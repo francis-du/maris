@@ -43,7 +43,7 @@ class NativeMenuDocuments(unittest.TestCase):
         png = synthetic_png()
         for language in docs.LOCALES:
             captures = []
-            for state, appearance in [('live', 'light'), ('pending', 'dark')] + [(state, 'dark') for state in docs.STATES]:
+            for state, appearance in [('live', 'light'), ('selection', 'dark')] + [(state, 'dark') for state in docs.STATES]:
                 item = {'language': language, 'state': state, 'appearance': appearance,
                         'image': {'template': True, 'logical_width': 18, 'logical_height': 18,
                                   'representations': [{'width': 64, 'height': 64}],
@@ -113,9 +113,9 @@ class NativeMenuDocuments(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'single native'):
             docs.image_source(self.root, item, 'bar')
 
-    def test_missing_pending_state_cannot_pass_as_complete_gallery(self):
+    def test_missing_selection_state_cannot_pass_as_complete_gallery(self):
         self.report['locales'][0]['native_states']['captures'] = [
-            item for item in self.report['locales'][0]['native_states']['captures'] if item['state'] != 'pending']
+            item for item in self.report['locales'][0]['native_states']['captures'] if item['state'] != 'selection']
         with self.assertRaisesRegex(ValueError, 'Missing native'):
             docs.captures(self.root, self.report)
 

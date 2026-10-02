@@ -30,11 +30,11 @@ SOURCES = ('Cargo.toml', 'Cargo.lock', 'src/ui/desktop/native.rs',
 MANIFEST = 'menu-bar-review-manifest.json'
 LIMIT = 2_000_000
 LABELS = {
-    'en': ('Maris · native menu', 'Light · processing', 'Dark · pending selection',
+    'en': ('Maris · native menu', 'Light · processing', 'Dark · selection preview',
            'Actual offline AppKit views. No audio capture or hardware validation.',
            'Processing', 'Standby', 'Awaiting telemetry', 'Audio unavailable',
            'Stopping audio', 'Restore failed'),
-    'zh-CN': ('Maris · 原生菜单', '浅色 · 正在处理', '深色 · 待确认选择',
+    'zh-CN': ('Maris · 原生菜单', '浅色 · 正在处理', '深色 · 待确认的场景',
               '真实离线 AppKit 视图；未启动音频采集，未验证硬件。',
               '正在处理', '待机', '等待遥测', '音频不可用', '正在停止音频', '恢复失败'),
 }
@@ -109,7 +109,7 @@ def captures(root: Path, report: dict) -> dict:
                     or not mark.get('accessibility_label') or not mark.get('accessibility_value')):
                 raise ValueError('Actual 18-point template mark or accessibility metadata is missing')
             entries[key] = item
-        required = {('live', 'light'), ('pending', 'dark')} | {(state, 'dark') for state in STATES}
+        required = {('live', 'light'), ('selection', 'dark')} | {(state, 'dark') for state in STATES}
         if not required.issubset(entries):
             raise ValueError('Missing native normal/pending/error-state views for ' + language)
         result[language] = entries
@@ -141,7 +141,7 @@ def illustration(root: Path, language: str, entries: dict) -> tuple[str, list[di
         assets.append(dict(source, language=language, state=item['state'], appearance=item['appearance'],
                            kind=kind, image=item['image']))
 
-    for index, key in enumerate((('live', 'light'), ('pending', 'dark'))):
+    for index, key in enumerate((('live', 'light'), ('selection', 'dark'))):
         x = 36 + index * 528
         out.append(f'<text x="{x}" y="118" font-size="19" font-weight="600">{escape(labels[1 + index])}</text>')
         item = entries[key]
