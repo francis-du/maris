@@ -74,3 +74,12 @@
   implemented_by: [component:i18n, component:ui, component:cli]
   acceptance: [AC-I18N-001]
   risk: {compatibility: medium}
+- schema_version: 1
+  id: REQ-UI-001
+  title: Readable and truthful production interfaces
+  intent: Production terminal and desktop surfaces must distinguish actions, selections, measurements, stale state, and unavailable information. Terminal color capability and motion preferences must preserve functional controls and numeric status, while documentation reflects the actual rendered interface.
+  priority: high
+  implemented_by: [component:ui, component:i18n]
+  acceptance: [AC-UI-001]
+  constraints: [MARIS-MODULE-LAYOUT, MARIS-DESIGN-SYNC]
+  risk: {compatibility: high, reliability: high}

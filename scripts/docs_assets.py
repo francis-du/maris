@@ -9,6 +9,7 @@ import argparse
 from html import escape
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import xml.etree.ElementTree as ET
@@ -16,7 +17,8 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 LANGUAGES = ('en', 'zh-CN', 'zh-TW', 'ja', 'de', 'es')
 VIEWS = {'studio': 'studio-140x40-signal', 'settings': 'inspector-eq-140x40-draft', 'presets': 'studio-140x40-picker'}
-SOURCES = ('src/ui/tui/view.rs', 'src/ui/tui/studio/mod.rs', 'src/ui/tui/studio/controls.rs', 'src/ui/tui/settings/view.rs',
+SOURCES = ('src/ui/tui/view.rs', 'src/ui/tui/studio/mod.rs', 'src/ui/tui/studio/analyzer.rs', 'src/ui/tui/studio/appearance.rs',
+           'src/ui/tui/studio/controls.rs', 'src/ui/tui/monitor.rs', 'src/ui/tui/settings/view.rs',
            'src/ui/tui/presets.rs', 'src/ui/tui/preset_picker.rs', 'src/ui/tui/inspector.rs', 'src/i18n/mod.rs', 'src/i18n/console.rs',
            'src/i18n/surface.rs', 'src/i18n/messages.rs', 'tests/support/ui_probe.rs')
 
@@ -112,9 +114,13 @@ def main() -> None:
         print(f'Validated {len(report["images"])} real offline illustrations.')
         return
     logs = []
+    # Product illustrations use one reproducible display capability fixture, independent
+    # of a caller's shell/CI color and motion preferences. No user settings are changed.
+    environment = dict(os.environ, TERM='xterm-256color', COLORTERM='truecolor', MARIS_REDUCED_MOTION='0')
+    environment.pop('NO_COLOR', None)
     for flags in (['--locales'], ['--settings', '--draft']):
         result = subprocess.run(['cargo', 'run', '--locked', '--quiet', '--example', 'ui_probe', '--'] + flags,
-                                cwd=ROOT, capture_output=True, text=True, check=True, timeout=180)
+                                cwd=ROOT, env=environment, capture_output=True, text=True, check=True, timeout=180)
         logs.append(result.stdout + result.stderr)
     manifest = {'scope': 'actual_offline_ratatui', 'hardware_validation': False,
                 'source_sha256': {name: digest(ROOT / name) for name in SOURCES}, 'images': {}}

@@ -193,6 +193,14 @@ fn render(
         assert_eq!(state.load()?.profile, snapshot.profile);
         assert!(!state.directory.join("listening.json").exists());
     }
+    // Replay the measured fixture as a current observation for every locale/size.
+    // Slow offline exports must not accidentally become stale-data illustrations.
+    let now = analysis::now_ms();
+    runtime["updated_at_ms"] = json!(now);
+    if active {
+        runtime["visualization"]["updated_at_ms"] = json!(now);
+        runtime["analysis"]["updated_at_ms"] = json!(now);
+    }
     let view = Console {
         snapshot: &snapshot,
         configuration: Some(&editor),
@@ -360,18 +368,31 @@ fn native_probe() -> anyhow::Result<()> {
     let _window_number = monitor.window_number();
     monitor.toggle();
     monitor.toggle();
-    let store = maris::store::Store::discover()?;
+    let mut runtime = fixture()?;
+    runtime["output"] = json!("OFFLINE UI FIXTURE");
+    let idle = std::env::args().any(|argument| argument == "--idle");
+    let stale = std::env::args().any(|argument| argument == "--stale");
+    if std::env::args().any(|argument| argument == "--missing-peak") {
+        runtime.as_object_mut().unwrap().remove("peak_dbfs");
+    }
+    if idle {
+        runtime["active"] = json!(false);
+    }
     let began = Instant::now();
     events.run_return(|event, _, flow| {
         *flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(33));
         if let Event::MainEventsCleared = event {
-            let runtime = maris::audio::runtime_status(&store);
+            let now = analysis::now_ms();
+            runtime["updated_at_ms"] = json!(if stale { now.saturating_sub(2000) } else { now });
+            runtime["visualization"]["updated_at_ms"] = json!(now);
             monitor.tick(&runtime, runtime["tonal_bypass"] == true);
             if began.elapsed() > Duration::from_secs(2) {
                 *flow = ControlFlow::Exit;
             }
         }
     });
-    println!("compact_monitor_event_loop_completed");
+    println!(
+        "offline_compact_monitor_event_loop_completed / generated audio / no hardware session"
+    );
     Ok(())
 }

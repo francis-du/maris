@@ -85,3 +85,14 @@
     id: rust-check
   - kind: check
     id: rust-test
+- schema_version: 1
+  id: AC-UI-001
+  title: Production interfaces remain readable across capabilities and states
+  statement: All six workspaces, compact monitoring, and overlays render with true color, indexed color, basic ANSI color, and no color. Reduced motion preserves measured numeric status without animated meters. Desktop monitoring rejects stale or missing measurements. Offline documentation figures come from the current production renderer.
+  verification:
+  - kind: check
+    id: rust-format
+  - kind: check
+    id: rust-test
+  - kind: check
+    id: rust-clippy

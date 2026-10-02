@@ -41,6 +41,7 @@ impl Hud {
             let _: () = msg_send![&panel, setReleasedWhenClosed: false];
             let _: () = msg_send![&panel, setFloatingPanel: true];
             let _: () = msg_send![&panel, setHidesOnDeactivate: false];
+            let _: () = msg_send![&panel, setHasShadow: true];
             let _: () = msg_send![&panel, setLevel: 3_isize];
             let _: () = msg_send![&panel, setTitle: &*NSString::from_str("Maris")];
             let _: () = msg_send![&panel, setMovableByWindowBackground: true];
@@ -78,6 +79,8 @@ impl Hud {
                     color(0.56, 0.74, 0.68),
                 ),
             ];
+            label(&content, rect(180.0, 20.0, 9.0, 9.0), "L", 8.0, true);
+            label(&content, rect(180.0, 12.0, 9.0, 9.0), "R", 8.0, true);
             let screen: Option<Retained<AnyObject>> = msg_send![class!(NSScreen), mainScreen];
             if let Some(screen) = screen {
                 let bounds: NSRect = msg_send![&screen, visibleFrame];
@@ -121,35 +124,33 @@ impl Hud {
     pub fn tick(&mut self, runtime: &serde_json::Value, bypass: bool) {
         let dt = self.last.elapsed().as_secs_f64();
         self.last = Instant::now();
-        self.motion.update(runtime, dt, crate::analysis::now_ms());
+        let now = crate::analysis::now_ms();
+        self.motion.update(runtime, dt, now);
         let palette = self.theme.update(runtime, dt);
-        let active = runtime["active"] == true;
+        let active = crate::ui::tui::studio::live(runtime, now);
+        let reduced_motion =
+            crate::ui::tui::studio::appearance::Appearance::from_environment().reduced_motion;
         let output =
             crate::ui::theme::clean(runtime["output"].as_str().unwrap_or(t("System default")));
-        let mode = t(if !active {
-            "Standby"
-        } else if bypass {
-            "EQ bypassed"
-        } else {
-            "Processing"
-        });
-        let level = runtime["peak_dbfs"].as_f64().unwrap_or(-120.0);
-        let adaptive = runtime["adaptive_reduction_db"].as_f64().unwrap_or(0.0);
-        let state = if active && adaptive > 0.05 {
-            format!(
-                "{mode} · {level:.1} dBFS · {} -{adaptive:.1} dB",
-                t("Dynamic EQ")
-            )
-        } else if active {
-            format!("{mode} · {level:.1} dBFS")
-        } else {
-            mode.to_owned()
-        };
+        let state = crate::ui::desktop::monitor_state::status(runtime, bypass, now);
         // SAFETY: retained AppKit controls, valid NSRect and NSString arguments, main thread.
         unsafe {
+            let workspace: Retained<AnyObject> = msg_send![class!(NSWorkspace), sharedWorkspace];
+            let system_reduced_motion: bool =
+                msg_send![&workspace, accessibilityDisplayShouldReduceMotion];
+            let reduced_motion = reduced_motion || system_reduced_motion;
             let _: () = msg_send![&self.device, setStringValue: &*NSString::from_str(&output)];
             let _: () = msg_send![&self.status, setStringValue: &*NSString::from_str(&state)];
+            let tint = ns_color(if active {
+                palette.meter
+            } else if runtime["active"] == true {
+                palette.warning
+            } else {
+                palette.muted
+            });
+            let _: () = msg_send![&self.status, setTextColor: &*tint];
             for (i, bar) in self.bars.iter().enumerate() {
+                let _: () = msg_send![bar, setHidden: reduced_motion || !active];
                 let _: () = msg_send![bar, setFrame: rect(10.0+i as f64*7.2,8.0,3.8,(self.motion.bands[i]*20.0).max(1.0))];
                 let hue = i as f64 / 23.0;
                 let tint = ns_color(crate::ui::theme::blend(
@@ -160,6 +161,7 @@ impl Hud {
                 let _: () = msg_send![bar, setFillColor: &*tint];
             }
             for (i, bar) in self.levels.iter().enumerate() {
+                let _: () = msg_send![bar, setHidden: reduced_motion || !active];
                 let _: () = msg_send![bar, setFrame: rect(190.0,22.0-i as f64*8.0,(self.motion.levels[i]*62.0).max(1.0),3.0)];
                 let tint = ns_color(palette.meter);
                 let _: () = msg_send![bar, setFillColor: &*tint];

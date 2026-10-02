@@ -2,6 +2,7 @@
 pub mod controls;
 #[cfg(all(target_os = "macos", feature = "desktop"))]
 pub(crate) mod monitor;
+pub mod monitor_state;
 
 #[cfg(feature = "desktop")]
 use crate::i18n::text as t;

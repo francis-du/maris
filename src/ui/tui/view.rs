@@ -126,6 +126,8 @@ pub fn draw(frame: &mut Frame<'_>, view: &Console<'_>) {
             );
         }
         draw_overlay(frame, area, view);
+        crate::ui::tui::studio::appearance::Appearance::from_environment()
+            .apply(frame.buffer_mut());
         return;
     }
 
@@ -135,6 +137,7 @@ pub fn draw(frame: &mut Frame<'_>, view: &Console<'_>) {
     crate::ui::tui::dashboard::draw(frame, shell.content, view);
     draw_footer(frame, shell.footer, view);
     draw_overlay(frame, area, view);
+    crate::ui::tui::studio::appearance::Appearance::from_environment().apply(frame.buffer_mut());
 }
 
 fn draw_header(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
@@ -166,8 +169,21 @@ fn draw_header(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
                 Style::default().fg(p.accent).add_modifier(Modifier::BOLD),
             ),
             Span::styled(
-                t(mode),
-                Style::default().fg(if active { p.meter } else { p.muted }),
+                format!(" {} ", t(mode)),
+                Style::default()
+                    .fg(if active || mode == "STALE" {
+                        p.bg
+                    } else {
+                        p.muted
+                    })
+                    .bg(if active {
+                        p.meter
+                    } else if mode == "STALE" {
+                        p.warning
+                    } else {
+                        p.panel
+                    })
+                    .add_modifier(Modifier::BOLD),
             ),
         ])),
         regions.brand,
@@ -458,7 +474,18 @@ fn draw_output_picker(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
             ],
         )
         .header(
-            Row::new(["", t("OUTPUT"), t("MODE")]).style(Style::default().fg(view.palette.muted)),
+            Row::new(["", t("OUTPUT"), t("MODE")]).style(
+                Style::default()
+                    .fg(view.palette.text)
+                    .bg(view.palette.selected)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        )
+        .row_highlight_style(
+            Style::default()
+                .fg(view.palette.accent)
+                .bg(view.palette.selected)
+                .add_modifier(Modifier::BOLD),
         )
         .block(modal_block(
             "OUTPUT · Enter switches · Esc cancels",
@@ -607,7 +634,14 @@ fn modal(frame: &mut Frame<'_>, area: Rect, title: &str, lines: Vec<Line<'_>>, p
 
 fn modal_block(title: &str, palette: Palette) -> Block<'static> {
     Block::default()
-        .title(format!(" {} ", t(title)))
+        .title(
+            Line::from(format!(" {} ", t(title))).style(
+                Style::default()
+                    .fg(palette.text)
+                    .bg(palette.selected)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        )
         .title_bottom(format!(" {} ", t("Enter confirms · Esc cancels")))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)

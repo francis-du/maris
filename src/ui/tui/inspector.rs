@@ -67,14 +67,7 @@ fn write(frame: &mut Frame<'_>, area: Rect, text: &str, style: Style) {
     }
 }
 fn heading(frame: &mut Frame<'_>, area: Rect, label: &str, p: Palette) {
-    write(
-        frame,
-        area,
-        t(label),
-        Style::default()
-            .fg(p.secondary)
-            .add_modifier(Modifier::BOLD),
-    );
+    studio::heading(frame, area, label, p);
 }
 fn field(frame: &mut Frame<'_>, area: Rect, label: &str, value: &str, p: Palette) {
     let label_width = (area.width / 3).clamp(12, 28);

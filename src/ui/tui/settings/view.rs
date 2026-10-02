@@ -206,12 +206,7 @@ pub fn draw(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
     let invalid = draft.is_some_and(|d| d.invalidated);
     let enabled = editable(view);
     frame.render_widget(Block::default().style(Style::default().bg(p.panel)), area);
-    put(
-        frame,
-        row(a.browser, 0, 1),
-        t("Sound settings"),
-        Style::default().fg(p.text).add_modifier(Modifier::BOLD),
-    );
+    studio_view::heading(frame, row(a.browser, 0, 1), "Sound settings", p);
     for (index, (rect, section)) in group_rects(a.browser)
         .into_iter()
         .zip(Group::ALL)
