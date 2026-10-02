@@ -584,7 +584,7 @@ impl Session {
 
 pub(super) fn applications() -> Result<serde_json::Value> {
     let current = std::process::id();
-    let applications = flexaudio::processes()?
+    let applications = super::windows_route::processes()?
         .into_iter()
         .filter(|process| process.pid != current)
         .map(|process| {
@@ -614,7 +614,7 @@ pub(super) fn applications() -> Result<serde_json::Value> {
 }
 
 pub(super) fn doctor() -> serde_json::Value {
-    match flexaudio::processes() {
+    match super::windows_route::processes() {
         Ok(processes) => serde_json::json!({
             "available":true,
             "backend":"wasapi_process_loopback",
