@@ -285,7 +285,7 @@ fn apply_rejects_tampering_and_accepts_matching_live_state() {
 
 #[test]
 #[test]
-fn live_apply_rejects_session_device_rebind_and_new_evidence() {
+fn live_apply_rejects_session_and_device_rebind_but_accepts_fresh_analysis() {
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path());
     let evidence = analysis::measure(&tone(1000.0), 48_000).unwrap();
@@ -315,9 +315,10 @@ fn live_apply_rejects_session_device_rebind_and_new_evidence() {
 
     let mut changed = original;
     changed["analysis"]["peak_dbfs"] = serde_json::json!(-9.0);
+    changed["analysis"]["updated_at_ms"] = serde_json::json!(analysis::now_ms());
+    changed["updated_at_ms"] = serde_json::json!(analysis::now_ms());
     store.write_json("runtime.json", &changed).unwrap();
-    assert!(music_tuning::apply(&store, &proposal).is_err());
-    assert_eq!(listening::load(&store).unwrap().revision, 0);
+    assert!(music_tuning::apply(&store, &proposal).is_ok());
 }
 
 fn apply_rejects_output_change_after_preview() {
