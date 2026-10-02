@@ -24,6 +24,7 @@ FORBIDDEN = {".env", ".DS_Store", "runtime.json", "listening.json", "profile.jso
 
 
 def source_files(root: Path = ROOT) -> list[Path]:
+    root = root.resolve()
     result = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
                             cwd=root, capture_output=True, check=True)
     names = sorted(set(result.stdout.decode("utf-8").split("\0")) - {""})
@@ -34,7 +35,8 @@ def source_files(root: Path = ROOT) -> list[Path]:
         if name not in TOP and not name.startswith(PREFIXES):
             problems.append(f"Unexpected publish path: {name}")
             continue
-        if (path.is_symlink() or not path.is_file() or path.name in FORBIDDEN
+        if (path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(root)
+                or path.name in FORBIDDEN
                 or any(p in {"__pycache__", "node_modules", "target", ".git"} for p in path.parts)
                 or path.suffix.lower() in {".pem", ".p12", ".pfx", ".key", ".wav", ".log"}):
             problems.append(f"Forbidden publish input: {name}")

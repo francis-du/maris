@@ -56,6 +56,33 @@ class SourceHygiene(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Unexpected publish path'):
             source_audit.source_files(self.root)
 
+    @unittest.skipIf(sys.platform == 'win32', 'Native directory-link fixture')
+    def test_ignored_vendor_parent_links_stay_inside_the_audit_root(self):
+        source = self.root / 'third_party/flexaudio-core/src/lib.rs'
+        source.parent.mkdir(parents=True)
+        source.write_text('// Reviewed source\n', encoding='utf-8')
+        self.git('add', '--', source.relative_to(self.root).as_posix())
+        source.unlink()
+        source.parent.rmdir()
+        # Git still lists the tracked leaf, while this rule hides its new parent link.
+        (self.root / '.gitignore').write_text('/third_party/flexaudio-core/src\n', encoding='utf-8')
+        outside_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(outside_directory.cleanup)
+        outside = Path(outside_directory.name).resolve()
+        (outside / 'lib.rs').write_text('// Outside the reviewed repository\n', encoding='utf-8')
+        source.parent.symlink_to(outside, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'Forbidden publish input'):
+            source_audit.source_files(self.root)
+
+        source.parent.unlink()
+        inside = self.root / 'third_party/musicnn/src'
+        inside.mkdir(parents=True)
+        (inside / 'lib.rs').write_text('// Inside the reviewed repository\n', encoding='utf-8')
+        source.parent.symlink_to(inside, target_is_directory=True)
+        files = source_audit.source_files(self.root)
+        self.assertIn(source, files)
+        self.assertTrue(all(path.resolve().is_relative_to(self.root) for path in files))
+
     def test_local_agent_state_is_ignored_but_design_contracts_remain_publishable(self):
         shutil.copyfile(ROOT / '.gitignore', self.root / '.gitignore')
         design = self.root / '.wcode/design'
