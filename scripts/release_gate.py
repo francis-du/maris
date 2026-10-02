@@ -126,7 +126,7 @@ def verify_publisher(bundle: Path, system: str, arch: str, version: str, approva
         metadata = plistlib.loads((bundle / "Contents/Info.plist").read_bytes())
         if metadata.get("CFBundleIdentifier") != "audio.maris.app" or metadata.get("CFBundleShortVersionString") != version:
             raise ValueError("Incorrect application identity or source version")
-        commands = [["/usr/bin/lipo", "-verify_arch", arch, str(bundle / "Contents/MacOS/maris")],
+        commands = [["/usr/bin/lipo", str(bundle / "Contents/MacOS/maris"), "-verify_arch", arch],
                     ["/usr/bin/codesign", "--verify", "--deep", "--strict", str(bundle)],
                     ["/usr/sbin/spctl", "--assess", "--type", "execute", str(bundle)],
                     ["/usr/bin/xcrun", "stapler", "validate", str(bundle)]]
