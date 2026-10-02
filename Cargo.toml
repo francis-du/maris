@@ -1,0 +1,80 @@
+[package]
+name = "maris"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+description = "Local system audio processing with device correction, mixing, TUI, CLI and MCP controls"
+publish = false
+
+[workspace]
+
+[features]
+default = ["neural", "desktop"]
+neural = ["dep:nnnoiseless"]
+desktop = ["dep:tray-icon", "dep:tao"]
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "0.8"
+ratatui = "0.29"
+crossterm = "0.28"
+cpal = "0.15.3"
+crossbeam-queue = "0.3"
+ctrlc = { version = "3", features = ["termination"] }
+directories = "6"
+fs2 = "0.4"
+hound = "3.5"
+
+tempfile = "3"
+rustfft = "6"
+ebur128 = "0.1.10"
+candle-core = { version = "0.11.0", default-features = false }
+candle-nn = { version = "0.11.0", default-features = false }
+sha2 = "0.10"
+nnnoiseless = { version = "=0.5.2", default-features = false, optional = true }
+
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+tray-icon = { version = "0.26", default-features = false, optional = true }
+tao = { version = "0.34", optional = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+flexaudio = "=0.2.0"
+windows = { version = "=0.54.0", features = ["Win32_Foundation", "Win32_Media_Audio", "Win32_System_Com", "Win32_System_Diagnostics_ToolHelp"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+tray-icon = { version = "0.26", default-features = false, features = ["ksni"], optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = "0.3.2"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[build-dependencies]
+ureq = "2.12"
+sha2 = "0.10"
+
+[dev-dependencies]
+
+[[example]]
+name = "ui_probe"
+path = "tests/support/ui_probe.rs"
+required-features = ["desktop"]
+
+[[example]]
+name = "engine_probe"
+path = "tests/support/engine_probe.rs"
+required-features = ["neural"]
+
+[[example]]
+name = "menu_probe"
+path = "tests/support/menu_probe.rs"
+required-features = ["desktop"]
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

@@ -1,0 +1,28 @@
+- schema_version: 1
+  id: DECISION-DSP-001
+  title: Deterministic DSP owns audio rendering
+  status: accepted
+  decision: Real-time audio is rendered by deterministic Rust DSP; analysis and model inference remain outside callbacks.
+  rationale: Callback predictability and recoverability take priority over model-driven rendering.
+  affects: [component:audio, component:dsp, component:analysis, component:models]
+- schema_version: 1
+  id: DECISION-STATE-001
+  title: One validated state model serves every control surface
+  status: accepted
+  decision: TUI, desktop, CLI, and MCP mutate audio state through shared validated control transitions rather than surface-specific state machines.
+  rationale: Shared revisions, validation, undo, and capability checks prevent contradictory behavior.
+  affects: [component:control, component:ui, component:cli]
+- schema_version: 1
+  id: DECISION-DEVICE-001
+  title: Device correction and preference remain separate
+  status: accepted
+  decision: Measured device correction, subjective listening preference, and source-dependent analysis remain separate domains.
+  rationale: A song spectrum or preference target is not evidence of physical device response.
+  affects: [component:devices, component:tuning, component:analysis, component:dsp]
+- schema_version: 1
+  id: DECISION-MODULE-001
+  title: Domain directories own implementation
+  status: accepted
+  decision: Production implementation lives under domain directories; src/main.rs and src/lib.rs are the only root source entry files and re-exports do not create duplicate ownership.
+  rationale: Explicit ownership keeps the architecture map, implementation paths, and refactors traceable.
+  affects: [component:runtime, component:audio, component:dsp, component:analysis, component:devices, component:tuning, component:mixer, component:models, component:presets, component:control, component:i18n, component:ui, component:cli]

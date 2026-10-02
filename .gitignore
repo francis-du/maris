@@ -1,0 +1,27 @@
+# Generated builds, packages, verification records and local agent state.
+/target/
+/dist/
+/_site/
+.maris-*/
+__pycache__/
+*.py[cod]
+*.log
+*.wav
+*.safetensors
+*.onnx
+# Local environment, credentials and editor settings are not release inputs.
+.env
+.env.*
+*.pem
+*.p12
+*.pfx
+*.key
+/.idea/
+/.vscode/
+.DS_Store
+# Keep project contracts, not local tasks, evidence, credentials or editor state.
+/.wcode/*
+!/.wcode/project.yaml
+!/.wcode/design/
+/.wcode/design/*
+!/.wcode/design/*.yaml

@@ -1,0 +1,76 @@
+- schema_version: 1
+  id: REQ-RUNTIME-001
+  title: Stable crate surface and domain ownership
+  intent: The binary and library entry points must remain thin, preserve stable public re-exports, and delegate implementation to the declared domain modules without duplicate root ownership.
+  priority: high
+  implemented_by: [component:runtime]
+  acceptance: [AC-RUNTIME-001]
+  constraints: [MARIS-MODULE-LAYOUT, MARIS-DESIGN-SYNC]
+  risk: {compatibility: high, reliability: high}
+- schema_version: 1
+  id: REQ-AUDIO-001
+  title: Deterministic real-time audio rendering
+  intent: Music playback processing must remain deterministic and safe for real-time execution, with blocking work kept outside callbacks.
+  priority: critical
+  implemented_by: [component:audio, component:dsp]
+  acceptance: [AC-AUDIO-001]
+  constraints: [MARIS-AUDIO-REALTIME, MARIS-MODULE-LAYOUT]
+  risk: {performance: critical, reliability: critical}
+- schema_version: 1
+  id: REQ-DEVICE-001
+  title: Device-aware correction and routing
+  intent: Maris must identify outputs stably, bind device-specific correction and preferences safely, and recover predictably when routes disappear.
+  priority: high
+  implemented_by: [component:audio, component:devices, component:tuning]
+  acceptance: [AC-DEVICE-001]
+  constraints: [MARIS-MODULE-LAYOUT]
+  risk: {compatibility: high, reliability: high}
+- schema_version: 1
+  id: REQ-TUNING-001
+  title: Reversible listening preferences
+  intent: Subjective tuning must remain separate from measured correction and use explicit preview, apply, compare, and undo semantics.
+  priority: high
+  implemented_by: [component:tuning, component:presets, component:control]
+  acceptance: [AC-TUNING-001]
+  risk: {reliability: high}
+- schema_version: 1
+  id: REQ-MIXER-001
+  title: Shared bounded mixer state
+  intent: Mixer state and matrix math must be deterministic and controlled through the same validated state model as other surfaces.
+  priority: high
+  implemented_by: [component:mixer, component:control]
+  acceptance: [AC-MIXER-001]
+  risk: {reliability: high}
+- schema_version: 1
+  id: REQ-MODEL-001
+  title: Models remain off the audio callback
+  intent: Local models may analyze or propose bounded parameters but must not execute on the real-time audio callback or silently upgrade candidate assets to integrated capability.
+  priority: critical
+  implemented_by: [component:models, component:analysis, component:tuning]
+  acceptance: [AC-MODEL-001]
+  constraints: [MARIS-AUDIO-REALTIME]
+  risk: {performance: critical, reliability: high}
+- schema_version: 1
+  id: REQ-CONTROL-001
+  title: Unified validated controls
+  intent: App, TUI, CLI, and MCP must operate over the same validated state transitions, revision guards, capability boundaries, and undo semantics.
+  priority: high
+  implemented_by: [component:control, component:ui, component:cli]
+  acceptance: [AC-CONTROL-001]
+  risk: {reliability: high}
+- schema_version: 1
+  id: REQ-PLATFORM-001
+  title: Honest cross-platform capability boundaries
+  intent: macOS, Windows, and Linux native paths must expose only capabilities actually implemented and validated for that platform.
+  priority: high
+  implemented_by: [component:audio, component:devices]
+  acceptance: [AC-PLATFORM-001]
+  risk: {compatibility: critical}
+- schema_version: 1
+  id: REQ-I18N-001
+  title: Localized presentation with stable machine semantics
+  intent: Human-facing surfaces and documentation use ordinary action-oriented language in all declared locales, without invented or promotional jargon. Machine fields, stable identifiers, template arguments, and user device names remain unchanged.
+  priority: medium
+  implemented_by: [component:i18n, component:ui, component:cli]
+  acceptance: [AC-I18N-001]
+  risk: {compatibility: medium}

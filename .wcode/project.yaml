@@ -1,0 +1,3 @@
+schema_version: 1
+name: Maris
+description: Cross-platform audio control and processing focused on music playback, device correction, reversible preferences, mixer state, and shared TUI, CLI and MCP controls.

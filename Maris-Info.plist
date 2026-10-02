@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleName</key><string>Maris</string>
+<key>CFBundleDisplayName</key><string>Maris</string>
+<key>CFBundleIdentifier</key><string>audio.maris.app</string>
+<key>CFBundleExecutable</key><string>maris</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleShortVersionString</key><string>0.1.0</string>
+<key>CFBundleVersion</key><string>2</string>
+<key>LSMinimumSystemVersion</key><string>14.2</string>
+<key>LSUIElement</key><true/>
+<key>NSHighResolutionCapable</key><true/>
+<key>NSAudioCaptureUsageDescription</key><string>Maris processes system playback locally to apply real-time headphone and speaker tuning. Audio is not recorded to disk or uploaded. Stop Maris to return to unprocessed playback.</string>
+<key>NSMicrophoneUsageDescription</key><string>Maris accesses a microphone only when you explicitly select a microphone input for voice processing. System audio tuning does not need your microphone.</string>
+</dict></plist>

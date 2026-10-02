@@ -1,0 +1,275 @@
+- schema_version: 1
+  id: component:runtime
+  name: Runtime and crate surface
+  responsibilities:
+  - Own process entry points, crate wiring, and stable public re-exports.
+  implementation:
+  - kind: file
+    path: src/main.rs
+  - kind: file
+    path: src/lib.rs
+
+- schema_version: 1
+  id: component:analysis
+  name: Audio analysis
+  responsibilities:
+  - Own spectrum and music-context analysis that executes outside the real-time callback.
+  implementation:
+  - kind: file
+    path: src/analysis/mod.rs
+  - kind: file
+    path: src/analysis/context.rs
+  - kind: file
+    path: src/analysis/spectrum.rs
+
+- schema_version: 1
+  id: component:audio
+  name: Native audio engine
+  responsibilities:
+  - Own stream lifetimes, native backends, routing, taps, platform session control, and real-time rendering integration.
+  constraints:
+  - MARIS-AUDIO-REALTIME
+  implementation:
+  - kind: file
+    path: src/audio/mod.rs
+  - kind: file
+    path: src/audio/bridge.rs
+  - kind: file
+    path: src/audio/devices.rs
+  - kind: file
+    path: src/audio/macos.rs
+  - kind: file
+    path: src/audio/mix/mod.rs
+  - kind: file
+    path: src/audio/mix/render.rs
+  - kind: file
+    path: src/audio/offline.rs
+  - kind: file
+    path: src/audio/platform.rs
+  - kind: file
+    path: src/audio/pulse/mod.rs
+  - kind: file
+    path: src/audio/pulse/route.rs
+  - kind: file
+    path: src/audio/pulse/server.rs
+  - kind: file
+    path: src/audio/pulse/stream.rs
+  - kind: file
+    path: src/audio/routing.rs
+  - kind: file
+    path: src/audio/session_control.rs
+  - kind: file
+    path: src/audio/system.rs
+  - kind: file
+    path: src/audio/tap.rs
+  - kind: file
+    path: src/audio/tap_ffi.rs
+  - kind: file
+    path: src/audio/voice.rs
+  - kind: file
+    path: src/audio/windows.rs
+  - kind: file
+    path: src/audio/windows_devices.rs
+  - kind: file
+    path: src/audio/windows_mix.rs
+  - kind: file
+    path: src/audio/windows_route.rs
+  - kind: file
+    path: src/audio/windows_scope.rs
+  - kind: file
+    path: src/audio/worker.rs
+
+- schema_version: 1
+  id: component:dsp
+  name: Deterministic DSP
+  responsibilities:
+  - Own music processing, profiles, resampling, tone shaping, safety headroom, and deterministic render math.
+  depends_on:
+  - component:analysis
+  constraints:
+  - MARIS-AUDIO-REALTIME
+  implementation:
+  - kind: file
+    path: src/dsp/mod.rs
+  - kind: file
+    path: src/dsp/music.rs
+  - kind: file
+    path: src/dsp/profile.rs
+  - kind: file
+    path: src/dsp/resample.rs
+  - kind: file
+    path: src/dsp/tone.rs
+
+- schema_version: 1
+  id: component:devices
+  name: Device identity and correction
+  responsibilities:
+  - Own stable device identity, capabilities, and correction matching.
+  implementation:
+  - kind: file
+    path: src/devices/mod.rs
+  - kind: file
+    path: src/devices/autoeq.rs
+  - kind: file
+    path: src/devices/capability.rs
+  - kind: file
+    path: src/devices/identity.rs
+
+- schema_version: 1
+  id: component:tuning
+  name: Listening preferences and planner
+  responsibilities:
+  - Own reversible listening preferences, EQ state, constrained proposals, and device-specific tuning.
+  depends_on:
+  - component:devices
+  - component:analysis
+  implementation:
+  - kind: file
+    path: src/tuning/mod.rs
+  - kind: file
+    path: src/tuning/eq.rs
+  - kind: file
+    path: src/tuning/planner.rs
+  - kind: file
+    path: src/tuning/preferences.rs
+
+- schema_version: 1
+  id: component:mixer
+  name: Mixer
+  responsibilities:
+  - Own multi-input mixer state, bus routing, and matrix math.
+  - Check revisions for channel edits and scene save/restore; scene saves preserve audio undo.
+  implementation:
+  - kind: file
+    path: src/mixer/mod.rs
+  - kind: file
+    path: src/mixer/engine.rs
+
+- schema_version: 1
+  id: component:models
+  name: Local model runtime
+  responsibilities:
+  - Own admitted local model assets, preprocessing, and non-real-time inference boundaries.
+  depends_on:
+  - component:analysis
+  implementation:
+  - kind: file
+    path: src/models/mod.rs
+  - kind: file
+    path: src/models/musicnn.rs
+  - kind: file
+    path: src/models/musicnn_preprocess.rs
+
+- schema_version: 1
+  id: component:presets
+  name: Presets and scenes
+  responsibilities:
+  - Own bounded listening presets and scene catalogs without changing measured correction semantics.
+  depends_on:
+  - component:tuning
+  implementation:
+  - kind: file
+    path: src/presets/mod.rs
+  - kind: file
+    path: src/presets/scenes.rs
+
+- schema_version: 1
+  id: component:control
+  name: Commands and saved settings
+  responsibilities:
+  - Own validated commands, persisted state, and MCP control surfaces.
+  depends_on:
+  - component:tuning
+  - component:mixer
+  - component:audio
+  implementation:
+  - kind: file
+    path: src/control/mod.rs
+  - kind: file
+    path: src/control/mcp.rs
+  - kind: file
+    path: src/control/store.rs
+
+- schema_version: 1
+  id: component:i18n
+  name: Localization
+  responsibilities:
+  - Own presentation localization while preserving machine fields and user device names.
+  implementation:
+  - kind: file
+    path: src/i18n/mod.rs
+  - kind: file
+    path: src/i18n/console.rs
+  - kind: file
+    path: src/i18n/messages.rs
+  - kind: file
+    path: src/i18n/surface.rs
+
+- schema_version: 1
+  id: component:ui
+  name: TUI and desktop experience
+  responsibilities:
+  - Own visible audio state, safe interaction geometry, inspectors, settings drafts, and desktop controls.
+  - In active mixer sessions, expose strip volume, mute, solo, balance and undo through the shared mixer transactions; reject stale targets.
+  depends_on:
+  - component:control
+  - component:i18n
+  implementation:
+  - kind: file
+    path: src/ui/mod.rs
+  - kind: file
+    path: src/ui/theme.rs
+  - kind: file
+    path: src/ui/desktop/mod.rs
+  - kind: file
+    path: src/ui/desktop/controls.rs
+  - kind: file
+    path: src/ui/desktop/events.rs
+  - kind: file
+    path: src/ui/desktop/monitor.rs
+  - kind: file
+    path: src/ui/desktop/native.rs
+  - kind: file
+    path: src/ui/tui/mod.rs
+  - kind: file
+    path: src/ui/tui/actions.rs
+  - kind: file
+    path: src/ui/tui/dashboard.rs
+  - kind: file
+    path: src/ui/tui/input.rs
+  - kind: file
+    path: src/ui/tui/inspector.rs
+  - kind: file
+    path: src/ui/tui/monitor.rs
+  - kind: file
+    path: src/ui/tui/music.rs
+  - kind: file
+    path: src/ui/tui/presets.rs
+  - kind: file
+    path: src/ui/tui/settings/mod.rs
+  - kind: file
+    path: src/ui/tui/settings/input.rs
+  - kind: file
+    path: src/ui/tui/settings/view.rs
+  - kind: file
+    path: src/ui/tui/studio/mod.rs
+  - kind: file
+    path: src/ui/tui/studio/controls.rs
+  - kind: file
+    path: src/ui/tui/view.rs
+
+- schema_version: 1
+  id: component:cli
+  name: CLI
+  responsibilities:
+  - Own command-line sound and mixer commands over the shared validated control model.
+  depends_on:
+  - component:control
+  - component:i18n
+  implementation:
+  - kind: file
+    path: src/cli/mod.rs
+  - kind: file
+    path: src/cli/mixer.rs
+  - kind: file
+    path: src/cli/sound.rs

@@ -1,0 +1,765 @@
+//! Native tray construction and event-loop dispatch.
+use super::*;
+use crate::{
+    i18n::Notice,
+    ui::desktop::controls::{self as desktop_controls, Controller, Summary},
+};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+use tray_icon::{
+    menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu},
+    Icon, TrayIcon, TrayIconBuilder,
+};
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub(super) fn menu_review() -> Result<Value> {
+    let _events = tao::event_loop::EventLoop::new();
+    let mut locales = Vec::new();
+    for code in crate::i18n::LANGUAGES {
+        let directory = tempfile::tempdir()?;
+        let store = Store::at(directory.path());
+        crate::i18n::configure(&store, Some(code))?;
+        store.write_json("runtime.json", &json!({"active":true,"music_processing":true,
+                "session_id":"offline-menu-fixture","output":"OFFLINE fixture output","profile_key":"OFFLINE fixture output",
+                "sample_rate":48000,"device_identity":{"stable_id":"offline-fixture"},
+                "device_binding_revision":0,"rebind_count":0,"applied_revision":0,"applied_music_revision":0,
+                "system_backend":"coreaudio_process_tap","output_mode":"follow_system_default",
+                "updated_at_ms":crate::analysis::now_ms()}))?;
+        let mut view = Indicator::new(store.clone(), false)?;
+        view.icon.set_title(Some("Maris Review"));
+        view.status
+            .set_text("OFFLINE MENU FIXTURE · no audio capture");
+        // The review never polls the menu event receiver or starts the application loop.
+        view.refresh_quick_controls()?;
+        let normal_items = view.menu.items().len();
+        view.controller.select_preset(&store, "night-dialogue")?;
+        view.refresh_quick_controls()?;
+        let pending_items = view.menu.items().len();
+        ensure!(
+            pending_items == normal_items + 3,
+            "Pending menu controls were not inserted correctly"
+        );
+        ensure!(
+            view.apply_selection.is_enabled(),
+            "Native preview confirmation is disabled"
+        );
+        ensure!(
+            !store.directory.join("control.json").exists()
+                && !store.directory.join("listening.json").exists(),
+            "Menu preview mutated audio configuration"
+        );
+        locales.push(json!({"language":code,"normal_items":normal_items,"pending_items":pending_items,
+                "output":view.output_caption.text(),"listening":view.profile.text(),"eq":view.tone_caption.text(),
+                "apply":view.apply_selection.text(),"cancel":view.cancel_selection.text(),
+                "presets":view.presets.iter().map(|(item,_)|item.text()).collect::<Vec<_>>(),
+                "preview":view.preview_rows.iter().map(MenuItem::text).collect::<Vec<_>>(),
+                "languages":view.languages.iter().map(|(item,_)|item.text()).collect::<Vec<_>>() }));
+        view.controller.cancel();
+        view.refresh_quick_controls()?;
+        ensure!(
+            view.menu.items().len() == normal_items,
+            "Cancelled preview left hidden menu actions behind"
+        );
+        // Dispatch real native item IDs through the production handler. Only the final
+        // modal response is injected; edits stay in this temporary state namespace.
+        let selected = view
+            .presets
+            .iter()
+            .find(|(_, id)| id == "focus")
+            .context("Missing focus menu item")?
+            .0
+            .id()
+            .clone();
+        view.menu_action(
+            MenuEvent {
+                id: selected.clone(),
+            },
+            |_, lines| {
+                ensure!(!lines.is_empty(), "No visible selection details");
+                Ok(Some(false))
+            },
+        )?;
+        ensure!(
+            !store.directory.join("listening.json").exists(),
+            "Cancel wrote settings"
+        );
+        view.menu_action(MenuEvent { id: selected }, |_, _| Ok(Some(true)))?;
+        ensure!(
+            crate::tuning::preferences::load(&store)?.revision == 1,
+            "Native action did not apply"
+        );
+        for _ in 0..2 {
+            view.menu_action(
+                MenuEvent {
+                    id: view.compare.id().clone(),
+                },
+                |_, _| bail!("A/B unexpectedly requested a modal"),
+            )?;
+        }
+        view.menu_action(
+            MenuEvent {
+                id: view.undo.id().clone(),
+            },
+            |_, _| bail!("Undo unexpectedly requested a modal"),
+        )?;
+        let restored = crate::tuning::preferences::load(&store)?;
+        ensure!(
+            restored.revision == 4 && restored.effective("OFFLINE fixture output").bass_db == 0.0,
+            "Native comparison or undo failed"
+        );
+        ensure!(
+            !store.directory.join("control.json").exists(),
+            "Review queued audio control"
+        );
+    }
+    Ok(
+        json!({"source":"isolated offline fixture","native_menu_construction":true,
+            "native_event_dispatch":true,"native_dialog_clicked":false,
+            "audio_started":false,"hardware_validated":false,"locales":locales}),
+    )
+}
+
+struct Indicator {
+    icon: TrayIcon,
+    menu: Menu,
+    pending_rows_visible: bool,
+    status: MenuItem,
+    profile: MenuItem,
+    toggle: MenuItem,
+    open: MenuItem,
+    stop: MenuItem,
+    resume: MenuItem,
+    quit: MenuItem,
+    presets: Vec<(MenuItem, String)>,
+    preset_menu: Submenu,
+    preset_headings: Vec<(MenuItem, &'static str)>,
+    output_caption: MenuItem,
+    tone_caption: MenuItem,
+    output_menu: Submenu,
+    outputs: Vec<(MenuItem, audio::DeviceInfo)>,
+    follow: MenuItem,
+    compare: MenuItem,
+    undo: MenuItem,
+    apply_selection: MenuItem,
+    cancel_selection: MenuItem,
+    preview_menu: Submenu,
+    preview_rows: Vec<MenuItem>,
+    notice: MenuItem,
+    controller: Controller,
+    language_menu: Submenu,
+    languages: Vec<(MenuItem, &'static str)>,
+    last_inventory: Instant,
+    last_result_ms: u64,
+    language: crate::i18n::Watcher,
+    store: Store,
+    closing: bool,
+    last_refresh: Instant,
+    last_visual: Instant,
+    cached_runtime: Value,
+    application_status: &'static str,
+    #[cfg(target_os = "macos")]
+    mini: MenuItem,
+    #[cfg(target_os = "macos")]
+    hud: crate::ui::desktop::monitor::Hud,
+}
+fn wave_icon() -> Result<Icon> {
+    let mut rgba = vec![0_u8; 32 * 32 * 4];
+    for x in 3..29_usize {
+        let wave = ((x as f64 - 3.0) * std::f64::consts::PI * 2.0 / 25.0).sin();
+        for offset in [-6.0, 0.0, 6.0] {
+            let y = (16.0 + offset + 2.5 * wave).round() as usize;
+            for dy in 0..2 {
+                let index = ((y + dy) * 32 + x) * 4;
+                rgba[index..index + 4].copy_from_slice(&[180, 192, 224, 255]);
+            }
+        }
+    }
+    Ok(Icon::from_rgba(rgba, 32, 32)?)
+}
+impl Indicator {
+    fn new(store: Store, auto_start: bool) -> Result<Self> {
+        let menu = Menu::new();
+        let status = MenuItem::new(format!("Maris - {}", t("Standby")), false, None);
+        let profile = MenuItem::new(format!("{}: {}", t("Profile"), t("Loading")), false, None);
+        let open = MenuItem::new(t("Open tuning console"), true, None);
+        let toggle = MenuItem::new(t("Bypass processing (keep safety gain)"), true, None);
+        let stop = MenuItem::new(t("Stop processing"), true, None);
+        let resume = MenuItem::new(t("Enable system audio tuning"), true, None);
+        let quit = MenuItem::new(t("Quit Maris"), true, None);
+        let output_caption = MenuItem::new(t("Output"), false, None);
+        let tone_caption = MenuItem::new(t("Tone curve"), false, None);
+        let output_menu = Submenu::new(t("Select output"), false);
+        let follow = MenuItem::new(t("Follow system default"), false, None);
+        output_menu.append(&follow)?;
+        let compare = MenuItem::new(t("Compare reference / enhanced"), false, None);
+        let undo = MenuItem::new(t("Undo listening change"), false, None);
+        let apply_selection = MenuItem::new(t("Apply selection"), false, None);
+        let cancel_selection = MenuItem::new(t("Cancel selection"), false, None);
+        let preview_menu = Submenu::new(t("Selection details"), false);
+        let notice = MenuItem::new(t("Select an output or preset to preview"), false, None);
+        menu.append_items(&[
+            &status,
+            &output_caption,
+            &profile,
+            &tone_caption,
+            &PredefinedMenuItem::separator(),
+            &output_menu,
+        ])?;
+        #[cfg(target_os = "macos")]
+        let mini = MenuItem::new(t("Compact monitor"), true, None);
+        let preset_menu = Submenu::new(t("Listening presets"), false);
+        let mut presets = Vec::new();
+        let mut preset_headings = Vec::new();
+        for (index, (heading, ids)) in desktop_controls::PRESET_GROUPS.iter().enumerate() {
+            if index > 0 {
+                preset_menu.append(&PredefinedMenuItem::separator())?;
+            }
+            let header = MenuItem::new(t(heading), false, None);
+            preset_menu.append(&header)?;
+            preset_headings.push((header, *heading));
+            for id in *ids {
+                let item = MenuItem::new(crate::i18n::preset_name(id, id), false, None);
+                preset_menu.append(&item)?;
+                presets.push((item, (*id).to_owned()));
+            }
+        }
+        let language_menu = Submenu::new(t("Language"), true);
+        let mut languages = Vec::new();
+        for code in crate::i18n::LANGUAGES {
+            let item = MenuItem::new(crate::i18n::language_name(code), true, None);
+            language_menu.append(&item)?;
+            languages.push((item, code));
+        }
+        menu.append_items(&[
+            &preset_menu,
+            &notice,
+            &PredefinedMenuItem::separator(),
+            &compare,
+            &undo,
+            &PredefinedMenuItem::separator(),
+            &open,
+        ])?;
+        #[cfg(target_os = "macos")]
+        menu.append(&mini)?;
+        menu.append_items(&[
+            &language_menu,
+            &toggle,
+            &PredefinedMenuItem::separator(),
+            &resume,
+            &stop,
+            &quit,
+        ])?;
+        let icon = TrayIconBuilder::new()
+            .with_menu(Box::new(menu.clone()))
+            .with_tooltip(format!("Maris - {}", t("Standby")))
+            .with_icon(wave_icon()?)
+            .build()?;
+        icon.set_title(Some("Maris"));
+        store.write_json("desktop.json", &json!({"active":true,"pid":std::process::id(),"updated_at_ms":crate::analysis::now_ms()}))?;
+        if auto_start {
+            start_system(store.clone());
+        }
+        Ok(Self {
+            icon,
+            menu,
+            pending_rows_visible: false,
+            status,
+            profile,
+            toggle,
+            open,
+            stop,
+            resume,
+            quit,
+            presets,
+            preset_menu,
+            preset_headings,
+            output_caption,
+            tone_caption,
+            output_menu,
+            outputs: Vec::new(),
+            follow,
+            compare,
+            undo,
+            apply_selection,
+            cancel_selection,
+            preview_menu,
+            preview_rows: Vec::new(),
+            notice,
+            controller: Controller::default(),
+            language_menu,
+            languages,
+            last_inventory: Instant::now() - Duration::from_secs(3),
+            last_result_ms: 0,
+            language: crate::i18n::Watcher::new(&store),
+            store,
+            closing: false,
+            last_refresh: Instant::now() - Duration::from_secs(1),
+            last_visual: Instant::now() - Duration::from_secs(1),
+            cached_runtime: json!({"active":false}),
+            application_status: "Apply state unknown",
+            #[cfg(target_os = "macos")]
+            mini,
+            #[cfg(target_os = "macos")]
+            hud: crate::ui::desktop::monitor::Hud::new(auto_start)?,
+        })
+    }
+    fn refresh_quick_controls(&mut self) -> Result<()> {
+        let runtime = audio::runtime_status(&self.store);
+        let summary = Summary::read(&self.store, &runtime, crate::analysis::now_ms())?;
+        self.application_status = summary.status;
+        self.controller.observe(&summary);
+        self.toggle
+            .set_enabled(summary.current && runtime["music_processing"] == true);
+        if self.last_inventory.elapsed() >= Duration::from_secs(2) {
+            let devices = audio::console_devices()?;
+            let outputs: Vec<_> = devices
+                .into_iter()
+                .filter(|d| d.direction == "output")
+                .collect();
+            let unchanged = outputs.len() == self.outputs.len()
+                && outputs.iter().zip(&self.outputs).all(|(a, (_, b))| {
+                    a.id == b.id && a.name == b.name && a.is_default == b.is_default
+                });
+            if !unchanged {
+                for (item, _) in &self.outputs {
+                    self.output_menu.remove(item)?;
+                }
+                self.outputs.clear();
+                for device in outputs {
+                    let item =
+                        MenuItem::new(desktop_controls::menu_text(&device.name), false, None);
+                    self.output_menu.append(&item)?;
+                    self.outputs.push((item, device));
+                }
+            }
+            self.last_inventory = Instant::now();
+        }
+        self.output_caption
+            .set_text(desktop_controls::menu_text(&summary.output));
+        self.profile
+            .set_text(desktop_controls::menu_text(&summary.listening));
+        self.tone_caption
+            .set_text(desktop_controls::menu_text(&summary.eq));
+        self.compare.set_text(format!(
+            "{} · {}",
+            t("Compare reference / enhanced"),
+            summary.compare
+        ));
+        self.compare.set_enabled(summary.controls_enabled);
+        self.undo.set_text(t("Undo listening change"));
+        self.undo.set_enabled(summary.undo_enabled);
+        self.output_menu.set_text(t("Select output"));
+        self.output_menu.set_enabled(summary.output_enabled);
+        self.follow.set_text(format!(
+            "{}{}",
+            if summary.current && runtime["output_mode"] == "follow_system_default" {
+                "✓ "
+            } else {
+                ""
+            },
+            t("Follow system default")
+        ));
+        self.follow.set_enabled(summary.output_enabled);
+        for (item, device) in &self.outputs {
+            let (enabled, active) = desktop_controls::output_item_state(&summary, &runtime, device);
+            item.set_text(desktop_controls::menu_text(&format!(
+                "{}{}",
+                if active { "✓ " } else { "" },
+                device.name
+            )));
+            item.set_enabled(enabled);
+        }
+        self.preset_menu.set_text(t("Listening presets"));
+        self.preset_menu.set_enabled(summary.controls_enabled);
+        for (item, key) in &self.preset_headings {
+            item.set_text(t(key));
+        }
+        for (item, id) in &self.presets {
+            item.set_text(format!(
+                "{}{}",
+                if summary.preset_id == Some(id.as_str()) && summary.status == "Applied" {
+                    "✓ "
+                } else {
+                    ""
+                },
+                crate::i18n::preset_name(id, id)
+            ));
+            item.set_enabled(summary.controls_enabled);
+        }
+        if self.pending_rows_visible != self.controller.has_pending() {
+            if self.controller.has_pending() {
+                self.menu.insert_items(
+                    &[
+                        &self.apply_selection,
+                        &self.cancel_selection,
+                        &self.preview_menu,
+                    ],
+                    7,
+                )?;
+            } else {
+                self.menu.remove(&self.apply_selection)?;
+                self.menu.remove(&self.cancel_selection)?;
+                self.menu.remove(&self.preview_menu)?;
+            }
+            self.pending_rows_visible = self.controller.has_pending();
+        }
+        self.apply_selection
+            .set_text(desktop_controls::menu_text(&self.controller.apply_title()));
+        let inventory: Vec<_> = self
+            .outputs
+            .iter()
+            .map(|(_, device)| device.clone())
+            .collect();
+        let pending_valid = match self.controller.pending_valid(&self.store, &inventory) {
+            Ok(valid) => valid,
+            Err(error) => {
+                self.controller.notice = Some(Notice::error(format!("{error:#}")));
+                false
+            }
+        };
+        self.apply_selection.set_enabled(pending_valid);
+        self.cancel_selection.set_text(t("Cancel selection"));
+        self.cancel_selection
+            .set_enabled(self.controller.has_pending());
+        self.preview_menu.set_text(t("Selection details"));
+        self.preview_menu.set_enabled(self.controller.has_pending());
+        let lines = self.controller.preview_lines();
+        if self.preview_rows.len() != lines.len() {
+            for item in &self.preview_rows {
+                self.preview_menu.remove(item)?;
+            }
+            self.preview_rows.clear();
+            for _ in &lines {
+                let item = MenuItem::new("", false, None);
+                self.preview_menu.append(&item)?;
+                self.preview_rows.push(item);
+            }
+        }
+        for (item, line) in self.preview_rows.iter().zip(lines) {
+            item.set_text(desktop_controls::menu_text(&line));
+        }
+        self.language_menu.set_text(t("Language"));
+        for (item, code) in &self.languages {
+            item.set_text(format!(
+                "{}{}",
+                if *code == crate::i18n::code() {
+                    "✓ "
+                } else {
+                    ""
+                },
+                crate::i18n::language_name(code)
+            ));
+        }
+        if let Some(time) = runtime["last_control_result"]["updated_at_ms"].as_u64() {
+            if time > self.last_result_ms
+                && runtime["last_control_result"]["session_id"] == runtime["session_id"]
+            {
+                self.last_result_ms = time;
+                if runtime["last_control_result"]["ok"] == false {
+                    self.controller.notice = Some(Notice::error(
+                        runtime["last_control_result"]["error"]
+                            .as_str()
+                            .unwrap_or("Audio control failed."),
+                    ));
+                }
+            }
+        }
+        let text = self.controller.notice.as_ref().map_or_else(
+            || t("Select an output or preset to preview").to_owned(),
+            Notice::render,
+        );
+        self.notice.set_text(desktop_controls::menu_text(&text));
+        Ok(())
+    }
+    fn compact_window_id(&self) -> Option<isize> {
+        #[cfg(target_os = "macos")]
+        {
+            Some(self.hud.window_number())
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            None
+        }
+    }
+    /// Dispatch exactly one native event. Telemetry refresh never repeats an action.
+    /// The confirmer is the OS presentation boundary; the same controller commits in tests.
+    fn menu_action(
+        &mut self,
+        event: MenuEvent,
+        confirm: impl FnOnce(&str, &[String]) -> Result<Option<bool>>,
+    ) -> Result<()> {
+        #[cfg(target_os = "macos")]
+        if event.id == *self.mini.id() {
+            self.hud.toggle();
+            return Ok(());
+        }
+        let preview = event.id == *self.follow.id()
+            || self.outputs.iter().any(|(item, _)| event.id == *item.id())
+            || self.presets.iter().any(|(item, _)| event.id == *item.id());
+        let result = (|| {
+            if event.id == *self.open.id() {
+                events::open_console(&self.store)?;
+            } else if event.id == *self.apply_selection.id() {
+                self.controller
+                    .apply(&self.store, &audio::console_devices()?)?;
+            } else if event.id == *self.cancel_selection.id() {
+                self.controller.cancel();
+            } else if event.id == *self.compare.id() {
+                self.controller.compare(&self.store)?;
+            } else if event.id == *self.undo.id() {
+                self.controller.undo(&self.store)?;
+            } else if event.id == *self.follow.id() {
+                self.controller.select_output(&self.store, None, &[])?;
+            } else if let Some((_, device)) =
+                self.outputs.iter().find(|(item, _)| event.id == *item.id())
+            {
+                self.controller.select_output(
+                    &self.store,
+                    Some(&device.id),
+                    &audio::console_devices()?,
+                )?;
+            } else if let Some((_, code)) = self
+                .languages
+                .iter()
+                .find(|(item, _)| event.id == *item.id())
+            {
+                crate::i18n::save(&self.store, code)?;
+            } else if event.id == *self.toggle.id() {
+                self.controller.toggle_processing(&self.store)?;
+            } else if event.id == *self.resume.id() {
+                start_system(self.store.clone());
+            } else if event.id == *self.stop.id() {
+                control::request_stop(&self.store)?;
+            } else if event.id == *self.quit.id() {
+                control::request_stop(&self.store)?;
+                self.closing = true;
+            } else if let Some((_, name)) =
+                self.presets.iter().find(|(item, _)| event.id == *item.id())
+            {
+                self.controller.select_preset(&self.store, name)?;
+            }
+            if preview && self.controller.has_pending() {
+                // Native menus close on selection. Present the review immediately instead
+                // of requiring users to discover newly inserted rows by opening it again.
+                match confirm(
+                    &self.controller.apply_title(),
+                    &self.controller.preview_lines(),
+                )? {
+                    Some(true) => self
+                        .controller
+                        .apply(&self.store, &audio::console_devices()?)?,
+                    Some(false) => self.controller.cancel(),
+                    None => {} // Linux retains the explicit in-menu Apply/Cancel fallback.
+                }
+            }
+            Ok(())
+        })();
+        self.last_refresh = Instant::now() - Duration::from_secs(1);
+        result
+    }
+    fn tick(&mut self, signal: bool) -> Result<bool> {
+        if signal && !self.closing {
+            control::request_stop(&self.store)?;
+            self.closing = true;
+        }
+        #[cfg(target_os = "linux")]
+        for _ in 0..32 {
+            let Ok(event) = MenuEvent::receiver().try_recv() else {
+                break;
+            };
+            let action = self.menu_action(event, events::confirm);
+            if let Err(error) = action {
+                self.controller.notice = Some(Notice::error(format!("{error:#}")));
+            }
+            self.last_refresh = Instant::now() - Duration::from_secs(1);
+        }
+        if self.closing {
+            self.status
+                .set_text(format!("Maris - {}", t("Stopping audio")));
+            if control::is_stopped(&self.store) {
+                // A previous crash can leave a route journal even after the engine releases its lock.
+                if let Err(error) = audio::restore(&self.store) {
+                    #[cfg(target_os = "macos")]
+                    {
+                        self.status.set_text(format!(
+                            "{}: {}",
+                            t("Restore failed"),
+                            crate::i18n::diagnostic(&error.to_string())
+                        ));
+                        self.closing = false;
+                        return Ok(false);
+                    }
+                    #[cfg(not(target_os = "macos"))]
+                    let _ = error;
+                }
+                return Ok(true);
+            }
+        }
+        if self.last_visual.elapsed() >= Duration::from_millis(80) {
+            self.cached_runtime = audio::runtime_status(&self.store);
+            self.last_visual = Instant::now();
+        }
+        #[cfg(target_os = "macos")]
+        self.hud.tick(
+            &self.cached_runtime,
+            self.cached_runtime["tonal_bypass"] == true,
+        );
+        if self.last_refresh.elapsed() >= Duration::from_millis(500) && !self.closing {
+            self.language.refresh(&self.store);
+            if let Err(error) = self.refresh_quick_controls() {
+                self.application_status = "Apply state unknown";
+                self.toggle.set_enabled(false);
+                self.controller.notice = Some(Notice::error(format!("{error:#}")));
+                self.apply_selection.set_enabled(false);
+                self.compare.set_enabled(false);
+                self.undo.set_enabled(false);
+                self.output_menu.set_enabled(false);
+                self.preset_menu.set_enabled(false);
+                self.notice.set_text(desktop_controls::menu_text(
+                    &self.controller.notice.as_ref().unwrap().render(),
+                ));
+            }
+            self.open.set_text(t("Open tuning console"));
+            self.stop.set_text(t("Stop processing"));
+            self.resume.set_text(t("Enable system audio tuning"));
+            self.quit.set_text(t("Quit Maris"));
+            let state = self.store.load()?;
+            let runtime = audio::runtime_status(&self.store);
+            let startup = read_json::<Value>(&self.store.directory.join("startup.json"))
+                .unwrap_or(Value::Null);
+            let mode = if self.application_status == "Awaiting telemetry" {
+                "Awaiting telemetry"
+            } else if runtime["active"] != true {
+                if startup["phase"] == "requesting_system_audio"
+                    && !control::is_stopped(&self.store)
+                {
+                    "Awaiting authorization"
+                } else if startup["phase"] == "failed" {
+                    "Audio unavailable"
+                } else {
+                    "Standby"
+                }
+            } else if self.application_status != "Applied" {
+                self.application_status
+            } else if runtime["tonal_bypass"] == true {
+                "Processing bypassed"
+            } else if runtime["neural"].is_object() {
+                "Voice AI"
+            } else {
+                "Processing"
+            };
+            self.status.set_text(format!("Maris - {}", t(mode)));
+            if runtime["active"] != true && startup["phase"] == "failed" {
+                self.profile.set_text(format!(
+                    "{}: {}",
+                    t("Error"),
+                    crate::i18n::diagnostic(
+                        startup["error"].as_str().unwrap_or("Audio startup failed")
+                    )
+                ));
+            }
+            self.toggle.set_text(t(if state.profile.bypass {
+                "Enable processing"
+            } else {
+                "Bypass processing (keep safety gain)"
+            }));
+            let _ = self.icon.set_tooltip(Some(format!(
+                "Maris - {} - {}",
+                t(mode),
+                runtime["output"].as_str().unwrap_or(t("Unavailable"))
+            )));
+            self.icon.set_title(Some("Maris"));
+            #[cfg(target_os = "macos")]
+            self.mini.set_text(t("Compact monitor"));
+            self.store.write_json("desktop.json", &json!({"active":true,"pid":std::process::id(),"mode":mode,"compact_window_id":self.compact_window_id(),"updated_at_ms":crate::analysis::now_ms()}))?;
+            self.last_refresh = Instant::now();
+        }
+        Ok(false)
+    }
+}
+impl Drop for Indicator {
+    fn drop(&mut self) {
+        let _ = self.store.write_json(
+            "desktop.json",
+            &json!({"active":false,"pid":std::process::id()}),
+        );
+    }
+}
+fn start_system(store: Store) {
+    if !control::is_stopped(&store) {
+        return;
+    }
+    std::thread::spawn(move || {
+        if let Err(error) = launch_audio(&store, &["system".into(), "--accept-routing".into()]) {
+            let _ = store.write_json("startup.json", &json!({"phase":"failed","error":format!("{error:#}"),"updated_at_ms":crate::analysis::now_ms()}));
+        }
+    });
+}
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub fn event_loop(store: Store, quitting: Arc<AtomicBool>, auto_start: bool) -> Result<()> {
+    use tao::{
+        event::{Event, StartCause},
+        event_loop::{ControlFlow, EventLoopBuilder},
+        platform::run_return::EventLoopExtRunReturn,
+    };
+    let mut event_loop = EventLoopBuilder::<MenuEvent>::with_user_event().build();
+    let proxy = event_loop.create_proxy();
+    MenuEvent::set_event_handler(Some(move |event| {
+        // Only enqueue/wake here: native dialogs and state writes belong to the main loop.
+        let _ = proxy.send_event(event);
+    }));
+    let mut indicator = None;
+    let mut failure = None;
+    event_loop.run_return(|event, _, flow| {
+        *flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(33));
+        if matches!(event, Event::NewEvents(StartCause::Init)) && indicator.is_none() {
+            match Indicator::new(store.clone(), auto_start) {
+                Ok(icon) => indicator = Some(icon),
+                Err(error) => {
+                    failure = Some(error);
+                    *flow = ControlFlow::Exit;
+                }
+            }
+        }
+        if let Event::UserEvent(menu) = &event {
+            if let Some(icon) = indicator.as_mut() {
+                if let Err(error) = icon.menu_action(menu.clone(), events::confirm) {
+                    icon.controller.notice = Some(Notice::error(format!("{error:#}")));
+                }
+            }
+        }
+        if matches!(event, Event::MainEventsCleared) {
+            if let Some(icon) = indicator.as_mut() {
+                match icon.tick(quitting.load(Ordering::Relaxed)) {
+                    Ok(true) => *flow = ControlFlow::Exit,
+                    Ok(false) => {}
+                    Err(error) => {
+                        failure = Some(error);
+                        *flow = ControlFlow::Exit;
+                    }
+                }
+            }
+        }
+    });
+    drop(indicator);
+    if let Some(error) = failure {
+        Err(error)
+    } else {
+        Ok(())
+    }
+}
+#[cfg(target_os = "linux")]
+pub fn event_loop(store: Store, quitting: Arc<AtomicBool>, auto_start: bool) -> Result<()> {
+    ensure!(std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_some(), "A desktop D-Bus session and StatusNotifier tray host are required; use --no-tray on headless Linux");
+    let mut indicator = Indicator::new(store, auto_start)?;
+    while !indicator.tick(quitting.load(Ordering::Relaxed))? {
+        thread::sleep(Duration::from_millis(100));
+    }
+    Ok(())
+}
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+pub fn event_loop(_store: Store, _quitting: Arc<AtomicBool>, _auto_start: bool) -> Result<()> {
+    bail!("Unsupported desktop platform")
+}

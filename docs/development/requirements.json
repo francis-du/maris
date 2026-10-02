@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "policy": "all_requested_work_before_release",
+  "requirements": [
+    {"id":"application-audio","status":"in_progress"},
+    {"id":"brand-readme","status":"verified"},
+    {"id":"context-tuning","status":"verified"},
+    {"id":"cross-platform-installers","status":"in_progress"},
+    {"id":"desktop-monitor","status":"in_progress"},
+    {"id":"device-autoeq","status":"verified"},
+    {"id":"documentation-site","status":"verified"},
+    {"id":"dsp-regression","status":"verified"},
+    {"id":"feature-ablation","status":"verified"},
+    {"id":"mixer-data-plane","status":"in_progress"},
+    {"id":"model-acquisition","status":"in_progress"},
+    {"id":"output-harshness","status":"in_progress"},
+    {"id":"power-transition-noise","status":"in_progress"},
+    {"id":"semantic-inference","status":"in_progress"},
+    {"id":"tui-completion","status":"verified"},
+    {"id":"verification-delivery","status":"in_progress"},
+    {"id":"windows-linux","status":"in_progress"}
+  ]
+}

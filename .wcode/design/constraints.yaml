@@ -1,0 +1,30 @@
+- schema_version: 1
+  id: CONSTRAINT-SOURCE-DECOMPOSITION
+  title: Source modules stay bounded
+  statement: Maintained text files must stay at or below 1000 physical lines; generated source outputs, lockfiles, and binary assets are exempt. Split cohesive responsibilities into domain subdirectories before a file crosses that boundary. Repository filenames stay at or below 32 characters, with Rust stems at or below 24, because the directory already supplies context.
+  applies_to: []
+- schema_version: 1
+  id: CONSTRAINT-TEST-ROOT
+  title: Tests live in the repository test root
+  statement: Standalone automated tests belong under the repository tests directory, grouped by the source domain. Source modules may attach those files for private unit coverage instead of accumulating large inline test modules.
+  applies_to: []
+- schema_version: 1
+  id: MARIS-DESIGN-SYNC
+  title: Maris design stays synchronized
+  statement: Changes to Maris audio responsibilities, source paths, trust boundaries, device capabilities, control protocols, or verification coverage must update this project's .wcode Design State in the same change.
+  applies_to: []
+- schema_version: 1
+  id: MARIS-PARALLEL-SAFETY
+  title: Independent Maris work may execute in parallel
+  statement: Independent implementation and verification lanes may run concurrently when they do not overlap files, audio devices, persistent state, or other shared mutable resources; real-time audio safety and deterministic state transitions take precedence over parallelism.
+  applies_to: []
+- schema_version: 1
+  id: MARIS-MODULE-LAYOUT
+  title: Source modules have domain owners
+  statement: Only main.rs and lib.rs live directly under src. Each implementation belongs to its domain directory and is connected by ordinary Rust module declarations. Existing library re-exports preserve caller compatibility; production imports use the owning domain. DSP math does not import terminal, desktop, command-line or transport code. Source moves update include paths, tests, architecture and illustration source bindings together.
+  applies_to: []
+- schema_version: 1
+  id: MARIS-AUDIO-REALTIME
+  title: Audio callbacks remain real-time safe
+  statement: Audio callbacks must not allocate, block, lock, perform file or network I/O, log, or invoke model inference. Real-time rendering uses preallocated state and bounded non-blocking handoff to control and analysis workers.
+  applies_to: []

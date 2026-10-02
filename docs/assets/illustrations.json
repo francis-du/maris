@@ -1,0 +1,163 @@
+{
+  "scope": "actual_offline_ratatui",
+  "hardware_validation": false,
+  "source_sha256": {
+    "src/ui/tui/view.rs": "e40f9cba1aa3d7f16aaef67e046b521943ff0cc59e594add91020e7aa797933d",
+    "src/ui/tui/studio/mod.rs": "f38f97cd78e07170a6d5e7e595e51c671c07d61787cf2c9295aad19185f78333",
+    "src/ui/tui/studio/controls.rs": "5ab440a18fdb6af210a0f16fa44ce17ccb21dfc8c9920a5e66e585c404a8e3bf",
+    "src/ui/tui/settings/view.rs": "d6dee16d2fa9b5aadf370410f4da867e228cc83f2a7ee526ac5767140a50bf15",
+    "src/ui/tui/presets.rs": "3e3e78093029b3fecc27a3aad422bfe874b0b881f105c55f0cd709b7f659c0a8",
+    "src/ui/tui/inspector.rs": "59a91902ba562300345964a2ebca9fcfb823be90d6fd37825eb5cab6d63ea928",
+    "src/i18n/mod.rs": "52dad2f6e7ffeeab6dc852c442e2de5d02be021c628b802bc571fccbf0e6f01f",
+    "src/i18n/console.rs": "9673f1c821b0a614ab0811bcefd740b90bbc7da09ed3b02fbe030484f3777173",
+    "src/i18n/surface.rs": "b9f938366c3a1c5ebe563dcf56c5a038a6e01b32e14c43bbeab6f8982af4d7da",
+    "src/i18n/messages.rs": "f523252bfe6c4bfe21d828959ec33019fb2b1f1fc1383f336e2bb4e2b9ae144d",
+    "tests/support/ui_probe.rs": "04b2129eb7a05a50dfc3f54337031840f4f16e1d7fc9cd0eae4ff1b0b2503d98"
+  },
+  "images": {
+    "studio-en.svg": {
+      "sha256": "3d290e9869c4227c047cc0ec3138b1ee392f62074085efb98600d1b6114e623c",
+      "buffer_sha256": "3127bcdc14276dea16e80b693831ab4ff3e20a159582d409042ab9c742f568de",
+      "locale": "en",
+      "view": "studio",
+      "columns": 140,
+      "rows": 40
+    },
+    "studio-zh-CN.svg": {
+      "sha256": "ebdcaba118a10b8595afc1d96b6ff5a2494694c6703adc5bd1671e2de974b3b8",
+      "buffer_sha256": "0182c326c55418e6e59057fb1f8e80bd8fdd4a9120768d6d57d1906a0360f639",
+      "locale": "zh-CN",
+      "view": "studio",
+      "columns": 140,
+      "rows": 40
+    },
+    "studio-zh-TW.svg": {
+      "sha256": "d476db612b098cfc13ad3e5f1ed38a71c8859bb2afbfefb34facd418f0cc3ec8",
+      "buffer_sha256": "af65dfdd5b05b6a1c583196607fd19c04830861b17d8427f4bfa1dfde91ab77b",
+      "locale": "zh-TW",
+      "view": "studio",
+      "columns": 140,
+      "rows": 40
+    },
+    "studio-ja.svg": {
+      "sha256": "e269c57097b421829afa973d4ab951c169eba0e60ae8899c865013bca30044d1",
+      "buffer_sha256": "1226596662708f6f626c0e3424bfdf731a2bfa1d82f01f8f414f204773fde164",
+      "locale": "ja",
+      "view": "studio",
+      "columns": 140,
+      "rows": 40
+    },
+    "studio-de.svg": {
+      "sha256": "95eaa61b2466979528c245a4aca237807ca5023c132af5499e7ea275cf609539",
+      "buffer_sha256": "e30a54ec94ded01a097a92b7b816c72a1b5548ad1480b13aa9641ad19267262f",
+      "locale": "de",
+      "view": "studio",
+      "columns": 140,
+      "rows": 40
+    },
+    "studio-es.svg": {
+      "sha256": "fb0a2d9f1b5faa04e2610f923bdc288f681a10254c69b473d76d13ed1a82d4ff",
+      "buffer_sha256": "c3cda762894418b89a3dcb859db95cfc22bd573a9ed41e5c165b118a386b5997",
+      "locale": "es",
+      "view": "studio",
+      "columns": 140,
+      "rows": 40
+    },
+    "settings-en.svg": {
+      "sha256": "5bdda5ed515948690a01db7d38d227588b49b1e52706fc93bba0eb7ceec75b35",
+      "buffer_sha256": "85c1d7417d8ba84649e21a43bba6e2c1307d9eb89c323c9b92f952dc764be356",
+      "locale": "en",
+      "view": "settings",
+      "columns": 140,
+      "rows": 40
+    },
+    "settings-zh-CN.svg": {
+      "sha256": "809461cd559caeb39303b3b85f684a4f98e69641ac5ca0976ebf095ad91d0b5e",
+      "buffer_sha256": "b243575d07cde2f1c96f80b9f0ce0bbc9f111fea1c919b7262e45817c84d7deb",
+      "locale": "zh-CN",
+      "view": "settings",
+      "columns": 140,
+      "rows": 40
+    },
+    "settings-zh-TW.svg": {
+      "sha256": "3daaa95a5a3524661c43956d2af2249f88ffd62e1b47515f1fd7857021b23a3f",
+      "buffer_sha256": "272df1cb3b602c6ffe0c4551ee5ef83fca16cb33a6ce9ca4991e18dbe92b80b0",
+      "locale": "zh-TW",
+      "view": "settings",
+      "columns": 140,
+      "rows": 40
+    },
+    "settings-ja.svg": {
+      "sha256": "3639fe93c922748a7c80a629ac450cdc0b68a7c24238de9da9a5596f042fadb1",
+      "buffer_sha256": "11a183b4aacf08aef2ec108e23c5736b7abc3e9ca346d9cf70d1edc9abc753a3",
+      "locale": "ja",
+      "view": "settings",
+      "columns": 140,
+      "rows": 40
+    },
+    "settings-de.svg": {
+      "sha256": "53d4ecddb630173695779575bcd22828641aa7634a8f39b86e287912d8f18af7",
+      "buffer_sha256": "f0379e832cc4149aab13ab8dc40dbe52fde202cbf8cdbdc1657d25a2e89fa323",
+      "locale": "de",
+      "view": "settings",
+      "columns": 140,
+      "rows": 40
+    },
+    "settings-es.svg": {
+      "sha256": "82e460a3694e894f3cd653850f5c1fdb28496ab6712c9d546b58d85106a43b5c",
+      "buffer_sha256": "23b4b86051c4ccd357d9dcecee6255093b0c52ce32bb65a710b737f4df0f791f",
+      "locale": "es",
+      "view": "settings",
+      "columns": 140,
+      "rows": 40
+    },
+    "presets-en.svg": {
+      "sha256": "32cd103c3e94c658c2c5e848fa7a42276b767082fc69ec24e9f4fffdbc3ef3ec",
+      "buffer_sha256": "e7373b4f7d63d7bd80f208ea1592807473878ab2a616a6701ebac24555bd20e5",
+      "locale": "en",
+      "view": "presets",
+      "columns": 140,
+      "rows": 40
+    },
+    "presets-zh-CN.svg": {
+      "sha256": "bbe6045ea0304776fd9fdeabeef0691d2e5559061baeb5480c508bd2bf615dd5",
+      "buffer_sha256": "f26ac1dca40ef10eb6d3c474a8ce9c42d0eb51328dc17432bee90490a28d74dd",
+      "locale": "zh-CN",
+      "view": "presets",
+      "columns": 140,
+      "rows": 40
+    },
+    "presets-zh-TW.svg": {
+      "sha256": "0a95c245a5b738b47f3f2beb6bf897763c1d048ddbb421732d0cb6418b7595f9",
+      "buffer_sha256": "32a4fb63b175563b790fe64143f772e23966049080c64ba874e62ba0311c35fb",
+      "locale": "zh-TW",
+      "view": "presets",
+      "columns": 140,
+      "rows": 40
+    },
+    "presets-ja.svg": {
+      "sha256": "a39dfecba5f6eab2c25fc827f8ef246adc5bd48da49932bbe74fe021dbed8347",
+      "buffer_sha256": "196cad7f08b05368e3b166f1e69bcec9162b0e3a51736cd271af5b07c6f66425",
+      "locale": "ja",
+      "view": "presets",
+      "columns": 140,
+      "rows": 40
+    },
+    "presets-de.svg": {
+      "sha256": "1223b0560e48ec0aef03e95154d30f9d7dbdd051fb39adbe978dce7e92e3fd73",
+      "buffer_sha256": "ec260f4bc8af25264cdcd3a6b75db96c4528747f6a87d44feb75611d4af7bab9",
+      "locale": "de",
+      "view": "presets",
+      "columns": 140,
+      "rows": 40
+    },
+    "presets-es.svg": {
+      "sha256": "9d17d58ddf2c14e09a638434b28f66337e3617cf20ef73aef4f33314695770e7",
+      "buffer_sha256": "fe07874e5a28ceb910c6badef97c891e5eca7496400fc6258e909e40de672d4a",
+      "locale": "es",
+      "view": "presets",
+      "columns": 140,
+      "rows": 40
+    }
+  }
+}

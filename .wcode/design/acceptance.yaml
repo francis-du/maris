@@ -1,0 +1,87 @@
+- schema_version: 1
+  id: AC-RUNTIME-001
+  title: Crate surface remains buildable and structurally stable
+  statement: Entry points, module declarations, and public re-exports compile with the locked dependency graph and pass the repository structure tests.
+  verification:
+  - kind: check
+    id: rust-check
+  - kind: check
+    id: rust-test
+- schema_version: 1
+  id: AC-AUDIO-001
+  title: Audio core passes deterministic quality gates
+  statement: The Rust workspace type-checks, tests pass, and clippy reports no warnings for the audio and DSP implementation.
+  verification:
+  - kind: check
+    id: rust-check
+  - kind: check
+    id: rust-test
+  - kind: check
+    id: rust-clippy
+- schema_version: 1
+  id: AC-DEVICE-001
+  title: Device behavior remains covered
+  statement: Device identity, routing, and tuning integration pass the repository test suite and static checks.
+  verification:
+  - kind: check
+    id: rust-test
+  - kind: check
+    id: rust-clippy
+- schema_version: 1
+  id: AC-TUNING-001
+  title: Tuning transitions remain validated
+  statement: Reversible tuning and preset behavior compile cleanly and pass automated tests.
+  verification:
+  - kind: check
+    id: rust-check
+  - kind: check
+    id: rust-test
+- schema_version: 1
+  id: AC-MIXER-001
+  title: Mixer behavior remains validated
+  statement: Mixer state and matrix behavior compile cleanly and pass automated tests.
+  verification:
+  - kind: check
+    id: rust-check
+  - kind: check
+    id: rust-test
+- schema_version: 1
+  id: AC-MODEL-001
+  title: Model integration preserves runtime boundaries
+  statement: Model and analysis code pass tests and clippy without moving inference into callback execution.
+  verification:
+  - kind: check
+    id: rust-test
+  - kind: check
+    id: rust-clippy
+- schema_version: 1
+  id: AC-CONTROL-001
+  title: Control surfaces share validated behavior
+  statement: Control, CLI, and UI code pass formatting, tests, and clippy checks.
+  verification:
+  - kind: check
+    id: rust-format
+  - kind: check
+    id: rust-test
+  - kind: check
+    id: rust-clippy
+- schema_version: 1
+  id: AC-PLATFORM-001
+  title: Platform code remains buildable and explicit
+  statement: Platform integrations pass the locked workspace type-check and automated tests without claiming unavailable capability.
+  verification:
+  - kind: check
+    id: rust-check
+  - kind: check
+    id: rust-test
+- schema_version: 1
+  id: AC-I18N-001
+  title: Localized surfaces preserve build and test contracts
+  statement: Labels and instructions explain user actions and status in plain language. All six locales render without losing controls or warnings, and tests preserve literal user names, message arguments, and machine identifiers. Updated documentation illustrations match the current source.
+  verification:
+  - kind: check
+    id: rust-format
+  - kind: check
+    id: rust-check
+  - kind: check
+    id: rust-test
