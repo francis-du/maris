@@ -320,6 +320,7 @@ fn live_apply_rejects_session_and_device_rebind_but_accepts_fresh_analysis() {
     assert!(music_tuning::apply(&store, &proposal).is_ok());
 }
 
+#[test]
 fn apply_rejects_output_change_after_preview() {
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path());
