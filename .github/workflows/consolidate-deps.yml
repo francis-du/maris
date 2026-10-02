@@ -16,10 +16,8 @@ jobs:
           sudo apt-get install -y libasound2-dev pkg-config
       - name: Regenerate lock and validate Linux compile
         run: |
-          cargo +1.94.0 update -p cpal --precise 0.17.1
-          cargo +1.94.0 update -p tao --precise 0.37.1
           cargo +1.94.0 fmt --all --check
-          cargo +1.94.0 check --locked --all-targets
+          cargo +1.94.0 check --all-targets
           cargo +1.94.0 check --locked --all-targets --no-default-features
       - name: Commit Cargo.lock once
         shell: bash
