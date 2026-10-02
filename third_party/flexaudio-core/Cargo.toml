@@ -18,3 +18,5 @@ ringbuf = "=0.5.2"
 rtrb = "0.3"
 rubato = "3"
 thiserror = "2"
+
+[workspace]
