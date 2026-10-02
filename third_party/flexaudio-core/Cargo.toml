@@ -1,0 +1,20 @@
+[package]
+name = "flexaudio-core"
+version = "0.2.0"
+edition = "2021"
+license = "MIT"
+rust-version = "1.85"
+authors = ["tubome (Studio Sadola)"]
+repository = "https://github.com/Studio-Sadola/flexaudio"
+description = "Source-agnostic audio capture engine, types, and resampling/normalization core for flexaudio."
+readme = "README.md"
+keywords = ["audio", "capture", "resampling", "stream", "dsp"]
+categories = ["multimedia::audio"]
+documentation = "https://docs.rs/flexaudio-core"
+
+[dependencies]
+bitflags = "2"
+ringbuf = "=0.5.2"
+rtrb = "0.3"
+rubato = "3"
+thiserror = "2"
