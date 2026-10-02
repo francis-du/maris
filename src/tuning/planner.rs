@@ -136,6 +136,15 @@ pub fn describe_changes(before: &MusicProfile, after: &MusicProfile) -> Vec<Stri
     result
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LiveGuard {
+    pub session_id: String,
+    pub stable_id: Option<String>,
+    pub device_binding_revision: Option<u64>,
+    pub rebind_count: Option<u64>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Proposal {
@@ -154,6 +163,8 @@ pub struct Proposal {
     pub changes: Vec<String>,
     pub reasons: Vec<String>,
     pub limitations: Vec<String>,
+    #[serde(default)]
+    pub live_guard: Option<LiveGuard>,
 }
 
 fn bounded_add(value: f64, delta: f64, min: f64, max: f64) -> f64 {
@@ -431,7 +442,7 @@ pub fn propose_from(input: TuningInput<'_>) -> Result<Proposal> {
     let changes = describe_changes(before, &target);
 
     Ok(Proposal {
-        algorithm: "maris-context-tuning-v1".into(),
+        algorithm: "maris-context-tuning-preview-v1".into(),
         goal: goal.into(),
         device: device.into(),
         profile_key: profile_key.into(),
@@ -451,6 +462,7 @@ pub fn propose_from(input: TuningInput<'_>) -> Result<Proposal> {
             "A proposal changes preference controls only; measured correction remains unchanged.".into(),
             "Digital headroom and limiter telemetry are not acoustic SPL or hearing-protection guarantees.".into(),
         ],
+        live_guard: None,
     })
 }
 
@@ -472,7 +484,25 @@ pub fn from_live(store: &Store, goal: &str) -> Result<Proposal> {
     let listening = crate::tuning::preferences::load(store)?;
     let before = listening.effective(&profile_key).clone();
     let effective_preamp_db = runtime["effective_preamp_db"].as_f64().unwrap_or(0.0);
-    propose_from(TuningInput {
+    let session_id = runtime["session_id"]
+        .as_str()
+        .context("Missing active session identity")?;
+    ensure!(
+        !session_id.is_empty()
+            && session_id.len() <= 256
+            && !session_id.chars().any(char::is_control),
+        "Invalid active session identity"
+    );
+    let stable_id = runtime["device_identity"]["stable_id"]
+        .as_str()
+        .map(str::to_owned);
+    if stable_id.is_some() {
+        ensure!(
+            runtime["device_binding_revision"].as_u64().is_some(),
+            "Missing device binding revision"
+        );
+    }
+    let mut proposal = propose_from(TuningInput {
         device: &device,
         profile_key: &profile_key,
         listening_revision: listening.revision,
@@ -482,22 +512,59 @@ pub fn from_live(store: &Store, goal: &str) -> Result<Proposal> {
         capability: &capability,
         goal,
         effective_preamp_db,
-    })
+    })?;
+    proposal.algorithm = "maris-context-tuning-live-v2".into();
+    proposal.live_guard = Some(LiveGuard {
+        session_id: session_id.to_owned(),
+        stable_id,
+        device_binding_revision: runtime["device_binding_revision"].as_u64(),
+        rebind_count: runtime["rebind_count"].as_u64(),
+    });
+    Ok(proposal)
 }
 
 pub fn apply(store: &Store, proposal: &Proposal) -> Result<crate::tuning::preferences::Library> {
     ensure!(
-        proposal.algorithm == "maris-context-tuning-v1",
-        "Unsupported tuning algorithm"
+        proposal.algorithm == "maris-context-tuning-live-v2",
+        "Only a live Maris tuning proposal can be applied"
     );
+    let guard = proposal
+        .live_guard
+        .as_ref()
+        .context("Tuning proposal is not bound to a live audio session")?;
+    let now = analysis::now_ms();
     ensure!(
-        analysis::now_ms()
-            .checked_sub(proposal.created_at_ms)
+        now.checked_sub(proposal.created_at_ms)
             .is_some_and(|age| age < 120_000),
         "Tuning proposal expired or has a future timestamp"
     );
     let runtime = crate::audio::runtime_status(store);
     ensure!(runtime["active"] == true, "No active audio session");
+    ensure!(
+        runtime["session_id"].as_str() == Some(guard.session_id.as_str()),
+        "Audio session changed after preview"
+    );
+    ensure!(
+        runtime["device_identity"]["stable_id"].as_str() == guard.stable_id.as_deref(),
+        "Active device identity changed after preview"
+    );
+    ensure!(
+        runtime["device_binding_revision"].as_u64() == guard.device_binding_revision,
+        "Device binding changed after preview"
+    );
+    ensure!(
+        runtime["rebind_count"].as_u64() == guard.rebind_count,
+        "Audio device was rebound after preview"
+    );
+    let live_evidence = preview_evidence(&runtime, now)?;
+    ensure!(
+        serde_json::to_value(&live_evidence)? == serde_json::to_value(&proposal.evidence)?,
+        "Signal evidence changed after preview"
+    );
+    ensure!(
+        live_context(&runtime, &live_evidence, now) == proposal.context,
+        "Music context changed after preview"
+    );
     ensure!(
         runtime["output"].as_str() == Some(proposal.device.as_str()),
         "Active output changed after preview"
