@@ -8,6 +8,8 @@ use crossterm::event::KeyCode;
 use serde_json::{json, Value};
 
 fn fixture() -> (tempfile::TempDir, Store, Value) {
+    // This fixture models one live mixer session; CI scheduling must not age it out.
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path());
     let state = mixer::edit(&store, Some(0), |config| {
