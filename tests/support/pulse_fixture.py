@@ -12,13 +12,26 @@ path = root / 'fixture.json'
 state = json.loads(path.read_text())
 with (root / 'calls.jsonl').open('a') as log:
     log.write(json.dumps(args) + '\n')
-if args and args[0] == '--format=json':
+if args and args[0] in ('--format=json', '--format=text'):
     args = args[1:]
 if args == ['info']:
     print(json.dumps({'default_sink_name': state['default']}))
+elif args == ['list', 'short', 'modules']:
+    for module in state['modules']:
+        print(str(module['index']) + '\t' + module['name'] + '\t' + module['argument'] + '\t')
 elif len(args) == 2 and args[0] == 'list':
     key = {'sinks': 'sinks', 'sink-inputs': 'inputs', 'modules': 'modules'}[args[1]]
-    print(json.dumps(state[key]))
+    items = state[key]
+    # Match independent native pactl 16.1 output instead of mirroring Rust structs.
+    if key == 'modules':
+        items = [{k: v for k, v in item.items() if k != 'index'} for item in items]
+    elif key == 'sinks':
+        items = [{('monitor_source' if k == 'monitor_source_name' else k): v
+                  for k, v in item.items()} for item in items]
+    elif key == 'inputs':
+        items = [dict(item, client=str(item['client']) if item.get('client') is not None else None)
+                 for item in items]
+    print(json.dumps(items))
 elif len(args) == 3 and args[0] == 'move-sink-input':
     if state.pop('fail_move', False):
         path.write_text(json.dumps(state))

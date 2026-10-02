@@ -166,9 +166,18 @@ def main() -> None:
             original_index = next(item['index'] for item in sinks if item['name'] == 'speakers_a')
             if second_input['sink'] != original_index:
                 raise RuntimeError('Removing an application from the scope did not restore its output.')
+            # Recovery is journaled per owned sink, not only in the legacy filename.
+            records = list(state.glob('pulse-route-*.json'))
+            if not records:
+                raise RuntimeError('No token-scoped recovery journal was written.')
+            for record in records:
+                journal = read_json(record)
+                if journal['sink'] != 'maris_' + journal['token']:
+                    raise RuntimeError('Recovery journal does not bind its owned sink.')
             # This process belongs to the test. Force exit tests the real pipe guardian.
             maris.kill(); maris.wait(timeout=5)
-            wait_for(lambda: not (state / 'pulse-route.json').exists()
+            wait_for(lambda: not list(state.glob('pulse-route-*.json'))
+                     and not (state / 'pulse-route.json').exists()
                      and not any(s['name'].startswith('maris_') for s in pactl('list', 'sinks')),
                      'Parent-exit recovery did not remove the owned route')
             first_input = next(item for item in pactl('list', 'sink-inputs')
