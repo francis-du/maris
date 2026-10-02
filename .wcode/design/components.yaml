@@ -228,6 +228,8 @@
   - kind: file
     path: src/ui/desktop/monitor.rs
   - kind: file
+    path: src/ui/desktop/monitor_state.rs
+  - kind: file
     path: src/ui/desktop/native.rs
   - kind: file
     path: src/ui/tui/mod.rs
@@ -255,6 +257,10 @@
     path: src/ui/tui/studio/mod.rs
   - kind: file
     path: src/ui/tui/studio/controls.rs
+  - kind: file
+    path: src/ui/tui/studio/analyzer.rs
+  - kind: file
+    path: src/ui/tui/studio/appearance.rs
   - kind: file
     path: src/ui/tui/view.rs
 

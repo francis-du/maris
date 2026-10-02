@@ -1,6 +1,16 @@
 //! Localized labels for the rewritten console. English identifiers stay unchanged.
 pub const TRANSLATIONS: &[(&str, [&str; 5])] = &[
     (
+        "Reduced motion",
+        [
+            "减少动态效果",
+            "減少動態效果",
+            "動きを減らす",
+            "Bewegung reduziert",
+            "Movimiento reducido",
+        ],
+    ),
+    (
         "Assist",
         ["调音助手", "調音助手", "アシスト", "Assistent", "Asistente"],
     ),

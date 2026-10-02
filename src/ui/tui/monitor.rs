@@ -94,7 +94,10 @@ pub fn compact_colored(
         && runtime["visualization"]["updated_at_ms"]
             .as_u64()
             .is_some_and(|time| now.checked_sub(time).is_some_and(|age| age < 600));
-    let mode = t(if !is_live {
+    let reduced_motion = super::studio::appearance::Appearance::from_environment().reduced_motion;
+    let mode = t(if runtime["active"] == true && !is_live {
+        "STALE"
+    } else if !is_live {
         "STANDBY"
     } else if bypass {
         "EQ BYPASS"
@@ -107,14 +110,20 @@ pub fn compact_colored(
             Span::styled(
                 format!(" {mode}  "),
                 Style::default()
-                    .fg(palette.meter)
+                    .fg(if is_live {
+                        palette.meter
+                    } else if runtime["active"] == true {
+                        palette.warning
+                    } else {
+                        palette.muted
+                    })
                     .add_modifier(Modifier::BOLD),
             ),
             Span::raw(device),
         ])),
         Rect::new(inner.x, inner.y, inner.width, 1),
     );
-    if inner.height > 3 {
+    if inner.height > 3 && !reduced_motion {
         spectrum_colored(
             frame,
             Rect::new(inner.x, inner.y + 1, inner.width, inner.height - 3),
@@ -124,6 +133,14 @@ pub fn compact_colored(
                 [0.0; 24]
             },
             palette,
+        );
+    }
+    if inner.height > 3 && reduced_motion {
+        frame.render_widget(
+            Paragraph::new(t("Reduced motion"))
+                .alignment(Alignment::Center)
+                .style(Style::default().fg(palette.muted)),
+            Rect::new(inner.x, inner.y + 2, inner.width, 1),
         );
     }
     if inner.height > 1 {

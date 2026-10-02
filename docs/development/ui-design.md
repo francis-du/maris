@@ -65,6 +65,10 @@ The left rail uses 28-35 columns. The main analyzer/support surface receives the
 
 ## Visual system
 
+The production console now uses restrained accent section strips across Studio, inspectors and settings. The measured frequency fill has a luminance gradient and its own solid-block legend; the calculated EQ curve retains a separate line legend and scale. Output LEDs and aligned digital readings remain measured data. Support sections share the neutral analyzer surface without becoming equally prominent cards.
+
+Terminal colors follow `COLORTERM` and `TERM`: true color, 256 colors or basic ANSI colors. A nonempty `NO_COLOR` or `TERM=dumb` removes color from the entire rendered buffer, including compact views and overlays; labels, selection pointers and confirmation text remain. Set `MARIS_REDUCED_MOTION=1` to hide moving frequency and level graphics while keeping the calculated EQ curve, digital readings and all actions. The macOS monitor also reads the system Reduce Motion preference. Native status requires a current audio timestamp and never fills in a missing peak. This changes presentation only and never starts or changes audio processing.
+
 Keep the existing dynamic palette tracker and its debounce. Backgrounds stay neutral charcoal. Primary text is near-white; units and auxiliary labels are quieter but legible. Cyan/aurora tones identify spectrum and live level evidence; the accent identifies the calculated profile curve and selected control. Warning color is reserved for actual warning states. A pointer, words and numbers accompany color: meaning must not depend on color alone.
 
 Terminal cells do not support normal GUI font sizing. Use placement, weight, short labels, spacing and color roles for hierarchy. Use two columns of inner padding on broad surfaces, one row between groups and consistent value alignment. Long names are visibly ellipsized without moving the numeric columns. Dense technical identifiers belong in detail views.
