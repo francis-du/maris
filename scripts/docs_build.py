@@ -7,6 +7,7 @@ import posixpath
 import re
 from urllib.parse import quote, unquote, urlsplit
 from docs_assets import LANGUAGES, validate as validate_illustrations
+from capture_menu_docs import MANIFEST as MENU_MANIFEST, validate as validate_menu_illustrations
 from docs_markdown import render, slug
 from release_requirements import load as load_requirements, REQUIRED
 
@@ -170,6 +171,7 @@ def build(root: Path) -> dict[str, bytes]:
     check_source_links(root)
     labels = translations(root)
     assets = validate_illustrations(root / 'docs/assets', root)
+    menu_assets = validate_menu_illustrations(root / 'docs/assets', root)
     version_match = re.search(r'^version = "([0-9.]+)"$', (root / 'Cargo.toml').read_text(encoding='utf-8'), re.M)
     if version_match is None:
         raise ValueError('Missing product version')
@@ -186,11 +188,11 @@ def build(root: Path) -> dict[str, bytes]:
         if file.is_symlink() or not file.is_file():
             raise ValueError('Missing or linked installer source')
         files[name] = file.read_bytes()
-    for name in ['site.css'] + list(BRAND) + list(assets['images']):
+    for name in ['site.css'] + list(BRAND) + list(assets['images']) + list(menu_assets['images']):
         files['assets/' + name] = (root / 'docs/assets' / name).read_bytes()
     expected = {source_path(root, lang, page).resolve() for lang in LANGUAGES for page in GUIDES + tuple(REFERENCES)}
     expected |= {(root / 'docs/locales' / f'{lang}.json').resolve() for lang in LANGUAGES}
-    expected |= {(root / 'docs/assets' / name).resolve() for name in ['site.css','illustrations.json'] + list(BRAND) + list(assets['images'])}
+    expected |= {(root / 'docs/assets' / name).resolve() for name in ['site.css','illustrations.json',MENU_MANIFEST] + list(BRAND) + list(assets['images']) + list(menu_assets['images'])}
     expected |= {(root / 'docs/README.md').resolve(), (root / 'docs/development/requirements.json').resolve()}
     for path in (root / 'docs').rglob('*'):
         if path.is_symlink() or (path.is_file() and path.resolve() not in expected):
