@@ -25,25 +25,28 @@ class ToolchainRequirements(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             temporary = Path(directory)
             cargo = temporary / 'cargo'
-            cargo.write_text('#!/bin/sh\ncat "$MARIS_DEPENDENCY_TREE"\n', encoding='utf-8')
+            cargo.write_text('#!/bin/sh\ncat tree.txt\n', encoding='utf-8', newline='\n')
             cargo.chmod(0o755)
             tree = temporary / 'tree.txt'
-            environment = dict(os.environ, PATH=str(temporary) + os.pathsep + os.environ.get('PATH', ''),
-                               MARIS_DEPENDENCY_TREE=str(tree), RUNNER_OS='Regression fixture')
+            environment = dict(os.environ, RUNNER_OS='Regression fixture')
             for name in ('ci.yml', 'build.yml'):
                 text = (ROOT / '.github/workflows' / name).read_text(encoding='utf-8')
                 block = re.search(r'      - name: Reject vulnerable dependencies reachable on this native target\n'
                                   r'        shell: bash\n        run: \|\n((?:          .*\n)+)', text)
                 self.assertIsNotNone(block, name)
-                script = '\n'.join(line[10:] for line in block[1].splitlines())
+                # Git Bash needs its own path syntax; $PWD also preserves spaces.
+                script = 'export PATH="$PWD:$PATH"\n' + '\n'.join(
+                    line[10:] for line in block[1].splitlines())
                 for dependency, rejected in [('glib v0.18.5', True), ('ringbuf v0.4.8', True),
                                              ('glib v0.21.5\nringbuf v0.5.2', False)]:
                     with self.subTest(workflow=name, dependency=dependency):
                         # Exceed pipe capacity so grep -q's early exit cannot hide SIGPIPE.
-                        tree.write_text(dependency + '\n' + 'dependency v1.0.0\n' * 20_000, encoding='utf-8')
+                        tree.write_text(dependency + '\n' + 'dependency v1.0.0\n' * 20_000, encoding='utf-8', newline='\n')
                         result = subprocess.run(['bash', '-c', script], cwd=temporary, env=environment,
-                                                capture_output=True, text=True, timeout=10)
-                        self.assertEqual(result.returncode, 1 if rejected else 0, result.stderr)
+                                                capture_output=True, text=True, encoding='utf-8', timeout=10)
+                        self.assertEqual(result.returncode, 1 if rejected else 0, result.stdout + result.stderr)
+                        if rejected:
+                            self.assertIn('reachable on Regression fixture', result.stderr)
 
     def test_native_workflows_test_the_declared_minimum_rust_version(self):
         minimum = minimum_rust()
