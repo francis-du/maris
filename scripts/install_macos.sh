@@ -105,7 +105,8 @@ validate() {
     [ -x "$app/Contents/MacOS/maris" ] || fail 'Bundle executable is missing or not executable'
     arch=$(uname -m)
     if [ "$arch" = x86_64 ] && [ "$(/usr/sbin/sysctl -in sysctl.proc_translated 2>/dev/null || true)" = 1 ]; then arch=arm64; fi
-    # lipo treats every argument after -verify_arch as an architecture, not a file.
+    # LLVM lipo treats every argument after -verify_arch as an architecture.
+    # Keep the input first so both Apple and LLVM implementations inspect the file.
     /usr/bin/lipo "$app/Contents/MacOS/maris" -verify_arch "$arch" >/dev/null 2>&1 || fail "Bundle does not contain a native $arch executable"
     if [ "$ALLOW_UNSIGNED" -eq 0 ]; then
         /usr/bin/codesign --verify --deep --strict "$app" >/dev/null 2>&1 || fail 'Signature validation failed; use --allow-unsigned only for a trusted local development build'

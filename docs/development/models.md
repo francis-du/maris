@@ -37,7 +37,7 @@ These are one-run offline kernel timings, not process CPU, full audio-pipeline c
 
 The earlier checkpoint test returned immediately when weights were absent. That green test did not prove inference execution. The build now exposes a checked `maris_musicnn_bundled` configuration only after exact resource verification; bundled tests require the real payload and recompute its SHA-256, while unbundled tests explicitly verify that inference is unavailable. NaN, infinity and out-of-range probabilities now reject the entire semantic result. A pre-fix regression demonstrated that NaN previously became a valid-looking semantic result.
 
-`--release` alone does not enable the resource; bundling requires the existing `MARIS_BUNDLE_SMALL_MODELS=1` build setting. The connected tool rejected this environment override during the current audit. No workaround, actual checkpoint execution, reference parity or model-quality acceptance is inferred from the unbundled test run. Those checks remain incomplete.
+`--release` alone does not enable the resource; bundling requires `MARIS_BUNDLE_SMALL_MODELS=1`. After the ordinary regression tests, the native push-check jobs now request the pinned weights and run the model tests. A download, digest or inference failure fails that job; a passing unbundled build is not counted as checkpoint execution. This test uses generated audio, not user playback. Reference-output comparison and listening acceptance remain separate checks.
 
 ## Resampling regression, 2026-10-02
 

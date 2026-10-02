@@ -57,6 +57,10 @@ jobs:
         run: cargo test --all-targets --no-default-features --locked
       - name: Clippy
         run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Execute the pinned local music model
+        env:
+          MARIS_BUNDLE_SMALL_MODELS: '1'
+        run: cargo test --locked --lib models:: -- --nocapture
       - name: Native Linux audio integration with private silent outputs
         if: runner.os == 'Linux'
         run: python3 tests/support/pulse_smoke.py --binary target/debug/maris
