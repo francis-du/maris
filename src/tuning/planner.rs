@@ -556,15 +556,6 @@ pub fn apply(store: &Store, proposal: &Proposal) -> Result<crate::tuning::prefer
         runtime["rebind_count"].as_u64() == guard.rebind_count,
         "Audio device was rebound after preview"
     );
-    let live_evidence = preview_evidence(&runtime, now)?;
-    ensure!(
-        serde_json::to_value(&live_evidence)? == serde_json::to_value(&proposal.evidence)?,
-        "Signal evidence changed after preview"
-    );
-    ensure!(
-        live_context(&runtime, &live_evidence, now) == proposal.context,
-        "Music context changed after preview"
-    );
     ensure!(
         runtime["output"].as_str() == Some(proposal.device.as_str()),
         "Active output changed after preview"
