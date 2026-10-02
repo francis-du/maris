@@ -29,20 +29,24 @@ struct Heartbeat {
 impl Heartbeat {
     fn start(store: Store) -> Self {
         let (stop, receiver) = std::sync::mpsc::channel();
-        let thread = std::thread::spawn(move || {
-            while matches!(
-                receiver.recv_timeout(Duration::from_millis(100)),
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout)
-            ) {
-                store.write_json("runtime.json", &json!({
+        let thread =
+            std::thread::spawn(move || {
+                while matches!(
+                    receiver.recv_timeout(Duration::from_millis(100)),
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+                ) {
+                    store.write_json("runtime.json", &json!({
                     "active":true,"music_processing":true,"session_id":"click-fixture",
                     "profile_key":"Headphones","output":"Headphones","sample_rate":48000,
                     "updated_at_ms":maris::analysis::now_ms(),
                     "applied_revision":0,"applied_music_revision":0
                 })).unwrap();
-            }
-        });
-        Self { stop, thread: Some(thread) }
+                }
+            });
+        Self {
+            stop,
+            thread: Some(thread),
+        }
     }
 }
 impl Drop for Heartbeat {
