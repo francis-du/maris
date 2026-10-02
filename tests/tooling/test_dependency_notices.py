@@ -4,6 +4,7 @@ import copy
 import hashlib
 import io
 import json
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -13,7 +14,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from dependency_notices import collect_standard_library, notice_entries, validate
+from dependency_notices import collect, collect_standard_library, notice_entries, validate
 
 
 def standard_library_fixture(directory):
@@ -38,6 +39,45 @@ def notice_fixture(directory, native='fixture-native-target'):
 
 
 class StandardLibraryNotices(unittest.TestCase):
+    @unittest.skipUnless(shutil.which('cargo') and shutil.which('git'), 'requires real Cargo and Git')
+    def test_real_cargo_build_metadata_preserves_identity_and_notice_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / 'repository'
+            crate = root / 'fixture'
+            (root / 'src').mkdir(parents=True)
+            (crate / 'src').mkdir(parents=True)
+            (root / 'Cargo.toml').write_text(
+                '[package]\nname="maris"\nversion="0.1.0"\nedition="2021"\n'
+                '[dependencies]\nfixture_version={path="fixture"}\n', encoding='utf-8')
+            (root / 'src/lib.rs').write_text('pub fn fixture() {}\n', encoding='utf-8')
+            version = '1.2.3+spec-1.1.0'
+            (crate / 'Cargo.toml').write_text(
+                '[package]\nname="fixture_version"\nversion="' + version +
+                '"\nedition="2021"\nlicense="MIT"\n', encoding='utf-8')
+            (crate / 'src/lib.rs').write_text('pub fn fixture() {}\n', encoding='utf-8')
+            original = b'Synthetic notice fixture: retain original bytes.\r\n'
+            (crate / 'LICENSE').write_bytes(original)
+            for family in ('eqmac', 'autoeq', 'musicnn', 'flexaudio-core'):
+                asset = root / 'third_party' / family
+                asset.mkdir(parents=True)
+                (asset / 'LICENSE').write_bytes(original)
+            for command in (['cargo', 'generate-lockfile', '--offline'], ['git', 'init', '--quiet'],
+                            ['git', 'add', '.'], ['git', '-c', 'user.name=Notice fixture',
+                            '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false',
+                            'commit', '--quiet', '-m', 'Notice fixture']):
+                subprocess.run(command, cwd=root, check=True, capture_output=True, timeout=30)
+            output = Path(temporary) / 'notices'
+            with patch('dependency_notices.collect_standard_library',
+                       side_effect=lambda _root, destination: standard_library_fixture(destination)):
+                record = collect(root, output, 'linux', 'arm64')
+            package, = record['runtime_dependencies']
+            self.assertEqual(package['version'], version)
+            self.assertIn('/' + version + '/download', package['published_source_archive'])
+            entry, = package['files']
+            self.assertEqual(entry['path'], 'rust/fixture_version-1.2.3_spec-1.1.0/00-LICENSE')
+            self.assertEqual((output / entry['path']).read_bytes(), original)
+            validate(output, 'aarch64-unknown-linux-gnu')
+
     def test_collection_preserves_toolchain_texts_and_compiler_identity(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

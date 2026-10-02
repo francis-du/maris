@@ -131,7 +131,10 @@ def collect(root: Path, output: Path, system: str, arch: str) -> dict:
             if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= 1_048_576:
                 raise ValueError('Missing, linked or oversized license text: ' + key)
             path.read_text(encoding='utf-8')
-            name = f'rust/{package["name"]}-{package["version"]}/{index:02d}-{path.name}'
+            # SemVer permits + build metadata but not _, keeping this mapping
+            # unambiguous while preserving the original identity in the index.
+            version_path = package['version'].replace('+', '_')
+            name = f'rust/{package["name"]}-{version_path}/{index:02d}-{path.name}'
             destination = output / name
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(path, destination)
