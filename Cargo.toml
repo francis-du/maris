@@ -82,3 +82,7 @@ required-features = ["desktop"]
 [profile.release]
 lto = "thin"
 codegen-units = 1
+
+[patch.crates-io]
+flexaudio-core = { path = "third_party/security-flexaudio-core" }
+tao = { path = "third_party/security-tao" }
