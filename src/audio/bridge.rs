@@ -280,7 +280,7 @@ where
     T: SizedSample + FromSample<f32>,
 {
     let channels = config.channels() as usize;
-    let mut renderer = Renderer::new(settings, config.sample_rate().0, updates, metrics.clone());
+    let mut renderer = Renderer::new(settings, config.sample_rate(), updates, metrics.clone());
     let errors = metrics.clone();
     Ok(device.build_output_stream(
         &config.config(),
