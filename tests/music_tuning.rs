@@ -284,7 +284,6 @@ fn apply_rejects_tampering_and_accepts_matching_live_state() {
 }
 
 #[test]
-#[test]
 fn live_apply_rejects_session_and_device_rebind_but_accepts_fresh_analysis() {
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path());
