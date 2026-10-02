@@ -141,13 +141,8 @@ def inspect_kit(archive: Path, item: dict) -> None:
                     or file_hashes.get(license_name) != proof.get('project_license_sha256')):
                 raise ValueError('CLI acceptance differs from the actual archived proof, notices or license status')
             notices = json.loads(captured[notice_name])
-            from dependency_notices import target
-            if notices.get('target') != target(system, arch) or not notices.get('runtime_dependencies'):
-                raise ValueError('Archived notice inventory belongs to another native target')
-            entries = [entry for package in notices['runtime_dependencies'] for entry in package['files']] + notices['bundled_assets']
-            if any(not package.get('license') or not package.get('files') for package in notices['runtime_dependencies']):
-                raise ValueError('Archived dependency has no actual notice text')
-            for entry in entries:
+            from dependency_notices import notice_entries, target
+            for entry in notice_entries(notices, target(system, arch)):
                 name = f'{stem}/{payload}/resources/notices/' + entry['path']
                 if file_hashes.get(name) != entry['sha256']:
                     raise ValueError('Actual archived dependency notice is missing or modified')
