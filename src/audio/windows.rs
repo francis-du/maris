@@ -232,7 +232,7 @@ struct OutputPipeline {
 fn device_format(device: &cpal::Device) -> Result<(u32, u16, cpal::SampleFormat)> {
     let config = device.default_output_config()?;
     Ok((
-        config.sample_rate().0,
+        config.sample_rate(),
         config.channels(),
         config.sample_format(),
     ))
@@ -244,14 +244,14 @@ fn output_pipeline(
     capture_metrics: Arc<Metrics>,
 ) -> Result<OutputPipeline> {
     let device = devices::select(output, false)?;
-    let name = device.name()?;
+    let name = device.description()?.name().to_owned();
     ensure!(
         !devices::is_virtual(&name),
         "Choose physical headphones or speakers as Maris output"
     );
     let device_format = device_format(&device)?;
     let format = devices::config_near(&device, false, RATE)?;
-    let rate = format.sample_rate().0;
+    let rate = format.sample_rate();
     let binding = output_binding(store, output, &name, &device)?;
     let state = store.load()?;
     let library = crate::tuning::preferences::load(store)?;
