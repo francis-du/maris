@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LOCALES = ('en', 'zh-CN')
 STATES = ('live', 'idle', 'stale', 'failed', 'stopping', 'restore-failed')
 SOURCES = ('Cargo.toml', 'Cargo.lock', 'src/ui/desktop/native.rs',
-           'src/ui/desktop/native/menu_review.rs', 'src/ui/desktop/menu_header.rs',
+           'src/ui/desktop/native/menu_review.rs', 'src/ui/desktop/native/native_loop.rs', 'src/ui/desktop/menu_header.rs',
            'src/ui/desktop/native_mark.rs', 'src/ui/desktop/status_icon.rs',
            'src/ui/desktop/menu_capture.rs', 'src/ui/desktop/monitor_state.rs',
            'src/ui/desktop/controls.rs', 'src/ui/desktop/events.rs', 'src/ui/desktop/mod.rs',
