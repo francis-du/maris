@@ -60,7 +60,8 @@ jobs:
       - name: Execute the pinned local music model
         env:
           MARIS_BUNDLE_SMALL_MODELS: '1'
-        run: cargo test --locked --lib models:: -- --nocapture
+        run: |
+          cargo test --locked --lib models:: -- --nocapture
       - name: Native Linux audio integration with private silent outputs
         if: runner.os == 'Linux'
         run: python3 tests/support/pulse_smoke.py --binary target/debug/maris
