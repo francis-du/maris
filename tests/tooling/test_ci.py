@@ -30,6 +30,11 @@ class ToolchainRequirements(unittest.TestCase):
                 self.assertNotIn('RUSTC_BOOTSTRAP', text)
                 self.assertNotIn('continue-on-error', text)
 
+    def test_push_checks_execute_the_bundled_model_not_only_the_absent_model_case(self):
+        text = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+        self.assertRegex(text, r"MARIS_BUNDLE_SMALL_MODELS:\s*'1'\s*\n\s*run: cargo test --locked --lib models:: -- --nocapture")
+        self.assertNotIn('--skip', text)
+
     def test_developer_install_instructions_match_cargo(self):
         required = 'Rust ' + minimum_rust()
         paths = [ROOT / 'docs' / language / 'install.md'
