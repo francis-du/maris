@@ -8,7 +8,7 @@ The core goal is enjoyable music on the current output device. Device correction
 
 The normal standalone Bash/PowerShell installer downloads precompiled native CI release assets. Users do not need a source checkout or Rust. Explicit `--from` / `-From` and developer `--build` / `-Build` are separate alternatives. Per-user validation, native identity/signature checks, backups and no-audio-activation behavior remain shared. Installation never starts the native macOS, Windows or Linux system-audio path.
 
-See [installation](../en/install.md) for signed-install behavior, destination options, recovery and uninstall. The static documentation source is [documentation](../README.md); GitHub Pages is configured for `https://francis-du.github.io/maris/` after repository Pages enablement and a successful deployment. [build and release](../development/releasing.md) separates push/PR checks, manual application builds and documentation deployment. A configured workflow is not evidence of remote success.
+See [installation](../en/install.md) for signed-install behavior, destination options, recovery and uninstall. The static documentation source is [documentation](../README.md); GitHub Pages is configured for `https://maris.francis.run/` after repository Pages enablement and a successful deployment. [build and release](../development/releasing.md) separates push/PR checks, manual application builds and documentation deployment. A configured workflow is not evidence of remote success.
 
 Only source, tests, scripts, documentation and required third-party attribution belong in Git. Build artifacts, local runtime settings, model caches, `.wcode` state and verification logs remain ignored. `python3 scripts/source_audit.py --manifest` creates an audited staging list.
 

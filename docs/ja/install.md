@@ -11,13 +11,13 @@
 macOS と Linux：
 
 ```sh
-curl -fsSL https://francis-du.github.io/maris/install.sh | bash
+curl -fsSL https://maris.francis.run/install.sh | bash
 ```
 
 Windows は通常権限の PowerShell を使います。
 
 ```powershell
-irm https://francis-du.github.io/maris/install.ps1 | iex
+irm https://maris.francis.run/install.ps1 | iex
 ```
 
 スクリプトを確認し、公式ソースと承認済み配布者のみを信頼してください。OS のスクリプト・署名保護や隔離属性を解除しないでください。コンパイラー、ドライバー、サービス、ログイン項目、モデルは追加しません。

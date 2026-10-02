@@ -21,13 +21,13 @@ Normal installation downloads the precompiled package for the current platform f
 **macOS / Linux**
 
 ~~~sh
-curl -fsSL https://francis-du.github.io/maris/install.sh | bash
+curl -fsSL https://maris.francis.run/install.sh | bash
 ~~~
 
 **Windows PowerShell**
 
 ~~~powershell
-irm https://francis-du.github.io/maris/install.ps1 | iex
+irm https://maris.francis.run/install.ps1 | iex
 ~~~
 
 The installer chooses the package for your computer, verifies the download and executable with SHA-256, then installs it for your user account. It does not start audio, change system volume or default output, install a driver, edit PATH or disable platform security. See [installation](docs/en/install.md) for version pinning, offline installation, rollback and developer builds.

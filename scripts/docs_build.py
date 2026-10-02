@@ -22,7 +22,7 @@ REFERENCES = {
 }
 INSTALLERS = ('install.sh', 'install.ps1')
 NAMES = {'en': 'English', 'zh-CN': '简体中文', 'zh-TW': '繁體中文', 'ja': '日本語', 'de': 'Deutsch', 'es': 'Español'}
-ORIGIN = 'https://francis-du.github.io/maris/'
+ORIGIN = 'https://maris.francis.run/'
 REPO = 'https://github.com/francis-du/maris'
 
 

@@ -11,13 +11,13 @@ Der Installer lädt das fertige Programmpaket für deinen Computer. Du brauchst 
 macOS und Linux:
 
 ```sh
-curl -fsSL https://francis-du.github.io/maris/install.sh | bash
+curl -fsSL https://maris.francis.run/install.sh | bash
 ```
 
 Windows: PowerShell als normaler Benutzer verwenden.
 
 ```powershell
-irm https://francis-du.github.io/maris/install.ps1 | iex
+irm https://maris.francis.run/install.ps1 | iex
 ```
 
 Prüfe das Skript und vertraue nur der Projektquelle und dem abgenommenen Herausgeber. Skript-, Signatur- und Quarantäneschutz des Betriebssystems nicht umgehen. Es werden keine Compiler, Treiber, Dienste, Autostarts oder Modelle installiert.
