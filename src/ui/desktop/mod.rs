@@ -232,5 +232,11 @@ pub fn menu_capture_review() -> Result<Value> {
     native::menu_review(true)
 }
 
+/// Exercise native event delivery and shutdown using an isolated fixture, without audio.
+#[cfg(all(feature = "desktop", any(target_os = "macos", target_os = "windows")))]
+pub fn event_loop_review() -> Result<Value> {
+    native::event_loop_review()
+}
+
 #[cfg(feature = "desktop")]
 mod native;

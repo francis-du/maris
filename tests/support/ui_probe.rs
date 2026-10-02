@@ -358,13 +358,15 @@ fn main() -> anyhow::Result<()> {
 #[cfg(target_os = "macos")]
 fn native_probe() -> anyhow::Result<()> {
     use std::time::{Duration, Instant};
-    use tao::{
-        event::Event,
-        event_loop::{ControlFlow, EventLoop},
-        platform::run_return::EventLoopExtRunReturn,
+    use winit::{
+        application::ApplicationHandler,
+        event::WindowEvent,
+        event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+        platform::run_on_demand::EventLoopExtRunOnDemand,
+        window::WindowId,
     };
-    let mut events = EventLoop::new();
-    let mut monitor = hud::Hud::new(true)?;
+    let mut events = EventLoop::new()?;
+    let monitor = hud::Hud::new(true)?;
     let _window_number = monitor.window_number();
     monitor.toggle();
     monitor.toggle();
@@ -378,19 +380,40 @@ fn native_probe() -> anyhow::Result<()> {
     if idle {
         runtime["active"] = json!(false);
     }
-    let began = Instant::now();
-    events.run_return(|event, _, flow| {
-        *flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(33));
-        if let Event::MainEventsCleared = event {
+    struct Probe {
+        monitor: hud::Hud,
+        runtime: Value,
+        stale: bool,
+        began: Instant,
+    }
+    impl ApplicationHandler for Probe {
+        fn resumed(&mut self, _: &ActiveEventLoop) {}
+        fn window_event(&mut self, _: &ActiveEventLoop, _: WindowId, _: WindowEvent) {}
+        fn about_to_wait(&mut self, events: &ActiveEventLoop) {
             let now = analysis::now_ms();
-            runtime["updated_at_ms"] = json!(if stale { now.saturating_sub(2000) } else { now });
-            runtime["visualization"]["updated_at_ms"] = json!(now);
-            monitor.tick(&runtime, runtime["tonal_bypass"] == true);
-            if began.elapsed() > Duration::from_secs(2) {
-                *flow = ControlFlow::Exit;
+            self.runtime["updated_at_ms"] = json!(if self.stale {
+                now.saturating_sub(2000)
+            } else {
+                now
+            });
+            self.runtime["visualization"]["updated_at_ms"] = json!(now);
+            self.monitor
+                .tick(&self.runtime, self.runtime["tonal_bypass"] == true);
+            if self.began.elapsed() > Duration::from_secs(2) {
+                events.exit();
+            } else {
+                events.set_control_flow(ControlFlow::WaitUntil(
+                    Instant::now() + Duration::from_millis(33),
+                ));
             }
         }
-    });
+    }
+    events.run_app_on_demand(&mut Probe {
+        monitor,
+        runtime,
+        stale,
+        began: Instant::now(),
+    })?;
     println!(
         "offline_compact_monitor_event_loop_completed / generated audio / no hardware session"
     );

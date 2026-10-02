@@ -14,6 +14,17 @@ env:
   CARGO_INCREMENTAL: '0'
   RUSTUP_TOOLCHAIN: 1.94.0
 jobs:
+  dependency-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned RustSec audit tool
+        run: rustup run stable cargo install cargo-audit --version 0.22.2 --locked
+      - name: Audit the complete lockfile including unsound dependencies
+        run: rustup run stable cargo audit --deny unsound
   source-and-docs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -77,6 +88,9 @@ jobs:
         run: cargo test --all-targets --no-default-features --locked
       - name: Clippy
         run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Exercise native menu event delivery and bounded shutdown
+        if: runner.os == 'macOS' || runner.os == 'Windows'
+        run: cargo run --locked --example menu_probe -- --event-loop
       - name: Execute the pinned local music model
         env:
           MARIS_BUNDLE_SMALL_MODELS: '1'

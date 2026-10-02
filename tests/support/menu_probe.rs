@@ -1,10 +1,12 @@
-//! Native menu construction/locale review only. No capture, routing or user-state writes.
+//! Native menu construction/locale review only. No audio capture, routing or user-state writes.
 fn main() -> anyhow::Result<()> {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
         let args: Vec<_> = std::env::args().skip(1).collect();
         let review = if args.is_empty() {
             maris::desktop::menu_review()?
+        } else if args == ["--event-loop"] {
+            maris::desktop::event_loop_review()?
         } else if args == ["--capture"] {
             #[cfg(target_os = "macos")]
             {

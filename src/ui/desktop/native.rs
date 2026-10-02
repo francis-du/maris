@@ -665,64 +665,14 @@ fn reduce_motion() -> bool {
     }
 }
 #[cfg(any(target_os = "macos", target_os = "windows"))]
+mod native_loop;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub(super) fn event_loop_review() -> Result<Value> {
+    native_loop::review()
+}
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 pub fn event_loop(store: Store, quitting: Arc<AtomicBool>, auto_start: bool) -> Result<()> {
-    use tao::{
-        event::{Event, StartCause},
-        event_loop::{ControlFlow, EventLoopBuilder},
-        platform::run_return::EventLoopExtRunReturn,
-    };
-    let mut event_loop = EventLoopBuilder::<MenuEvent>::with_user_event().build();
-    let proxy = event_loop.create_proxy();
-    MenuEvent::set_event_handler(Some(move |event| {
-        // Only enqueue/wake here: native dialogs and state writes belong to the main loop.
-        let _ = proxy.send_event(event);
-    }));
-    let mut indicator = None;
-    let mut failure = None;
-    event_loop.run_return(|event, _, flow| {
-        *flow = ControlFlow::WaitUntil(
-            Instant::now()
-                + indicator
-                    .as_ref()
-                    .map_or(Duration::from_millis(500), Indicator::wait_interval),
-        );
-        if matches!(event, Event::NewEvents(StartCause::Init)) && indicator.is_none() {
-            match Indicator::new(store.clone(), auto_start) {
-                Ok(icon) => indicator = Some(icon),
-                Err(error) => {
-                    failure = Some(error);
-                    *flow = ControlFlow::Exit;
-                }
-            }
-        }
-        if let Event::UserEvent(menu) = &event {
-            if let Some(icon) = indicator.as_mut() {
-                if let Err(error) = icon.menu_action(menu.clone(), events::confirm) {
-                    icon.controller.notice = Some(Notice::error(format!("{error:#}")));
-                }
-            }
-        }
-        if matches!(event, Event::MainEventsCleared) {
-            if let Some(icon) = indicator.as_mut() {
-                match icon.tick(quitting.load(Ordering::Relaxed)) {
-                    Ok(true) => *flow = ControlFlow::Exit,
-                    Ok(false) => {
-                        *flow = ControlFlow::WaitUntil(Instant::now() + icon.wait_interval())
-                    }
-                    Err(error) => {
-                        failure = Some(error);
-                        *flow = ControlFlow::Exit;
-                    }
-                }
-            }
-        }
-    });
-    drop(indicator);
-    if let Some(error) = failure {
-        Err(error)
-    } else {
-        Ok(())
-    }
+    native_loop::run(store, quitting, auto_start)
 }
 #[cfg(target_os = "linux")]
 pub fn event_loop(store: Store, quitting: Arc<AtomicBool>, auto_start: bool) -> Result<()> {

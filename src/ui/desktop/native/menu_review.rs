@@ -238,7 +238,7 @@ fn state_review(view: &mut Indicator, locale: &str, capture: bool) -> Result<Val
 pub(super) fn run(capture: bool) -> Result<Value> {
     #[cfg(not(target_os = "macos"))]
     let _ = capture;
-    let _events = tao::event_loop::EventLoop::new();
+    let _events = winit::event_loop::EventLoop::new()?;
     let mut locales = Vec::new();
     for code in crate::i18n::LANGUAGES {
         let directory = tempfile::tempdir()?;

@@ -149,6 +149,8 @@ A mouse report split after its Escape byte can otherwise arrive as keyboard shor
 
 An unavailable rendered menu target remains a binding condition: queued immediate actions cannot acquire a different output when telemetry later returns. The controller requires a fresh observed summary before those actions become valid again. Fixture tests publish a new heartbeat before deliberately current actions and separately verify stale, stopped and unsupported displayed contexts.
 
+On macOS and Windows, `native/native_loop.rs` uses Winit's application event receiver. Menu callbacks enqueue item IDs; validated mutations, confirmations and shutdown run on the native main thread. macOS uses an accessory application without replacing the host's menu or activating another app. Linux retains its StatusNotifier/D-Bus loop. This replaces Tao's unused GTK dependency resolution, removing the affected GLib iterator from the complete lockfile. See [dependency security](../development/dependency-security.md) for the audit and reproducible native event probe.
+
 `i18n` provides six locales. Display text names the action or condition in ordinary language. The English display map, like translated resources, is separate from stable internal message keys. Neither changes JSON, proposals, placeholders, raw operating-system diagnostics or user-supplied names. Tests render every locale and check literal device-name preservation. Missing or stale measurements show unavailable state rather than animated substitutes. The visual design and interaction details are maintained in [interface design](../development/ui-design.md).
 
 ## Analysis, models and agent controls
