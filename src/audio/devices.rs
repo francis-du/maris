@@ -24,8 +24,12 @@ pub fn devices() -> Result<Vec<DeviceInfo>> {
 #[cfg(not(target_os = "windows"))]
 pub fn devices() -> Result<Vec<DeviceInfo>> {
     let host = cpal::default_host();
-    let default_in = host.default_input_device().and_then(|d| d.description().ok().map(|v| v.name().to_owned()));
-    let default_out = host.default_output_device().and_then(|d| d.description().ok().map(|v| v.name().to_owned()));
+    let default_in = host
+        .default_input_device()
+        .and_then(|d| d.description().ok().map(|v| v.name().to_owned()));
+    let default_out = host
+        .default_output_device()
+        .and_then(|d| d.description().ok().map(|v| v.name().to_owned()));
     #[cfg(target_os = "macos")]
     let default_out_id = tap_ffi::default_output().ok();
     let mut result = Vec::new();
@@ -42,7 +46,10 @@ pub fn devices() -> Result<Vec<DeviceInfo>> {
         ),
     ] {
         for (index, device) in list.into_iter().enumerate() {
-            let name = device.description().map(|v| v.name().to_owned()).unwrap_or_else(|_| "Unnamed device".into());
+            let name = device
+                .description()
+                .map(|v| v.name().to_owned())
+                .unwrap_or_else(|_| "Unnamed device".into());
             #[cfg(target_os = "macos")]
             let coreaudio_id = (direction == "output")
                 .then(|| tap_ffi::output_device_id_at(index).ok())
@@ -147,8 +154,8 @@ pub fn config(device: &Device, input: bool, rate: u32) -> Result<SupportedStream
         .into_iter()
         .filter(|r| {
             (1..=2).contains(&r.channels())
-                && r.min_sample_rate().0 <= rate
-                && rate <= r.max_sample_rate().0
+                && r.min_sample_rate() <= rate
+                && rate <= r.max_sample_rate()
                 && matches!(
                     r.sample_format(),
                     SampleFormat::F32 | SampleFormat::I16 | SampleFormat::U16 | SampleFormat::I32
@@ -163,7 +170,10 @@ pub fn config(device: &Device, input: bool, rate: u32) -> Result<SupportedStream
         .with_context(|| {
             format!(
                 "Device '{}' does not support mono/stereo PCM at {rate} Hz",
-                device.description().map(|v| v.name().to_owned()).unwrap_or_default()
+                device
+                    .description()
+                    .map(|v| v.name().to_owned())
+                    .unwrap_or_default()
             )
         })
 }
