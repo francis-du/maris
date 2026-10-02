@@ -229,7 +229,7 @@ impl Session {
         for (bus, setting) in state.config.buses.iter().enumerate() {
             if let Some(selector) = setting.output_device.as_deref() {
                 let device = devices::select(Some(selector), false)?;
-                let name = device.name()?;
+                let name = device.description()?.name().to_owned();
                 let binding = output_binding(&store, Some(selector), &name, &device)?;
                 ensure!(
                     identities.insert(binding.resolution.profile_key.clone()),
@@ -241,7 +241,7 @@ impl Session {
                     devices::config_near(&device, false, rate)?
                 };
                 let (settings, capability) =
-                    output_settings(&store, &binding, format.sample_rate().0, &eq, &listening)?;
+                    output_settings(&store, &binding, format.sample_rate(), &eq, &listening)?;
                 let (eq_revision, music_revision) = (eq.revision, listening.revision);
                 let updates = Arc::new(ArrayQueue::new(8));
                 updates
@@ -332,13 +332,13 @@ impl Session {
                     );
                 } else {
                     let device = devices::select(Some(selector), true)?;
-                    let name = device.name()?;
+                    let name = device.description()?.name().to_owned();
                     ensure!(
                         source_names.insert(name),
                         "Mixer input selectors resolve to the same or ambiguously named device"
                     );
                     let format = devices::config_near(&device, true, rate)?;
-                    input_rate = format.sample_rate().0;
+                    input_rate = format.sample_rate();
                     captures.push(Capture::Device(bridge::input(
                         &device,
                         &format,
@@ -385,7 +385,7 @@ impl Session {
                     bridge::Source::Live(bridge::LiveSource::with_rates(
                         queue.clone(),
                         rate,
-                        output.format.sample_rate().0,
+                        output.format.sample_rate(),
                     )?),
                     output.settings,
                     output.updates.clone(),
@@ -565,7 +565,7 @@ impl Session {
             let (settings, capability) = output_settings(
                 &self.store,
                 &output.binding,
-                output.format.sample_rate().0,
+                output.format.sample_rate(),
                 &state,
                 &library,
             )?;
@@ -596,7 +596,7 @@ impl Session {
         let buses: Vec<_> = self.outputs.iter().enumerate().filter_map(|(index, output)| output.as_ref().map(|output| {
             let m = &self.output_metrics[index];
             json!({"id":self.topology.buses[index].id,"output":output.binding.resolution.identity.display_name,
-                "profile_key":output.binding.resolution.profile_key,"sample_rate":output.format.sample_rate().0,
+                "profile_key":output.binding.resolution.profile_key,"sample_rate":output.format.sample_rate(),
                 "delay_ms":self.topology.buses[index].delay_ms,"frames":m.frames.load(Ordering::Relaxed),"continuity":m.continuity(),
                 "peak_left_dbfs":db(m.peak_left.load(Ordering::Relaxed)),"peak_right_dbfs":db(m.peak_right.load(Ordering::Relaxed)),
                 "applied_revision":m.revision.load(Ordering::Relaxed),"applied_music_revision":m.music_revision.load(Ordering::Relaxed),
@@ -671,7 +671,7 @@ fn master_typed<T: SizedSample + FromSample<f32>>(
     let channels = output.format.channels() as usize;
     let mut renderer = bridge::Renderer::new(
         output.settings,
-        output.format.sample_rate().0,
+        output.format.sample_rate(),
         output.updates.clone(),
         metrics.clone(),
     );

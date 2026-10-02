@@ -315,8 +315,8 @@ impl Session {
         let lease = store.session_lock()?;
         let input_device = devices::select(Some(input), true)?;
         let output_device = devices::select(output, false)?;
-        let input_name = input_device.name()?;
-        let output_name = output_device.name()?;
+        let input_name = input_device.description()?.name().to_owned();
+        let output_name = output_device.description()?.name().to_owned();
         ensure!(
             input_name != output_name,
             "Input and output must be distinct endpoints to prevent feedback"
@@ -329,7 +329,7 @@ impl Session {
             if neural && rate != 48000 { return None; }
             Some((devices::config(&input_device, true, rate).ok()?, devices::config(&output_device, false, rate).ok()?))
         }).context("No common mono/stereo sample rate. Set both endpoints to 48 kHz in your system audio settings")?;
-        let rate = configurations.1.sample_rate().0;
+        let rate = configurations.1.sample_rate();
         let state = store.load()?;
         let binding = output_binding(&store, output, &output_name, &output_device)?;
         let listening = crate::tuning::preferences::load(&store)?;
@@ -433,7 +433,7 @@ impl Session {
         ensure!(!audio.frames.is_empty(), "WAV contains no audio frames");
         let rate = audio.rate;
         let device = devices::select(output, false)?;
-        let output_name = device.name()?;
+        let output_name = device.description()?.name().to_owned();
         ensure!(
             !devices::is_virtual(&output_name),
             "Select a physical output device for WAV playback"

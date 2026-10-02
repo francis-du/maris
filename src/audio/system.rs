@@ -29,10 +29,10 @@ struct Pipeline {
 }
 fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pipeline> {
     let device = devices::select(output, false)?;
-    let name = device.name()?;
+    let name = device.description()?.name().to_owned();
     let mut binding = output_binding(store, output, &name, &device)?;
     ensure!(!devices::is_virtual(&name), "The active system output is a loopback device, not physical playback; original audio was not changed");
-    let rate = device.default_output_config()?.sample_rate().0;
+    let rate = device.default_output_config()?.sample_rate();
     let initial = devices::config(&device, false, rate)?;
     let state = store.load()?;
     let queue = Arc::new(ArrayQueue::new(192000 / 4));
@@ -312,7 +312,7 @@ impl Session {
 
     pub(super) fn rebind_system_output(&mut self, output: Option<&str>) -> Result<()> {
         let device = devices::select(output, false)?;
-        let name = device.name()?;
+        let name = device.description()?.name().to_owned();
         ensure!(
             !devices::is_virtual(&name),
             "Choose a physical output device, not a loopback device"
@@ -408,7 +408,7 @@ impl Session {
                     Err(_) => return self.rebind_system_output(None),
                 };
                 let device = devices::select(Some(&selector), false)?;
-                let name = device.name()?;
+                let name = device.description()?.name().to_owned();
                 let device_id = tap_ffi::output_device_id_for_selector(Some(&selector), &name)?;
                 let rate = tap_ffi::sample_rate(device_id)?;
                 if device_id == self.system_device_id && rate == self.sample_rate {
@@ -424,7 +424,7 @@ impl Session {
                 Ok(device) => device,
                 Err(_) => return self.rebind_system_output(None),
             };
-            let name = device.name()?;
+            let name = device.description()?.name().to_owned();
             if let Ok(device_id) = tap_ffi::output_device_id_for_selector(Some(&pinned), &name) {
                 let rate = tap_ffi::sample_rate(device_id)?;
                 if device_id == self.system_device_id && rate == self.sample_rate {

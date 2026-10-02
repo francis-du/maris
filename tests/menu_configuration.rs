@@ -70,7 +70,8 @@ fn global_bypass_is_not_misrepresented_as_an_audible_ab_comparison() {
     assert!(controller.select_preset(&store, "focus").is_err());
     assert_eq!(listening::load(&store).unwrap().revision, 0);
     let state = maris::audio::runtime_status(&store);
-    let summary = Summary::read(&store, &state, maris::analysis::now_ms()).unwrap();
+    let observed_at = state["updated_at_ms"].as_u64().unwrap();
+    let summary = Summary::read(&store, &state, observed_at).unwrap();
     assert!(!summary.controls_enabled);
     assert!(
         summary.output_enabled,

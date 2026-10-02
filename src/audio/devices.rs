@@ -1,7 +1,7 @@
 use anyhow::{bail, Context, Result};
 use cpal::{
     traits::{DeviceTrait, HostTrait},
-    Device, SampleFormat, SampleRate, SupportedStreamConfig,
+    Device, SampleFormat, SupportedStreamConfig,
 };
 use serde::Serialize;
 
@@ -24,8 +24,12 @@ pub fn devices() -> Result<Vec<DeviceInfo>> {
 #[cfg(not(target_os = "windows"))]
 pub fn devices() -> Result<Vec<DeviceInfo>> {
     let host = cpal::default_host();
-    let default_in = host.default_input_device().and_then(|d| d.name().ok());
-    let default_out = host.default_output_device().and_then(|d| d.name().ok());
+    let default_in = host
+        .default_input_device()
+        .and_then(|d| d.description().ok().map(|v| v.name().to_owned()));
+    let default_out = host
+        .default_output_device()
+        .and_then(|d| d.description().ok().map(|v| v.name().to_owned()));
     #[cfg(target_os = "macos")]
     let default_out_id = tap_ffi::default_output().ok();
     let mut result = Vec::new();
@@ -42,7 +46,10 @@ pub fn devices() -> Result<Vec<DeviceInfo>> {
         ),
     ] {
         for (index, device) in list.into_iter().enumerate() {
-            let name = device.name().unwrap_or_else(|_| "Unnamed device".into());
+            let name = device
+                .description()
+                .map(|v| v.name().to_owned())
+                .unwrap_or_else(|_| "Unnamed device".into());
             #[cfg(target_os = "macos")]
             let coreaudio_id = (direction == "output")
                 .then(|| tap_ffi::output_device_id_at(index).ok())
@@ -124,7 +131,7 @@ pub fn select(selector: Option<&str>, input: bool) -> Result<Device> {
     }
     let mut matches = devices
         .into_iter()
-        .filter(|d| d.name().is_ok_and(|name| name == selector));
+        .filter(|d| d.description().is_ok_and(|v| v.name() == selector));
     let first = matches.next().with_context(|| {
         format!(
             "No {} device named '{selector}'; run 'maris devices'",
@@ -147,8 +154,8 @@ pub fn config(device: &Device, input: bool, rate: u32) -> Result<SupportedStream
         .into_iter()
         .filter(|r| {
             (1..=2).contains(&r.channels())
-                && r.min_sample_rate().0 <= rate
-                && rate <= r.max_sample_rate().0
+                && r.min_sample_rate() <= rate
+                && rate <= r.max_sample_rate()
                 && matches!(
                     r.sample_format(),
                     SampleFormat::F32 | SampleFormat::I16 | SampleFormat::U16 | SampleFormat::I32
@@ -159,11 +166,14 @@ pub fn config(device: &Device, input: bool, rate: u32) -> Result<SupportedStream
     candidates
         .into_iter()
         .next()
-        .map(|r| r.with_sample_rate(SampleRate(rate)))
+        .map(|r| r.with_sample_rate(rate))
         .with_context(|| {
             format!(
                 "Device '{}' does not support mono/stereo PCM at {rate} Hz",
-                device.name().unwrap_or_default()
+                device
+                    .description()
+                    .map(|v| v.name().to_owned())
+                    .unwrap_or_default()
             )
         })
 }
@@ -182,7 +192,7 @@ pub(super) fn config_near(
     } else {
         device.default_output_config()
     }?;
-    let rate = default.sample_rate().0;
+    let rate = default.sample_rate();
     if (44100..=192000).contains(&rate) {
         if let Ok(config) = config(device, input, rate) {
             return Ok(config);
