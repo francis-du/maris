@@ -2,11 +2,12 @@
   "scope": "actual_offline_ratatui",
   "hardware_validation": false,
   "source_sha256": {
-    "src/ui/tui/view.rs": "e40f9cba1aa3d7f16aaef67e046b521943ff0cc59e594add91020e7aa797933d",
+    "src/ui/tui/view.rs": "757a547a961844d188db2c30651d156259f5f6d1849cb2872c835459dbde7c3e",
     "src/ui/tui/studio/mod.rs": "f38f97cd78e07170a6d5e7e595e51c671c07d61787cf2c9295aad19185f78333",
     "src/ui/tui/studio/controls.rs": "5ab440a18fdb6af210a0f16fa44ce17ccb21dfc8c9920a5e66e585c404a8e3bf",
     "src/ui/tui/settings/view.rs": "d6dee16d2fa9b5aadf370410f4da867e228cc83f2a7ee526ac5767140a50bf15",
     "src/ui/tui/presets.rs": "3e3e78093029b3fecc27a3aad422bfe874b0b881f105c55f0cd709b7f659c0a8",
+    "src/ui/tui/preset_picker.rs": "d16c9789c3ef38c2ea6b26752de9dce409a2bdd02dc3f45fe8dcbdc9e6fa8df1",
     "src/ui/tui/inspector.rs": "59a91902ba562300345964a2ebca9fcfb823be90d6fd37825eb5cab6d63ea928",
     "src/i18n/mod.rs": "52dad2f6e7ffeeab6dc852c442e2de5d02be021c628b802bc571fccbf0e6f01f",
     "src/i18n/console.rs": "9673f1c821b0a614ab0811bcefd740b90bbc7da09ed3b02fbe030484f3777173",
@@ -16,144 +17,144 @@
   },
   "images": {
     "studio-en.svg": {
-      "sha256": "3d290e9869c4227c047cc0ec3138b1ee392f62074085efb98600d1b6114e623c",
-      "buffer_sha256": "3127bcdc14276dea16e80b693831ab4ff3e20a159582d409042ab9c742f568de",
+      "sha256": "1e302d4231bc23e643e867677f72fedc247367213b5d34a8d96ca415e520d2c4",
+      "buffer_sha256": "b39bdd9ce2c36c900e22edcefa677462e646e5544b10446be46ae1618788e20d",
       "locale": "en",
       "view": "studio",
       "columns": 140,
       "rows": 40
     },
     "studio-zh-CN.svg": {
-      "sha256": "ebdcaba118a10b8595afc1d96b6ff5a2494694c6703adc5bd1671e2de974b3b8",
-      "buffer_sha256": "0182c326c55418e6e59057fb1f8e80bd8fdd4a9120768d6d57d1906a0360f639",
+      "sha256": "910530f3076595614c5f74e17859ba99f1ec6013a8c6b781952fe9cf4a3c321b",
+      "buffer_sha256": "8cd287038ce83343826cc01661945ad34ebac7dab5cef5ea4604d176001b718b",
       "locale": "zh-CN",
       "view": "studio",
       "columns": 140,
       "rows": 40
     },
     "studio-zh-TW.svg": {
-      "sha256": "d476db612b098cfc13ad3e5f1ed38a71c8859bb2afbfefb34facd418f0cc3ec8",
-      "buffer_sha256": "af65dfdd5b05b6a1c583196607fd19c04830861b17d8427f4bfa1dfde91ab77b",
+      "sha256": "67183bf0a5facd5216bdc93303a6e1d1419ed5055bcec62adbe1fe556f3fba52",
+      "buffer_sha256": "904821e9e5ed4973028037a11e9e54e1df6d86ef30b77fabd12697a7a4e6be2a",
       "locale": "zh-TW",
       "view": "studio",
       "columns": 140,
       "rows": 40
     },
     "studio-ja.svg": {
-      "sha256": "e269c57097b421829afa973d4ab951c169eba0e60ae8899c865013bca30044d1",
-      "buffer_sha256": "1226596662708f6f626c0e3424bfdf731a2bfa1d82f01f8f414f204773fde164",
+      "sha256": "64478843a9677694eb8244ae62520e008b2060ce693e5020a80fc8eb56800e58",
+      "buffer_sha256": "948b7416fc34bba1026582c096617f175ea8dd0be9025c9f340f456588657da1",
       "locale": "ja",
       "view": "studio",
       "columns": 140,
       "rows": 40
     },
     "studio-de.svg": {
-      "sha256": "95eaa61b2466979528c245a4aca237807ca5023c132af5499e7ea275cf609539",
-      "buffer_sha256": "e30a54ec94ded01a097a92b7b816c72a1b5548ad1480b13aa9641ad19267262f",
+      "sha256": "cef819b67d57dde67743b29b9b2978c433a1034ff3b3ee5985bb00f84e1aaa39",
+      "buffer_sha256": "554ba52a934db49ddb2083aa1e04d677c4455782bc530a02127ca034f0f7ea9b",
       "locale": "de",
       "view": "studio",
       "columns": 140,
       "rows": 40
     },
     "studio-es.svg": {
-      "sha256": "fb0a2d9f1b5faa04e2610f923bdc288f681a10254c69b473d76d13ed1a82d4ff",
-      "buffer_sha256": "c3cda762894418b89a3dcb859db95cfc22bd573a9ed41e5c165b118a386b5997",
+      "sha256": "58d04e55abd53ed286d9b369ec9d32a08e5299561b094714bb3cc9477f2fffdb",
+      "buffer_sha256": "80d072781385ffe80b43ca4f98867ce56aae73ff2ffc36820a251f2429a79520",
       "locale": "es",
       "view": "studio",
       "columns": 140,
       "rows": 40
     },
     "settings-en.svg": {
-      "sha256": "5bdda5ed515948690a01db7d38d227588b49b1e52706fc93bba0eb7ceec75b35",
-      "buffer_sha256": "85c1d7417d8ba84649e21a43bba6e2c1307d9eb89c323c9b92f952dc764be356",
+      "sha256": "e437a86ea91af5d11bdd38caed493eac7fe5a0085d0ca3498f94877eb8b70cf8",
+      "buffer_sha256": "2cc5e613ab2a125dc0ca51efc56ce723dae9e64043c1ab9b12d8be4209d239bc",
       "locale": "en",
       "view": "settings",
       "columns": 140,
       "rows": 40
     },
     "settings-zh-CN.svg": {
-      "sha256": "809461cd559caeb39303b3b85f684a4f98e69641ac5ca0976ebf095ad91d0b5e",
-      "buffer_sha256": "b243575d07cde2f1c96f80b9f0ce0bbc9f111fea1c919b7262e45817c84d7deb",
+      "sha256": "46bc3cebfcecd1704dedb3a2cc3563f157af37fddd0ff8636b6c3f8a7785ac85",
+      "buffer_sha256": "97f831ddf70c29e071789f46547324479bebf43409620a820ddb1f4d2006158b",
       "locale": "zh-CN",
       "view": "settings",
       "columns": 140,
       "rows": 40
     },
     "settings-zh-TW.svg": {
-      "sha256": "3daaa95a5a3524661c43956d2af2249f88ffd62e1b47515f1fd7857021b23a3f",
-      "buffer_sha256": "272df1cb3b602c6ffe0c4551ee5ef83fca16cb33a6ce9ca4991e18dbe92b80b0",
+      "sha256": "d582f81724d9229d016128b071568150160b452d2b66cdcb835d4e942122e152",
+      "buffer_sha256": "22ef428d0dc614ceb6e3b206d312f0141d5b56f42a4f80d1e713c3f552e91aae",
       "locale": "zh-TW",
       "view": "settings",
       "columns": 140,
       "rows": 40
     },
     "settings-ja.svg": {
-      "sha256": "3639fe93c922748a7c80a629ac450cdc0b68a7c24238de9da9a5596f042fadb1",
-      "buffer_sha256": "11a183b4aacf08aef2ec108e23c5736b7abc3e9ca346d9cf70d1edc9abc753a3",
+      "sha256": "6e6032a2731007591cf7aa54c3adf39982360ed8fea35794b15a5d54eda2945e",
+      "buffer_sha256": "3cb541796d193373861095cd9f3d5d34202c4c2dac46c8a6acf4687780f87350",
       "locale": "ja",
       "view": "settings",
       "columns": 140,
       "rows": 40
     },
     "settings-de.svg": {
-      "sha256": "53d4ecddb630173695779575bcd22828641aa7634a8f39b86e287912d8f18af7",
-      "buffer_sha256": "f0379e832cc4149aab13ab8dc40dbe52fde202cbf8cdbdc1657d25a2e89fa323",
+      "sha256": "0feed730742dd95e8f5490d85c0af9f259e42066ab6f80f299e21cf115c3bfc1",
+      "buffer_sha256": "6a229fba600bdab0e6b635f0d298da858bd64236c0087c464814285af7157976",
       "locale": "de",
       "view": "settings",
       "columns": 140,
       "rows": 40
     },
     "settings-es.svg": {
-      "sha256": "82e460a3694e894f3cd653850f5c1fdb28496ab6712c9d546b58d85106a43b5c",
-      "buffer_sha256": "23b4b86051c4ccd357d9dcecee6255093b0c52ce32bb65a710b737f4df0f791f",
+      "sha256": "5aacf6f4d8dc96b3e1fdcbca98e22c530ab8ce6b74e6bba1b47f3449f8e9171b",
+      "buffer_sha256": "7cb160e4c2d13e51e53d977127ec3c1c72a2f69d859fde6ba175f44d57edd497",
       "locale": "es",
       "view": "settings",
       "columns": 140,
       "rows": 40
     },
     "presets-en.svg": {
-      "sha256": "32cd103c3e94c658c2c5e848fa7a42276b767082fc69ec24e9f4fffdbc3ef3ec",
-      "buffer_sha256": "e7373b4f7d63d7bd80f208ea1592807473878ab2a616a6701ebac24555bd20e5",
+      "sha256": "ed0162800a0dec5c4ce78ef43e7eda89904defaec614a543162df3f6ad9702a8",
+      "buffer_sha256": "0520fc548b8bcb34b62f1691e2db166c299493560a11059e4c3dd396fc9dfaa5",
       "locale": "en",
       "view": "presets",
       "columns": 140,
       "rows": 40
     },
     "presets-zh-CN.svg": {
-      "sha256": "bbe6045ea0304776fd9fdeabeef0691d2e5559061baeb5480c508bd2bf615dd5",
-      "buffer_sha256": "f26ac1dca40ef10eb6d3c474a8ce9c42d0eb51328dc17432bee90490a28d74dd",
+      "sha256": "62c65a21c1be53a4b2f55662e3731567a5c0477a67635613791f37d07514afbb",
+      "buffer_sha256": "799e4ed8d3028ce3f17b0f7321fbdcb4d692ae8e064713a9cb8663f82629bb3f",
       "locale": "zh-CN",
       "view": "presets",
       "columns": 140,
       "rows": 40
     },
     "presets-zh-TW.svg": {
-      "sha256": "0a95c245a5b738b47f3f2beb6bf897763c1d048ddbb421732d0cb6418b7595f9",
-      "buffer_sha256": "32a4fb63b175563b790fe64143f772e23966049080c64ba874e62ba0311c35fb",
+      "sha256": "ec8805b09f309a550e094d57ecb5efad61bc2685406594dd777519bb0904073c",
+      "buffer_sha256": "1f851f43c0515a56be7c450ac03a3e13f92c50ff5fdbc7f2d86666968eaa08d7",
       "locale": "zh-TW",
       "view": "presets",
       "columns": 140,
       "rows": 40
     },
     "presets-ja.svg": {
-      "sha256": "a39dfecba5f6eab2c25fc827f8ef246adc5bd48da49932bbe74fe021dbed8347",
-      "buffer_sha256": "196cad7f08b05368e3b166f1e69bcec9162b0e3a51736cd271af5b07c6f66425",
+      "sha256": "09c32aaf68dc2443c9c60fcd93092c83cc0afc6a0652d16b64196eaccf4ebb7f",
+      "buffer_sha256": "16dbb98dbcee5fbac8964a8c20bd8febe10f2395487f502daad15a1a4079a40b",
       "locale": "ja",
       "view": "presets",
       "columns": 140,
       "rows": 40
     },
     "presets-de.svg": {
-      "sha256": "1223b0560e48ec0aef03e95154d30f9d7dbdd051fb39adbe978dce7e92e3fd73",
-      "buffer_sha256": "ec260f4bc8af25264cdcd3a6b75db96c4528747f6a87d44feb75611d4af7bab9",
+      "sha256": "eab07b766a01404aeed391e8e950d0fa76103cfd771ae19d4a7d8755864c72d6",
+      "buffer_sha256": "c7e613e6360787b26d54d04cb93a69c15a9d1c0099e417d72e02493ce0009b7f",
       "locale": "de",
       "view": "presets",
       "columns": 140,
       "rows": 40
     },
     "presets-es.svg": {
-      "sha256": "9d17d58ddf2c14e09a638434b28f66337e3617cf20ef73aef4f33314695770e7",
-      "buffer_sha256": "fe07874e5a28ceb910c6badef97c891e5eca7496400fc6258e909e40de672d4a",
+      "sha256": "c465a3ec269c2516e72edd9ce891f420a26386ed10699238dce86df6933431d6",
+      "buffer_sha256": "6514496dc3758bb76749d3940f4606f5b9d573731374a6c30a49647bbc7e7f02",
       "locale": "es",
       "view": "presets",
       "columns": 140,
