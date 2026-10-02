@@ -83,6 +83,31 @@ class SourceHygiene(unittest.TestCase):
         self.assertIn(source, files)
         self.assertTrue(all(path.resolve().is_relative_to(self.root) for path in files))
 
+    @unittest.skipIf(sys.platform == 'win32', 'Native directory-link fixture')
+    def test_audit_root_alias_preserves_staged_relative_paths(self):
+        self.git('add', '--', 'README.md')
+        alias_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(alias_directory.cleanup)
+        alias = Path(alias_directory.name) / 'checkout'
+        alias.symlink_to(self.root, target_is_directory=True)
+        files = source_audit.source_files(alias)
+        self.assertTrue(all(path.is_relative_to(alias) for path in files))
+        self.assertEqual(source_audit.source_digest(alias), source_audit.source_digest(self.root))
+        source_audit.check_staged(alias)
+
+    @unittest.skipIf(sys.platform == 'win32', 'Native directory-link fixture')
+    def test_cyclic_vendor_parent_links_are_explicitly_rejected(self):
+        source = self.root / 'third_party/flexaudio-core/src/lib.rs'
+        source.parent.mkdir(parents=True)
+        source.write_text('// Reviewed source\n', encoding='utf-8')
+        self.git('add', '--', source.relative_to(self.root).as_posix())
+        source.unlink()
+        source.parent.rmdir()
+        (self.root / '.gitignore').write_text('/third_party/flexaudio-core/src\n', encoding='utf-8')
+        source.parent.symlink_to('src', target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'Unresolvable publish input'):
+            source_audit.source_files(self.root)
+
     def test_local_agent_state_is_ignored_but_design_contracts_remain_publishable(self):
         shutil.copyfile(ROOT / '.gitignore', self.root / '.gitignore')
         design = self.root / '.wcode/design'

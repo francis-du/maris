@@ -24,7 +24,10 @@ FORBIDDEN = {".env", ".DS_Store", "runtime.json", "listening.json", "profile.jso
 
 
 def source_files(root: Path = ROOT) -> list[Path]:
-    root = root.resolve()
+    try:
+        resolved_root = root.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ValueError("Unresolvable audit root") from error
     result = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
                             cwd=root, capture_output=True, check=True)
     names = sorted(set(result.stdout.decode("utf-8").split("\0")) - {""})
@@ -35,7 +38,12 @@ def source_files(root: Path = ROOT) -> list[Path]:
         if name not in TOP and not name.startswith(PREFIXES):
             problems.append(f"Unexpected publish path: {name}")
             continue
-        if (path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(root)
+        try:
+            resolved_path = path.resolve(strict=True)
+        except (OSError, RuntimeError):
+            problems.append(f"Unresolvable publish input: {name}")
+            continue
+        if (path.is_symlink() or not path.is_file() or not resolved_path.is_relative_to(resolved_root)
                 or path.name in FORBIDDEN
                 or any(p in {"__pycache__", "node_modules", "target", ".git"} for p in path.parts)
                 or path.suffix.lower() in {".pem", ".p12", ".pfx", ".key", ".wav", ".log"}):
