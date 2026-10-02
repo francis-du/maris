@@ -133,6 +133,10 @@ def illustration(root: Path, language: str, entries: dict) -> tuple[str, list[di
     def draw(item: dict, kind: str, x: int, y: int, width: int, height: int):
         source = image_source(root, item, kind)
         encoded = base64.b64encode(source.pop('data')).decode('ascii')
+        if kind == 'bar' and item['appearance'] == 'light':
+            # A transparent light-appearance status button needs a light page
+            # backing, just as it does in the native menu bar. Pixels stay intact.
+            out.append(f'<rect x="{x}" y="{y}" width="{width}" height="{height}" rx="5" fill="#f4f5f6"/>')
         out.append(f'<image x="{x}" y="{y}" width="{width}" height="{height}" preserveAspectRatio="xMinYMin meet" href="data:image/png;base64,{encoded}"/>')
         assets.append(dict(source, language=language, state=item['state'], appearance=item['appearance'],
                            kind=kind, image=item['image']))
