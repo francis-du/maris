@@ -55,6 +55,7 @@ pub fn read_input() -> std::io::Result<Option<crossterm::event::Event>> {
 struct TerminalInput {
     queued: std::collections::VecDeque<crossterm::event::Event>,
     discard_mouse_tail: bool,
+    pending_mouse: Option<String>,
 }
 impl TerminalInput {
     fn next(
@@ -93,18 +94,21 @@ impl TerminalInput {
             }
             return Ok(None);
         }
-        let Some(event) = read(wait)? else {
-            return Ok(None);
+        let (mut original, mut text) = if let Some(partial) = self.pending_mouse.take() {
+            (std::collections::VecDeque::new(), partial)
+        } else {
+            let Some(event) = read(wait)? else {
+                return Ok(None);
+            };
+            if !matches!(event, Event::Key(key) if key.code == KeyCode::Esc
+                && key.kind == KeyEventKind::Press && key.modifiers.is_empty())
+            {
+                return Ok(Some(event));
+            }
+            (std::collections::VecDeque::from([event]), String::new())
         };
-        if !matches!(event, Event::Key(key) if key.code == KeyCode::Esc
-            && key.kind == KeyEventKind::Press && key.modifiers.is_empty())
-        {
-            return Ok(Some(event));
-        }
-        let mut original = std::collections::VecDeque::from([event]);
-        let mut text = String::new();
         let deadline = Instant::now() + Duration::from_millis(30);
-        for _ in 0..32 {
+        for _ in text.len()..32 {
             let next = match read(deadline.saturating_duration_since(Instant::now())) {
                 Ok(event) => event,
                 Err(error) => {
@@ -117,9 +121,10 @@ impl TerminalInput {
                 }
             };
             let Some(next) = next else {
-                // An established, incomplete mouse report must not cancel a draft.
+                // A short read is not a lost click. Preserve the bounded report
+                // across polling calls instead of discarding a delayed press/release.
                 if text.starts_with("[<") {
-                    self.discard_mouse_tail = true;
+                    self.pending_mouse = Some(text);
                     return Ok(None);
                 }
                 self.queued.extend(original);
