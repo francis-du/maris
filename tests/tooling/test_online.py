@@ -16,6 +16,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -79,7 +80,8 @@ printf 'verified fixture installer reached; no audio or real installation\\n' > 
         selected = (target, machine) == (system, arch)
         lines.append('\t'.join(['asset', target, machine, f'Maris-{version}-{target}-{machine}{suffix}', sha(data) if selected else 'b' * 64, str(len(data)) if selected else '1', sha(binary)]))
     manifest = '\n'.join(lines) + '\n'
-    (folder / 'manifest').write_text(manifest, encoding='ascii')
+    # The release wire format is LF-only, including on native Windows runners.
+    (folder / 'manifest').write_bytes(manifest.encode('ascii'))
     return manifest, data
 
 
@@ -217,6 +219,24 @@ sys.stdout.buffer.write(file.read_bytes())
 
 
 class ReleaseManifests(unittest.TestCase):
+    def test_download_fixture_preserves_manifest_wire_bytes_on_windows(self):
+        original_write_text = Path.write_text
+
+        def windows_write_text(path, data, *args, **kwargs):
+            # Reproduce Windows' default text-mode newline translation on any host.
+            if kwargs.get('newline') is None:
+                kwargs['newline'] = '\r\n'
+            return original_write_text(path, data, *args, **kwargs)
+
+        for arch in ('x86_64', 'arm64'):
+            with self.subTest(architecture=arch), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                with patch.object(Path, 'write_text', windows_write_text):
+                    manifest, _ = fixture(root, 'windows', arch)
+                actual = (root / 'manifest').read_bytes()
+                self.assertEqual(actual, manifest.encode('ascii'))
+                self.assertNotIn(b'\r', actual)
+
     def test_all_six_native_candidates_are_required_and_stay_candidate(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
