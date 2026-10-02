@@ -106,3 +106,23 @@ Maris's tonal planner is original bounded heuristic code, not a pretrained neura
 ## flexaudio-core security patch
 
 Maris vendors the unmodified flexaudio-core v0.2.0 source under `third_party/flexaudio-core` and retains its MIT license. The local Cargo manifest changes only its ringbuf dependency from the upstream 0.4 range to ringbuf 0.5.2 so the Windows loopback path does not ship the memory-safety issue fixed by RUSTSEC-2026-0293. The vendored source remains attributable to Studio Sadola; Maris-specific rationale is recorded in `MARIS_PATCH.md`.
+
+## gemm-common AArch64 FP16 patch
+
+`third_party/gemm-common` retains the MIT-licensed published `0.19.0` crate from
+upstream revision `86102c5b712737978371ac9ef7a11982f686d7bc`. The four vector
+half-precision assembly helpers now declare their required `fp16` target feature,
+matching the existing scalar helpers. This fixes baseline AArch64 debug
+compilation; it leaves runtime CPU detection and non-FP16 fallback paths intact.
+It does not raise the application-wide CPU requirement or disable model support.
+
+`UPSTREAM.json` records the original and patched SIMD file hashes, and
+`PATCHES.md` describes the four attribute additions. All other vendored crate
+source and its license are unchanged. The source publication audit covers this
+package with the same credential and path checks as other approved vendors.
+
+The regression reproducer is a library depending on `gemm-f16 = "=0.19.0"`,
+built with Rust 1.94.0 for `aarch64-unknown-linux-gnu` in the default debug
+profile. The published dependency fails with eleven `fullfp16` assembler
+errors; selecting this patch compiles without target-feature overrides.
+The native Linux ARM build workflow additionally compiles and tests Maris itself.

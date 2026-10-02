@@ -1,0 +1,13 @@
+{
+  "crate": "gemm-common",
+  "version": "0.19.0",
+  "repository": "https://github.com/sarah-ek/gemm/",
+  "revision": "86102c5b712737978371ac9ef7a11982f686d7bc",
+  "source": "https://crates.io/api/v1/crates/gemm-common/0.19.0/download",
+  "original_simd_sha256": "5f068586c035edd817239b8f8334f01b744529f705ced474ff0633967695e3ff",
+  "patched_simd_sha256": "456af15c8b8cf47059035123a0d6b758ecfdc442bea88a0633277093412c3b30",
+  "license": "MIT",
+  "modified_files": [
+    "src/simd.rs"
+  ]
+}

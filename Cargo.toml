@@ -81,6 +81,7 @@ path = "tests/support/menu_probe.rs"
 required-features = ["desktop"]
 
 [patch.crates-io]
+gemm-common = { path = "third_party/gemm-common" }
 flexaudio-core = { path = "third_party/flexaudio-core" }
 
 [profile.release]
