@@ -100,7 +100,7 @@ pub(super) fn devices() -> Result<Vec<super::DeviceInfo>> {
     let output = host.default_output_device();
     let mut result = Vec::new();
     for (id, device) in paired()? {
-        let name = device.name()?;
+        let name = device.description()?.name().to_owned();
         for (direction, is_input, default) in [
             ("input", true, input.as_ref()),
             ("output", false, output.as_ref()),
