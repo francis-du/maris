@@ -37,7 +37,7 @@ class Documentation(unittest.TestCase):
         cls.output = build(ROOT)
 
     def test_one_source_tree_produces_all_languages_and_legacy_urls(self):
-        self.assertEqual(len(check_output(self.output)), 103)
+        self.assertEqual(len(check_output(self.output)), 109)
         for locale in LANGUAGES:
             for page in GUIDES:
                 data = self.output[f'{locale}/{page}.html'].decode()

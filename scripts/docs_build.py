@@ -18,6 +18,7 @@ REFERENCES = {
     'commands': 'reference/commands.md', 'third-party': 'reference/third-party.md',
     'ui-design': 'development/ui-design.md', 'models': 'development/models.md',
     'product-gates': 'development/product-gates.md', 'releasing': 'development/releasing.md',
+    'dependency-security': 'development/dependency-security.md',
 }
 INSTALLERS = ('install.sh', 'install.ps1')
 NAMES = {'en': 'English', 'zh-CN': '简体中文', 'zh-TW': '繁體中文', 'ja': '日本語', 'de': 'Deutsch', 'es': 'Español'}
