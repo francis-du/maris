@@ -59,6 +59,8 @@ When the analysis queue loses frames, the recognition collector discards its par
 
 The handoff also records the loss counter alongside each completed observation. Retrieval rejects a counter change, even when the analysis thread has not polled again. The model worker rejects future observation times before changing its submission history, so a bad timestamp cannot suppress subsequent valid audio. The regression tests cover loss after publication, counter resets, exact-once retrieval and recovery after a future timestamp. This does not change the saved profile or audio routing.
 
+Recognition results retain the captured window's measured bass and treble energy, level, crest factor and stereo correlation. A backend may add classification tags but cannot replace those measurements or change the observation time. A regression deliberately returns incorrect measurements and checks that the worker preserves the captured values while retaining valid tags.
+
 ## Before adding another model
 
 Require a named listening problem, a pinned artifact, reviewed code and weight permissions, reproducible preprocessing/reference outputs, bounded offline CPU/memory/latency measurements, failure isolation, an integration test on the actual backend, and level-matched blind comparison against the existing DSP-only baseline. Do not train a network to imitate existing heuristics and then market that as a demonstrated improvement. A small classifier may be worth researching, but fitting in the installer does not satisfy these checks.
