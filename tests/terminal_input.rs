@@ -18,6 +18,40 @@ use std::{
 struct ConsoleProcess {
     child: Child,
     master: File,
+    first_output: String,
+}
+
+/// Fixture status must continue independently while the terminal blocks on a burst.
+/// This does not weaken the production timeout or grant a real capture session.
+struct Heartbeat {
+    stop: std::sync::mpsc::Sender<()>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+impl Heartbeat {
+    fn start(store: Store) -> Self {
+        heartbeat(&store);
+        let (stop, receiver) = std::sync::mpsc::channel();
+        let thread = std::thread::spawn(move || {
+            while matches!(
+                receiver.recv_timeout(Duration::from_millis(100)),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+            ) {
+                heartbeat(&store);
+            }
+        });
+        Self {
+            stop,
+            thread: Some(thread),
+        }
+    }
+}
+impl Drop for Heartbeat {
+    fn drop(&mut self) {
+        let _ = self.stop.send(());
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
 }
 impl Drop for ConsoleProcess {
     fn drop(&mut self) {
@@ -34,7 +68,14 @@ impl ConsoleProcess {
         loop {
             match self.master.read(&mut bytes) {
                 Ok(0) => break,
-                Ok(count) => output.push_str(&String::from_utf8_lossy(&bytes[..count])),
+                Ok(count) => {
+                    let text = String::from_utf8_lossy(&bytes[..count]);
+                    output.push_str(&text);
+                    // Retain early notices even when send() drains output to avoid PTY deadlock.
+                    if self.first_output.len() < 65_536 {
+                        self.first_output.push_str(&text);
+                    }
+                }
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
                 Err(_) => break,
             }
@@ -78,7 +119,7 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
     let dir = tempfile::tempdir().unwrap();
     let store = Store::at(dir.path());
     let _lease = store.session_lock().unwrap();
-    heartbeat(&store);
+    let _heartbeat = Heartbeat::start(store.clone());
     let mut master = -1;
     let mut slave = -1;
     let mut size = libc::winsize {
@@ -132,11 +173,14 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
         });
     }
     let child = command.spawn().unwrap();
-    let mut process = ConsoleProcess { child, master };
+    let mut process = ConsoleProcess {
+        child,
+        master,
+        first_output: String::new(),
+    };
     let start = Instant::now();
     let mut output = String::new();
     while !output.contains("MARIS") {
-        heartbeat(&store);
         process.drain(&mut output);
         assert!(
             process.child.try_wait().unwrap().is_none(),
@@ -152,7 +196,6 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
     output.clear();
     let start = Instant::now();
     while !output.contains("Current") {
-        heartbeat(&store);
         process.drain(&mut output);
         assert!(
             start.elapsed() < Duration::from_secs(5),
@@ -162,7 +205,6 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
     }
     let areas = configuration::layout(studio_controls::shell(Rect::new(0, 0, 140, 40)).content);
     for step in 0..16 {
-        heartbeat(&store);
         // Motion was previously rendered one event at a time, burying real button events.
         process.send(&format!(
             "{}{}",
@@ -173,7 +215,6 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
     process.send(&click(areas.apply));
     let start = Instant::now();
     while store.load().unwrap().revision == 0 {
-        heartbeat(&store);
         process.drain(&mut output);
         assert!(
             process.child.try_wait().unwrap().is_none(),
@@ -181,7 +222,8 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
         );
         assert!(
             start.elapsed() < Duration::from_secs(10),
-            "Button burst did not commit its draft; terminal tail: {}",
+            "Button burst did not commit its draft; first output: {}\nterminal tail: {}",
+            process.first_output,
             output
                 .chars()
                 .rev()
@@ -196,8 +238,18 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
     let saved = store.load().unwrap();
     assert_eq!(saved.revision, 1);
     assert_eq!(
-        saved.profile.bands[0].gain_db, 4.0,
-        "A physical +/- click was lost or duplicated"
+        saved.profile.bands[0].gain_db,
+        4.0,
+        "A physical +/- click was lost or duplicated; first output: {}\nterminal tail: {}",
+        process.first_output,
+        output
+            .chars()
+            .rev()
+            .take(6000)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect::<String>()
     );
     assert_eq!(listening::load(&store).unwrap().revision, 0);
     assert!(!dir.path().join("control.json").exists());
@@ -207,7 +259,6 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
     process.send("+");
     let editing = Instant::now();
     while editing.elapsed() < Duration::from_millis(1400) {
-        heartbeat(&store);
         process.drain(&mut output);
         std::thread::sleep(Duration::from_millis(20));
     }
@@ -219,7 +270,6 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
     process.send("\r");
     let start = Instant::now();
     while store.load().unwrap().revision < 2 {
-        heartbeat(&store);
         process.drain(&mut output);
         assert!(
             start.elapsed() < Duration::from_secs(5),
@@ -234,7 +284,6 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
     process.send("+\r");
     let start = Instant::now();
     while store.load().unwrap().revision < 3 {
-        heartbeat(&store);
         process.drain(&mut output);
         assert!(
             start.elapsed() < Duration::from_secs(5),

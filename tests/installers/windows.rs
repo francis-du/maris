@@ -44,6 +44,41 @@ fn ok(output: Output) {
     );
 }
 #[test]
+fn windows_checksum_helper_handles_empty_binary_and_multiblock_files_without_cmdlets() {
+    use sha2::{Digest, Sha256};
+    let directory = tempfile::tempdir().unwrap();
+    let mut cases = Vec::new();
+    for (name, data) in [
+        ("empty file", Vec::new()),
+        ("abc.txt", b"abc".to_vec()),
+        (
+            "binary file",
+            (0..1_048_577).map(|index| (index % 251) as u8).collect(),
+        ),
+    ] {
+        fs::write(directory.path().join(name), &data).unwrap();
+        cases.push(
+            serde_json::json!({"name":name,"expected":format!("{:X}", Sha256::digest(&data))}),
+        );
+    }
+    fs::write(
+        directory.path().join("cases.json"),
+        serde_json::to_vec(&cases).unwrap(),
+    )
+    .unwrap();
+    ok(Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-File"])
+        .arg(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/support/checksum_probe.ps1"
+        ))
+        .arg("-Fixture")
+        .arg(directory.path())
+        .output()
+        .unwrap());
+}
+
+#[test]
 fn windows_dry_run_and_missing_confirmation_never_write() {
     let (_temp, source, prefix) = setup();
     ok(run(&source, &prefix, &["-AllowUnsigned", "-DryRun"]));

@@ -28,17 +28,209 @@ pub fn next_input(
 
 pub fn read_input() -> std::io::Result<Option<crossterm::event::Event>> {
     use crossterm::event;
-    if !event::poll(Duration::from_millis(33))? {
-        return Ok(None);
+    thread_local! {
+        static INPUT: std::cell::RefCell<TerminalInput> = std::cell::RefCell::default();
     }
-    next_input(|| {
-        if event::poll(Duration::ZERO)? {
-            event::read().map(Some)
-        } else {
-            Ok(None)
-        }
+    INPUT.with(|input| {
+        let mut input = input.borrow_mut();
+        let mut wait = Duration::from_millis(33);
+        next_input(|| {
+            let result = input.next(wait, &mut |timeout| {
+                if event::poll(timeout)? {
+                    event::read().map(Some)
+                } else {
+                    Ok(None)
+                }
+            });
+            wait = Duration::ZERO;
+            result
+        })
     })
 }
+
+/// Crossterm can report a standalone Esc when a Unix read ends at that byte.
+/// Rejoin only a complete SGR mouse report before its fragments reach shortcuts.
+/// Ordinary Escape and non-mouse keys retain their order, with at most 30 ms delay.
+#[derive(Default)]
+struct TerminalInput {
+    queued: std::collections::VecDeque<crossterm::event::Event>,
+    discard_mouse_tail: bool,
+}
+impl TerminalInput {
+    fn next(
+        &mut self,
+        wait: Duration,
+        read: &mut impl FnMut(Duration) -> std::io::Result<Option<crossterm::event::Event>>,
+    ) -> std::io::Result<Option<crossterm::event::Event>> {
+        use crossterm::event::Event;
+        if let Some(event) = self.queued.pop_front() {
+            return Ok(Some(event));
+        }
+        if self.discard_mouse_tail {
+            // Drain a bounded piece of an incomplete/oversized report. Its numeric
+            // tail must not select another page. A genuine non-report event survives.
+            for index in 0..32 {
+                let Some(event) = read(if index == 0 { wait } else { Duration::ZERO })? else {
+                    return Ok(None);
+                };
+                if let Event::Key(key) = &event {
+                    if key.kind == KeyEventKind::Press
+                        && key.modifiers.bits() & !KeyModifiers::SHIFT.bits() == 0
+                    {
+                        if let KeyCode::Char(ch) = key.code {
+                            if ch.is_ascii_digit() || ch == ';' {
+                                continue;
+                            }
+                            if matches!(ch, 'M' | 'm') {
+                                self.discard_mouse_tail = false;
+                                return Ok(None);
+                            }
+                        }
+                    }
+                }
+                self.discard_mouse_tail = false;
+                return Ok(Some(event));
+            }
+            return Ok(None);
+        }
+        let Some(event) = read(wait)? else {
+            return Ok(None);
+        };
+        if !matches!(event, Event::Key(key) if key.code == KeyCode::Esc
+            && key.kind == KeyEventKind::Press && key.modifiers.is_empty())
+        {
+            return Ok(Some(event));
+        }
+        let mut original = std::collections::VecDeque::from([event]);
+        let mut text = String::new();
+        let deadline = Instant::now() + Duration::from_millis(30);
+        for _ in 0..32 {
+            let next = match read(deadline.saturating_duration_since(Instant::now())) {
+                Ok(event) => event,
+                Err(error) => {
+                    if text.starts_with("[<") {
+                        self.discard_mouse_tail = true;
+                    } else {
+                        self.queued.extend(original);
+                    }
+                    return Err(error);
+                }
+            };
+            let Some(next) = next else {
+                // An established, incomplete mouse report must not cancel a draft.
+                if text.starts_with("[<") {
+                    self.discard_mouse_tail = true;
+                    return Ok(None);
+                }
+                self.queued.extend(original);
+                return Ok(self.queued.pop_front());
+            };
+            let character = match &next {
+                Event::Key(key)
+                    if key.kind == KeyEventKind::Press
+                        && key.modifiers.bits() & !KeyModifiers::SHIFT.bits() == 0 =>
+                {
+                    match key.code {
+                        KeyCode::Char(ch) if ch.is_ascii() => Some(ch),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            };
+            original.push_back(next);
+            let Some(ch) = character else {
+                if text.starts_with("[<") {
+                    // Preserve the interrupting event, then discard the unfinished
+                    // report's coordinates instead of turning them into shortcuts.
+                    self.discard_mouse_tail = true;
+                    return Ok(original.pop_back());
+                }
+                self.queued.extend(original);
+                return Ok(self.queued.pop_front());
+            };
+            text.push(ch);
+            if text == "[" || text == "[<" {
+                continue;
+            }
+            if !text.starts_with("[<") {
+                self.queued.extend(original);
+                return Ok(self.queued.pop_front());
+            }
+            if matches!(ch, 'M' | 'm') {
+                return Ok(sgr_mouse(&text).map(Event::Mouse));
+            }
+            if !ch.is_ascii_digit() && ch != ';' {
+                self.discard_mouse_tail = true;
+                return Ok(None);
+            }
+        }
+        // Bound malformed input without interpreting its prefix as keyboard commands.
+        self.discard_mouse_tail = true;
+        Ok(None)
+    }
+}
+
+fn sgr_mouse(text: &str) -> Option<crossterm::event::MouseEvent> {
+    use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+    let released = text.ends_with('m');
+    let mut fields = text
+        .strip_prefix("[<")?
+        .strip_suffix(['M', 'm'])?
+        .split(';');
+    let code = fields.next()?.parse::<u16>().ok()?;
+    let column = fields.next()?.parse::<u16>().ok()?.checked_sub(1)?;
+    let row = fields.next()?.parse::<u16>().ok()?.checked_sub(1)?;
+    if fields.next().is_some() || code > 127 {
+        return None;
+    }
+    let mut modifiers = KeyModifiers::NONE;
+    for (mask, modifier) in [
+        (4, KeyModifiers::SHIFT),
+        (8, KeyModifiers::ALT),
+        (16, KeyModifiers::CONTROL),
+    ] {
+        if code & mask != 0 {
+            modifiers.insert(modifier);
+        }
+    }
+    let kind = if code & 64 != 0 {
+        if released || code & 32 != 0 {
+            return None;
+        }
+        match code & 3 {
+            0 => MouseEventKind::ScrollUp,
+            1 => MouseEventKind::ScrollDown,
+            2 => MouseEventKind::ScrollLeft,
+            _ => MouseEventKind::ScrollRight,
+        }
+    } else if code & 3 == 3 && code & 32 != 0 && !released {
+        MouseEventKind::Moved
+    } else {
+        let button = match code & 3 {
+            0 => MouseButton::Left,
+            1 => MouseButton::Middle,
+            2 => MouseButton::Right,
+            _ => return None,
+        };
+        if released {
+            MouseEventKind::Up(button)
+        } else if code & 32 != 0 {
+            MouseEventKind::Drag(button)
+        } else {
+            MouseEventKind::Down(button)
+        }
+    };
+    Some(MouseEvent {
+        kind,
+        column,
+        row,
+        modifiers,
+    })
+}
+
+#[cfg(test)]
+#[path = "../../../tests/unit/terminal_fragments.rs"]
+mod fragment_tests;
 
 pub const DASHBOARD_SOUND_ROWS: usize = 10;
 pub const SOUND_ROWS: usize = 26;
