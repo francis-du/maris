@@ -38,6 +38,34 @@ fn semantic_context(evidence: &analysis::Analysis) -> MusicContext {
     context
 }
 
+fn live_runtime(
+    store: &Store,
+    device: &str,
+    evidence: &analysis::Analysis,
+    context: &MusicContext,
+) {
+    store
+        .write_json(
+            "runtime.json",
+            &serde_json::json!({
+                "active":true,
+                "session_id":"tuning-live-session",
+                "output":device,
+                "profile_key":device,
+                "sample_rate":evidence.sample_rate,
+                "updated_at_ms":analysis::now_ms(),
+                "effective_preamp_db":-3.0,
+                "device_identity":{"stable_id":"tuning-device-A"},
+                "device_binding_revision":1,
+                "rebind_count":0,
+                "analysis":evidence,
+                "music_context":context,
+                "music_context_status":{"semantic_backend_available":context.mode == "semantic"}
+            }),
+        )
+        .unwrap();
+}
+
 #[test]
 fn bass_heavy_source_never_gets_more_static_bass() {
     let evidence = analysis::measure(&tone(100.0), 48_000).unwrap();
@@ -242,33 +270,8 @@ fn apply_rejects_tampering_and_accepts_matching_live_state() {
     let store = Store::at(directory.path());
     let evidence = analysis::measure(&tone(1000.0), 48_000).unwrap();
     let context = MusicContext::signal_only(&evidence);
-    let before = MusicProfile::default();
-    let capability = maris::device_profile::effective(&store, "Unknown Output").unwrap();
-    let proposal = music_tuning::propose_from(TuningInput {
-        device: "Unknown Output",
-        profile_key: "Unknown Output",
-        listening_revision: 0,
-        before: &before,
-        evidence: &evidence,
-        context: &context,
-        capability: &capability,
-        goal: "soft",
-        effective_preamp_db: -3.0,
-    })
-    .unwrap();
-    store
-        .write_json(
-            "runtime.json",
-            &serde_json::json!({
-                "active":true,
-                "output":"Unknown Output",
-                "updated_at_ms":analysis::now_ms(),
-                "effective_preamp_db":-3.0,
-                "analysis":evidence,
-                "music_context":context
-            }),
-        )
-        .unwrap();
+    live_runtime(&store, "Unknown Output", &evidence, &context);
+    let proposal = music_tuning::from_live(&store, "soft").unwrap();
 
     let mut tampered = proposal.clone();
     tampered.profile.bass_db = 6.0;
@@ -281,35 +284,54 @@ fn apply_rejects_tampering_and_accepts_matching_live_state() {
 }
 
 #[test]
+fn live_apply_rejects_session_and_device_rebind_but_accepts_fresh_analysis() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = Store::at(directory.path());
+    let evidence = analysis::measure(&tone(1000.0), 48_000).unwrap();
+    let context = MusicContext::signal_only(&evidence);
+    live_runtime(&store, "Headphones", &evidence, &context);
+    let proposal = music_tuning::from_live(&store, "soft").unwrap();
+    let original: serde_json::Value =
+        maris::store::read_json(&store.directory.join("runtime.json")).unwrap();
+
+    for (field, value) in [
+        ("session_id", serde_json::json!("new-session")),
+        ("device_binding_revision", serde_json::json!(2)),
+        ("rebind_count", serde_json::json!(1)),
+    ] {
+        let mut changed = original.clone();
+        changed[field] = value;
+        store.write_json("runtime.json", &changed).unwrap();
+        assert!(
+            music_tuning::apply(&store, &proposal).is_err(),
+            "accepted changed {field}"
+        );
+    }
+    let mut changed = original.clone();
+    changed["device_identity"]["stable_id"] = serde_json::json!("tuning-device-B");
+    store.write_json("runtime.json", &changed).unwrap();
+    assert!(music_tuning::apply(&store, &proposal).is_err());
+
+    let mut changed = original;
+    changed["analysis"]["peak_dbfs"] = serde_json::json!(-9.0);
+    changed["analysis"]["updated_at_ms"] = serde_json::json!(analysis::now_ms());
+    changed["updated_at_ms"] = serde_json::json!(analysis::now_ms());
+    store.write_json("runtime.json", &changed).unwrap();
+    assert!(music_tuning::apply(&store, &proposal).is_ok());
+}
+
+#[test]
 fn apply_rejects_output_change_after_preview() {
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path());
     let evidence = analysis::measure(&tone(1000.0), 48_000).unwrap();
     let context = MusicContext::signal_only(&evidence);
-    let before = MusicProfile::default();
-    let capability = maris::device_profile::effective(&store, "Headphones").unwrap();
-    let proposal = music_tuning::propose_from(TuningInput {
-        device: "Headphones",
-        profile_key: "Headphones",
-        listening_revision: 0,
-        before: &before,
-        evidence: &evidence,
-        context: &context,
-        capability: &capability,
-        goal: "balanced",
-        effective_preamp_db: -3.0,
-    })
-    .unwrap();
-    store
-        .write_json(
-            "runtime.json",
-            &serde_json::json!({
-                "active":true,
-                "output":"MacBook Pro Speakers",
-                "updated_at_ms":analysis::now_ms()
-            }),
-        )
-        .unwrap();
+    live_runtime(&store, "Headphones", &evidence, &context);
+    let proposal = music_tuning::from_live(&store, "balanced").unwrap();
+    let mut runtime: serde_json::Value =
+        maris::store::read_json(&store.directory.join("runtime.json")).unwrap();
+    runtime["output"] = serde_json::json!("MacBook Pro Speakers");
+    store.write_json("runtime.json", &runtime).unwrap();
     assert!(music_tuning::apply(&store, &proposal).is_err());
     assert_eq!(listening::load(&store).unwrap().revision, 0);
 }
@@ -451,23 +473,11 @@ fn no_op_preview_preserves_revision_and_the_previous_undo_snapshot() {
     .unwrap();
     let evidence = analysis::measure(&tone(1000.0), 48_000).unwrap();
     let context = MusicContext::signal_only(&evidence);
-    let capability = maris::device_profile::effective(&store, "Fixture").unwrap();
     let before = library.effective("Fixture");
-    let proposal = music_tuning::propose_from(TuningInput {
-        device: "Fixture",
-        profile_key: "Fixture",
-        listening_revision: 2,
-        before,
-        evidence: &evidence,
-        context: &context,
-        capability: &capability,
-        goal: "balanced",
-        effective_preamp_db: -3.0,
-    })
-    .unwrap();
+    live_runtime(&store, "Fixture", &evidence, &context);
+    let proposal = music_tuning::from_live(&store, "balanced").unwrap();
     assert_eq!(&proposal.profile, before);
     assert!(proposal.changes.is_empty());
-    store.write_json("runtime.json", &serde_json::json!({"active":true,"output":"Fixture","updated_at_ms":analysis::now_ms()})).unwrap();
     let mut tampered = proposal.clone();
     tampered.changes.push("Invented improvement".into());
     assert!(music_tuning::apply(&store, &tampered).is_err());

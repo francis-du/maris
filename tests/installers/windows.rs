@@ -79,6 +79,56 @@ fn windows_checksum_helper_handles_empty_binary_and_multiblock_files_without_cmd
 }
 
 #[test]
+fn windows_build_dry_run_needs_no_payload_and_preserves_mode_checks() {
+    let temp = tempfile::tempdir().unwrap();
+    // Keep the -File script argument in ordinary absolute path form.
+    let root = temp.path().to_path_buf();
+    assert!(root.is_absolute());
+    let checkout = root.join("checkout with spaces");
+    fs::create_dir(&checkout).unwrap();
+    let script = checkout.join("install.ps1");
+    fs::copy(concat!(env!("CARGO_MANIFEST_DIR"), "/install.ps1"), &script).unwrap();
+    fs::write(
+        checkout.join("Cargo.lock"),
+        "# Dry-run fixture; never compiled\n",
+    )
+    .unwrap();
+    let prefix = root.join("Programs with spaces");
+    let powershell = PathBuf::from(std::env::var_os("SystemRoot").unwrap())
+        .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+    let invoke = |options: &[&str]| {
+        Command::new(&powershell)
+            .args(["-NoProfile", "-NonInteractive", "-File"])
+            .arg(&script)
+            .arg("-Prefix")
+            .arg(&prefix)
+            .args(options)
+            // No compiler or download tools are available to this process.
+            .env("PATH", &checkout)
+            .output()
+            .unwrap()
+    };
+    let output = invoke(&["-Build", "-DryRun"]);
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("Dry run: locked native Windows build"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    ok(output);
+    for options in [
+        vec!["-Build", "-DryRun", "-From", "missing-payload"],
+        vec!["-Build", "-DryRun", "-Version", "1.2.3"],
+        vec!["-DryRun", "-From", "missing-payload"],
+    ] {
+        assert!(!invoke(&options).status.success(), "accepted {options:?}");
+    }
+    assert!(!prefix.exists());
+    assert!(!checkout.join("target").exists());
+    assert!(!checkout.join("dist").exists());
+    assert_eq!(fs::read_dir(&checkout).unwrap().count(), 2);
+}
+
+#[test]
 fn windows_dry_run_and_missing_confirmation_never_write() {
     let (_temp, source, prefix) = setup();
     ok(run(&source, &prefix, &["-AllowUnsigned", "-DryRun"]));
@@ -165,19 +215,25 @@ fn windows_rejects_wrong_platform_or_non_pe_images_before_installation() {
 #[test]
 fn windows_rejects_traversal_and_machine_wide_destinations() {
     let (_temp, source, prefix) = setup();
-    // PathBuf::join normalizes .. after a Windows verbatim prefix. Construct
-    // the raw argument without joining so the installer receives the attack.
-    for suffix in ["/../other", "\\..\\other", "/./other"] {
+    // canonicalize() returns a Windows verbatim path. PathBuf::join would
+    // normalize away `..` before the installer ever receives the argument.
+    // Append to OsString instead and assert the exact input was retained.
+    for suffix in [
+        r"\..\other",
+        "/../other",
+        r"\child/../../other",
+        r"\.\other",
+    ] {
         let mut raw = prefix.as_os_str().to_os_string();
         raw.push(suffix);
         let traversal = PathBuf::from(raw);
         assert!(traversal.as_os_str().to_string_lossy().ends_with(suffix));
-        let result = run(&source, &traversal, &["-AllowUnsigned", "-Yes"]);
-        assert!(!result.status.success());
+        let output = run(&source, &traversal, &["-AllowUnsigned", "-Yes"]);
+        assert!(!output.status.success(), "accepted {traversal:?}");
         assert!(
-            String::from_utf8_lossy(&result.stderr).contains("traversal"),
-            "{}",
-            String::from_utf8_lossy(&result.stderr)
+            String::from_utf8_lossy(&output.stderr).contains("traversal paths are not accepted"),
+            "Wrong rejection for {traversal:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
         );
         assert!(!prefix.exists());
         assert!(!prefix.parent().unwrap().join("other").exists());

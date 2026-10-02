@@ -28,6 +28,19 @@ jobs:
           architecture: ${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }}
       - name: Install declared Rust toolchain
         run: rustup toolchain install 1.94.0 --profile minimal --component rustfmt --component clippy
+      - name: Reject vulnerable dependencies reachable on this native target
+        shell: bash
+        run: |
+          set -euo pipefail
+          tree="$(cargo tree --locked --edges normal)"
+          if grep -Eq '(^|[[:space:]├└─])glib v0\.18\.5([[:space:]]|$)' <<< "$tree"; then
+            echo "glib 0.18.5 is reachable on $RUNNER_OS; target is not release-safe" >&2
+            exit 1
+          fi
+          if grep -Eq '(^|[[:space:]├└─])ringbuf v0\.[0-4]\.' <<< "$tree"; then
+            echo "an unpatched ringbuf version is reachable on $RUNNER_OS" >&2
+            exit 1
+          fi
       - name: Install Linux audio build headers and open-file checker
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config psmisc pulseaudio pulseaudio-utils
@@ -48,6 +61,9 @@ jobs:
         run: |
           cargo test --locked --lib models::musicnn::tests::bundled_checkpoint_executes_end_to_end
           cargo test --locked --test autoeq bundled_profile_pack_contains_known_profile
+      - name: Exercise native menu construction and actual item-ID dispatch
+        if: runner.os == 'macOS' || runner.os == 'Windows'
+        run: cargo run --locked --example menu_probe
       - name: 200 recorded offline regression rounds
         run: python scripts/verify_rounds.py --rounds 200
       - name: Build once and package explicitly local development artifacts

@@ -79,6 +79,9 @@ name = "menu_probe"
 path = "tests/support/menu_probe.rs"
 required-features = ["desktop"]
 
+[patch.crates-io]
+flexaudio-core = { path = "third_party/flexaudio-core" }
+
 [profile.release]
 lto = "thin"
 codegen-units = 1

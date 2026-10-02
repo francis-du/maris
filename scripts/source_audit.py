@@ -13,7 +13,8 @@ TOP = {".gitignore", ".gitattributes", "AGENTS.md", "README.md", "Cargo.lock", "
        "Maris-Info.plist", "build.rs", "install.sh", "install.ps1",
        ".wcode/project.yaml"}
 PREFIXES = ("src/", "tests/", "scripts/", "docs/", ".github/", "third_party/eqmac/",
-            "third_party/autoeq/", "third_party/musicnn/", ".wcode/design/")
+            "third_party/autoeq/", "third_party/musicnn/", "third_party/flexaudio-core/",
+            ".wcode/design/")
 SECRET_PATTERNS = [re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
                    re.compile(r"gh[pousr]_[A-Za-z0-9]{30,}"),
                    re.compile(r"github_pat_[A-Za-z0-9_]{40,}"),
@@ -23,6 +24,10 @@ FORBIDDEN = {".env", ".DS_Store", "runtime.json", "listening.json", "profile.jso
 
 
 def source_files(root: Path = ROOT) -> list[Path]:
+    try:
+        resolved_root = root.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ValueError("Unresolvable audit root") from error
     result = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
                             cwd=root, capture_output=True, check=True)
     names = sorted(set(result.stdout.decode("utf-8").split("\0")) - {""})
@@ -33,7 +38,13 @@ def source_files(root: Path = ROOT) -> list[Path]:
         if name not in TOP and not name.startswith(PREFIXES):
             problems.append(f"Unexpected publish path: {name}")
             continue
-        if (path.is_symlink() or not path.is_file() or path.name in FORBIDDEN
+        try:
+            resolved_path = path.resolve(strict=True)
+        except (OSError, RuntimeError):
+            problems.append(f"Unresolvable publish input: {name}")
+            continue
+        if (path.is_symlink() or not path.is_file() or not resolved_path.is_relative_to(resolved_root)
+                or path.name in FORBIDDEN
                 or any(p in {"__pycache__", "node_modules", "target", ".git"} for p in path.parts)
                 or path.suffix.lower() in {".pem", ".p12", ".pfx", ".key", ".wav", ".log"}):
             problems.append(f"Forbidden publish input: {name}")
