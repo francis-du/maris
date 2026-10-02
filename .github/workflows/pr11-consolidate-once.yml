@@ -53,6 +53,12 @@ jobs:
                                    ('tests/unit/model_cache.rs', 'bytes')]:
               replace(path, 'format!("{:x}", Sha256::digest(' + expression + '))',
                       'hex::encode(Sha256::digest(' + expression + '))')
+          replace('tests/installers/linux.rs',
+                  'format!(\n        "{:x}",\n        Sha256::digest(fs::read(source.join("bin/maris")).unwrap())\n    )',
+                  'hex::encode(Sha256::digest(fs::read(source.join("bin/maris")).unwrap()))')
+          replace('tests/installers/windows.rs',
+                  'format!("{:X}", Sha256::digest(&data))',
+                  'hex::encode_upper(Sha256::digest(&data))')
           for path, expected in [('src/control/mcp.rs', 7), ('src/cli/mod.rs', 1),
                                  ('src/cli/sound.rs', 1)]:
               p = Path(path)
@@ -116,13 +122,13 @@ jobs:
           }
           ''', encoding='utf-8', newline='\n')
           PY
-          rustfmt --edition 2021 build.rs src/control/mcp.rs src/cli/mod.rs src/cli/sound.rs tests/unit/model_cache.rs tests/dependency_schema.rs
+          rustfmt --edition 2021 build.rs src/control/mcp.rs src/cli/mod.rs src/cli/sound.rs tests/unit/model_cache.rs tests/installers/linux.rs tests/installers/windows.rs tests/dependency_schema.rs
           cargo update --workspace
       - name: Verify generated lockfile and adapters
         run: |
-          cargo check --all-targets --locked
-          cargo test --locked --test dependency_schema --test protocol --test tui
           cargo fmt --all --check
+          cargo check --all-targets --locked
+          cargo test --locked --test dependency_schema --test protocol --test tui --test installer
       - name: Commit only the reviewed files to PR 11
         env:
           GH_TOKEN: ${{ github.token }}
@@ -137,6 +143,7 @@ jobs:
           base = os.environ['GITHUB_SHA']
           files = ['Cargo.toml', 'Cargo.lock', 'build.rs', 'src/control/mcp.rs',
                    'src/cli/mod.rs', 'src/cli/sound.rs', 'tests/unit/model_cache.rs',
+                   'tests/installers/linux.rs', 'tests/installers/windows.rs',
                    'tests/dependency_schema.rs']
           changed = set(subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines())
           if not changed.issubset(files):
