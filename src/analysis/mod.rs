@@ -97,7 +97,15 @@ impl Analysis {
         Ok(())
     }
 }
+#[cfg(test)]
+#[path = "../../tests/unit/test_clock.rs"]
+pub(crate) mod test_clock;
+
 pub fn now_ms() -> u64 {
+    #[cfg(test)]
+    if let Some(now) = test_clock::current() {
+        return now;
+    }
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()

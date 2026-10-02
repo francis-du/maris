@@ -472,6 +472,8 @@ fn preparing_an_output_does_not_publish_settings_before_a_callback_runs() {
 
 #[test]
 fn all_settings_rows_commit_through_the_session_queue_into_the_real_renderer() {
+    // This fixture represents a live session, independent of CI disk/scheduler delays.
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     use crate::{
         configuration::{Context, Editor, Outcome},
         device_profile, listening,
@@ -753,4 +755,47 @@ fn stop_fade_reaches_zero_monotonically_even_after_source_disappears() {
     }
     assert_eq!(render.gain, 0.0);
     assert_eq!(render.frame([1.0; 2], false, true), [0.0; 2]);
+}
+
+#[test]
+fn expired_renderer_telemetry_still_rejects_a_staged_configuration() {
+    use crate::{
+        configuration::{Context, Editor, Outcome},
+        device_profile, listening,
+        store::Store,
+    };
+    use crossterm::event::KeyCode;
+    use serde_json::json;
+    let clock = crate::analysis::test_clock::Clock::freeze();
+    let directory = tempfile::tempdir().unwrap();
+    let store = Store::at(directory.path());
+    let key = "OFFLINE expiry fixture";
+    let runtime = json!({"active":true,"session_id":"expiry-test","output":key,
+        "profile_key":key,"sample_rate":48000,"music_processing":true,
+        "device_capability":device_profile::effective(&store,key).unwrap(),
+        "updated_at_ms":crate::analysis::now_ms()});
+    store.write_json("runtime.json", &runtime).unwrap();
+    let eq = store.load().unwrap();
+    let library = listening::load(&store).unwrap();
+    let context = Context {
+        runtime: &runtime,
+        eq: &eq,
+        listening: &library,
+    };
+    let mut editor = Editor::default();
+    let mut row = 0;
+    assert_eq!(
+        editor
+            .handle(&store, context, &mut row, KeyCode::Char('+'))
+            .unwrap(),
+        Outcome::Staged
+    );
+    clock.advance(10_000);
+    assert_eq!(crate::audio::runtime_status(&store)["stale"], true);
+    assert!(editor
+        .handle(&store, context, &mut row, KeyCode::Enter)
+        .is_err());
+    assert_eq!(store.load().unwrap().revision, 0);
+    assert_eq!(listening::load(&store).unwrap().revision, 0);
+    assert!(!directory.path().join("control.json").exists());
 }

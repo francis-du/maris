@@ -414,6 +414,8 @@ fn pending_device_limits_are_not_reported_applied_just_because_profile_revisions
 
 #[test]
 fn summary_distinguishes_listening_scene_global_eq_and_callback_application() {
+    // This fixture represents a live session, independent of CI disk/scheduler delays.
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     let (_dir, store) = fixture();
     listening::preset(&store, Some(0), Some("Headphones"), "focus").unwrap();
     store

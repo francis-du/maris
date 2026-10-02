@@ -885,6 +885,10 @@ fn new_session_id() -> String {
     )
 }
 fn now_ms() -> u64 {
+    #[cfg(test)]
+    if let Some(now) = crate::analysis::test_clock::current() {
+        return now;
+    }
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
