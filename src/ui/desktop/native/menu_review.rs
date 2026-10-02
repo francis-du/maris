@@ -113,6 +113,13 @@ fn state_review(view: &mut Indicator, locale: &str, capture: bool) -> Result<Val
                     && view.cancel_selection.is_enabled(),
                 "Native selection omitted its live Apply/Cancel controls"
             );
+            let metadata = crate::ui::desktop::menu_capture::image_metadata(&view.header.button)?;
+            ensure!(
+                metadata["accessibility_value"]
+                    .as_str()
+                    .is_some_and(|value| value.contains(t("Selection ready; review then apply"))),
+                "Native header reported a staged selection as already applied"
+            );
             if capture && matches!(locale, "en" | "zh-CN") {
                 for appearance in ["light", "dark"] {
                     result.push(snapshot(view, locale, "selection", appearance)?);
@@ -172,6 +179,13 @@ fn state_review(view: &mut Indicator, locale: &str, capture: bool) -> Result<Val
         ("restore-failed", t("Restore failed")),
     ] {
         if name == "restore-failed" {
+            // The fixture engine has released its lease and stopped publishing
+            // active telemetry; recovery must not enable expired audio controls.
+            store.write_json(
+                "runtime.json",
+                &json!({"active":false,
+                "updated_at_ms":crate::analysis::now_ms()}),
+            )?;
             ensure!(
                 !view.tick(false)? && !view.closing && view.resume.is_enabled(),
                 "Restore failure did not leave recovery controls available"
@@ -184,6 +198,13 @@ fn state_review(view: &mut Indicator, locale: &str, capture: bool) -> Result<Val
             ensure!(
                 !view.tick(false)?,
                 "Recovery unexpectedly closed the review"
+            );
+            ensure!(
+                !view.toggle.is_enabled()
+                    && !view.compare.is_enabled()
+                    && !view.output_menu.is_enabled()
+                    && view.resume.is_enabled(),
+                "Recovery exposed audio actions without a current session"
             );
         }
         let metadata = crate::ui::desktop::menu_capture::image_metadata(&view.header.button)?;

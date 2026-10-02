@@ -244,7 +244,11 @@ impl Indicator {
             .set_text(desktop_controls::menu_text(&summary.eq));
         #[cfg(target_os = "macos")]
         self.header.update(
-            t(summary.status),
+            t(if self.controller.has_pending() {
+                "Selection ready; review then apply"
+            } else {
+                summary.status
+            }),
             &desktop_controls::menu_text(&summary.output),
         );
         self.compare.set_text(format!(
@@ -601,10 +605,14 @@ impl Indicator {
             if !self.store.directory.join("route.json").exists() {
                 self.recovery_error = None;
             }
-            let display = self
-                .recovery_error
-                .clone()
-                .unwrap_or_else(|| t(mode).to_owned());
+            let display = self.recovery_error.clone().unwrap_or_else(|| {
+                t(if self.controller.has_pending() {
+                    "Selection ready; review then apply"
+                } else {
+                    mode
+                })
+                .to_owned()
+            });
             self.show_status(&display, &self.output_caption.text());
             if runtime["active"] != true && startup["phase"] == "failed" {
                 self.profile.set_text(format!(
