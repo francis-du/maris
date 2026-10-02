@@ -16,6 +16,14 @@ In Settings, select a control and use minus or plus to prepare a change. Current
 
 ![Settings showing current and proposed values with Apply and Cancel](../assets/settings-en.svg)
 
+## Quick controls from the menu bar
+
+The compact M follows measured audio level and stays still with Reduce Motion. Output and preset selections need confirmation; Compare and Undo are directly available. Expired audio disables changes, and recovery failures keep their message visible.
+
+![Actual macOS menus in light and dark appearance, including a selection awaiting Apply](../assets/menu-bar-en.svg)
+
+These native views use isolated offline state, without starting or capturing audio.
+
 ## Keep headphone correction separate
 
 Headphone correction uses existing device measurements. Bass, treble and other sound controls reflect your preferences. Choosing a preset preserves the correction source. A song's spectrum cannot measure the headphones themselves.
