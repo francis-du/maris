@@ -1,3 +1,6 @@
+#[path = "support/live_telemetry.rs"]
+mod live_telemetry;
+
 use maris::{
     control,
     desktop_controls::{Controller, Summary},
@@ -66,9 +69,12 @@ fn global_bypass_is_not_misrepresented_as_an_audible_ab_comparison() {
         })
         .unwrap();
     let mut controller = Controller::default();
+    live_telemetry::refresh(&store);
     assert!(controller.compare(&store).is_err());
+    live_telemetry::refresh(&store);
     assert!(controller.select_preset(&store, "focus").is_err());
     assert_eq!(listening::load(&store).unwrap().revision, 0);
+    live_telemetry::refresh(&store);
     let state = maris::audio::runtime_status(&store);
     let observed_at = state["updated_at_ms"].as_u64().unwrap();
     let summary = Summary::read(&store, &state, observed_at).unwrap();
