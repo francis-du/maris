@@ -33,7 +33,7 @@ rustfft = "6"
 ebur128 = "0.1.10"
 candle-core = { version = "0.11.0", default-features = false }
 candle-nn = { version = "0.11.0", default-features = false }
-sha2 = "0.10"
+sha2 = "0.11"
 nnnoiseless = { version = "=0.5.2", default-features = false, optional = true }
 
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
@@ -56,7 +56,7 @@ libc = "0.2"
 
 [build-dependencies]
 ureq = "2.12"
-sha2 = "0.10"
+sha2 = "0.11"
 
 [dev-dependencies]
 
