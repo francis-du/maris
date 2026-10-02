@@ -34,6 +34,28 @@ class SourceHygiene(unittest.TestCase):
         self.assertFalse((ROOT / 'run.sh').exists())
         self.assertFalse((ROOT / 'run.ps1').exists())
 
+    def test_vendored_flexaudio_core_is_audited_for_credentials(self):
+        vendor = self.root / 'third_party/flexaudio-core'
+        (vendor / 'src').mkdir(parents=True)
+        (vendor / 'Cargo.toml').write_text('[package]\nname = "flexaudio-core"\n', encoding='utf-8')
+        source = vendor / 'src/lib.rs'
+        source.write_text('// Audited vendored source\n', encoding='utf-8')
+        names = {p.relative_to(self.root).as_posix() for p in source_audit.source_files(self.root)}
+        self.assertIn('third_party/flexaudio-core/Cargo.toml', names)
+        self.assertIn('third_party/flexaudio-core/src/lib.rs', names)
+        credential = '-----BEGIN ' + 'PRIVATE KEY-----'
+        source.write_text(credential + '\n', encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'Potential credential') as failure:
+            source_audit.source_files(self.root)
+        self.assertNotIn(credential, str(failure.exception))
+
+    def test_unreviewed_third_party_packages_are_not_publishable(self):
+        vendor = self.root / 'third_party/unreviewed/src'
+        vendor.mkdir(parents=True)
+        (vendor / 'lib.rs').write_text('// Unreviewed source\n', encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'Unexpected publish path'):
+            source_audit.source_files(self.root)
+
     def test_local_agent_state_is_ignored_but_design_contracts_remain_publishable(self):
         shutil.copyfile(ROOT / '.gitignore', self.root / '.gitignore')
         design = self.root / '.wcode/design'
