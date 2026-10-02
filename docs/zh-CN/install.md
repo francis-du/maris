@@ -1,5 +1,7 @@
 # 安装 Maris
 
+0.1.0 以 CLI/TUI 预编译归档发行，不宣称程序已获得发行者签名。安装器核对原生可执行文件、正式下载清单与 SHA-256；GUI 应用签名属于另一种发行流程。实体耳机、蓝牙与主观听感仍未完成验收。源码未声明项目许可证时，归档如实记录该状态，不自行添加开源授权。
+
 安装器下载适合你电脑的安装包，不需要下载源码或安装 Rust、Cargo、Xcode、C++ 编译器。只有开发者主动选择时才会从源码编译；下载失败会停止安装。
 
 > 在线安装必须有已经通过验收并发布的正式版本。当前仍是开发阶段；版本不存在、网络失败或拿到候选包时，安装会明确停止，不改变现有应用。
@@ -24,13 +26,13 @@ irm https://francis-du.github.io/maris/install.ps1 | iex
 
 ```sh
 bash install.sh --dry-run
-bash install.sh --version v1.2.3 --yes
+bash install.sh --version v0.1.0 --yes
 bash install.sh --prefix "$HOME/Audio Tools" --yes
 ```
 
 ```powershell
 .\install.ps1 -DryRun
-.\install.ps1 -Version v1.2.3 -Yes
+.\install.ps1 -Version v0.1.0 -Yes
 .\install.ps1 -Prefix "$env:LOCALAPPDATA\Programs\Audio Tools" -Yes
 ```
 
@@ -38,7 +40,7 @@ bash install.sh --prefix "$HOME/Audio Tools" --yes
 
 | 系统 | 原生架构 | 默认安装位置 | 已有运行工具 |
 | --- | --- | --- | --- |
-| macOS | x86_64 / ARM64；识别 Rosetta 下的原生 ARM64 | `~/Applications/Maris.app` | Bash、curl、tar、gzip、SHA-256 与系统签名工具 |
+| macOS | x86_64 / ARM64；识别 Rosetta 下的原生 ARM64 | `~/.local/lib/maris; ~/.local/bin/maris` | Bash、curl、tar、gzip、SHA-256 |
 | Linux | x86_64 / ARM64 | `~/.local/lib/maris`；自有启动链接 `~/.local/bin/maris` | Bash、curl、tar、gzip、SHA-256、运行库；升级检查需要 psmisc |
 | Windows | x86_64 / ARM64 | `%LOCALAPPDATA%/Programs/Maris` | PowerShell 5.1+ 及已有 .NET HTTP/ZIP 支持 |
 
@@ -50,7 +52,7 @@ bash install.sh --prefix "$HOME/Audio Tools" --yes
 
 解压时不允许文件写到安装包目录之外，也不接受重复文件名、链接、特殊文件或异常大的内容。程序的版本和校验值符合下载清单后，才开始替换安装。
 
-macOS 使用签名和 Gatekeeper 检查，Windows 使用 Authenticode 签名检查，Linux 对照正式下载清单验证程序文件。校验值用于发现文件被改动，不能单独证明发行者身份，也不说明音质好坏。
+CLI/TUI 安装核对正式下载清单、平台、架构、版本、长度、归档路径与程序 SHA-256，拒绝候选包、GUI/CLI 身份混用与被改动的文件。GUI 套件保留独立的 macOS 签名/Gatekeeper 和 Windows Authenticode 检查。校验值本身不能独立证明发行者身份或音质。
 
 ## 升级、回滚与首次启动 {#recovery}
 
@@ -58,7 +60,7 @@ macOS 使用签名和 Gatekeeper 检查，Windows 使用 Authenticode 签名检�
 
 回滚可指定先前正式版本，也可在完整的离线安装套件中将打印出的备份目录传给 `--from` / `-From`。不要删除正在使用的安装锁。断电或强制终止后，先检查保留路径和进程再恢复。
 
-安装不启动音频，不修改系统音量或默认输出。macOS 用户准备好后自行打开 Maris.app 并完成授权；其他平台先看 `--help` 和显式设备/离线能力。新文件不会热替换已经运行的旧菜单栏或音频引擎。
+使用安装器打印的命令；macOS/Linux 可自行将 `~/.local/bin` 加入 shell PATH。运行 `maris` 打开 TUI，`maris --help` 查看命令。macOS 在真正启动采集后可能要求为启动程序的终端授予音频录制权限，安装不会代为授权。关闭 TUI 不会停止已有音频会话；使用 `maris stop` 停止。
 
 ## CI 构建与公开下载分开 {#ci}
 
@@ -66,11 +68,11 @@ Push 检查不发布应用。独立的手动原生 CI 构建生成优化程序�
 
 GitHub Actions 里的测试包需要仓库访问权限，且会过期。普通用户下载的是正式发布在 GitHub Releases 中的安装包。清单为 `maris-release.tsv`，Unix 包为 `Maris-VERSION-PLATFORM-ARCH.tar.gz`，Windows 为 `.zip`。
 
-正式套件准备必须检查最终签名与验收材料，并对解压后的实际包再次验证。所有六个目标必须来自同一源码和版本；以前提出的每项能力仍须验收。不能靠 200 轮报告、改名候选包或 unsigned 参数获得发布资格。
+CLI 清单明确标记发行类型，六个原生归档须对应同一次 CI、同一源码与版本。安装、升级和 200 轮记录提供软件验证证据，实体设备验收仍单独记录。签名门槛适用于 GUI 发行流程。
 
 ## 离线安装与开发编译 {#development}
 
-完整且可信的离线套件使用 `bash install.sh --from /absolute/Maris.app --allow-unsigned --dry-run`；Linux 将来源改成 `Maris` 目录。Windows 使用 `./install.ps1 -From /path/to/Maris -AllowUnsigned -DryRun`。开发信任选项只允许显式本地来源，不能绕过正常在线验证。
+完整且可信的 CLI 离线套件使用 `bash install.sh --from /absolute/Maris --sha256 TRUSTED_SHA256 --dry-run`；Windows 使用 `./install.ps1 -From /path/to/Maris -Sha256 TRUSTED_SHA256 -DryRun`。将占位值换成正式清单中的真实 SHA-256。开发信任选项仅限显式本地来源。
 
 只有源码开发者明确使用 `--build` / `-Build` 时，才需要 Rust 1.94 与对应平台编译工具。原生离线安装辅助脚本不联网。
 

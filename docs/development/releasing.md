@@ -70,7 +70,19 @@ python3 -m http.server 8000 --directory _site
 
 Review the generated site locally. A successful Pages deployment, not simply pushing the YAML, establishes availability. Its expected project path is `/maris/`. The deployment has its own `github-pages` environment and least-privilege token.
 
-## Public application release gate
+## CLI/TUI first-release contract
+
+Version 0.1.0 uses portable CLI/TUI archives on six native targets. This contract requires exact-source CI, the recorded 200 offline rounds, native executable validation, actual isolated installation and startup, retained upgrade backups, a rejected corrupt upgrade that preserves the installed version and user data, complete native runtime notice inventories, and archive/executable SHA-256. The release metadata states that these files are unsigned and that physical-device and subjective listening acceptance are unverified. It does not mark unfinished product requirements as verified.
+
+`package.py --local --cli` compiles once and creates `Maris/bin/maris` (or `maris.exe`) with a `maris-package-v2` identity ending in `cli`. On macOS this is a portable command-line payload, not a `.app`. `package_smoke.py` exercises its real native installer and installed `--version`. `release_bundle.py --cli` reads the actual round logs, install report, notice index and final archive bytes; it creates a stable CLI kit without signing or publishing. The assembly job requires all six artifacts from its exact CI run and commit.
+
+The CLI manifest uses `maris-release-v2` with `interface\tcli`; its embedded kit and payload identities must match. GUI v1 payloads cannot be relabeled to avoid their publisher checks. CLI installation verifies HTTPS acquisition, archive and binary hashes, native executable type/architecture, paths, size bounds and atomic replacement. It does not alter script policy, quarantine, PATH, services, permissions or audio routing. macOS/Linux use `~/.local/lib/maris` and an owned `~/.local/bin/maris` launcher; Windows uses `%LOCALAPPDATA%/Programs/Maris`.
+
+Project licensing is recorded as declared if a root `LICENSE` exists, otherwise as unspecified without inventing a new grant. This status does not add a new publication approval step. Each dependency retains its own terms. `resources/notices/index.json` binds the actual selected runtime licenses and source pointers; two upstream crates that omit standalone notices retain their published MIT/author declarations explicitly, as described in `third_party/rust-notices/SOURCE.md`.
+
+After the exact six-target workflow passes, publish its six `Maris-0.1.0-SYSTEM-ARCH` archives, the CLI manifest and `SHA256SUMS` under `v0.1.0`. Compare downloaded public attachments with the reviewed artifacts and verify the normal installer. A successful build or Actions artifact alone is not a published release.
+
+## GUI application release gate
 
 Do not publish until all applicable PRODUCT_GATES.md requirements are actually met: exact-revision CI, recorded automated checks, a documented headphone/Bluetooth matrix, level-matched output/preset/A-B listening acceptance, dependency/model/asset redistribution review, a deliberate project-license decision, Developer ID signing, notarization, stapling, and final archive verification. No credentials or signing identities belong in Git.
 
@@ -91,9 +103,9 @@ After successful review, the owner may sign the final bundle with a protected De
 
 The root Bash and PowerShell installers now download precompiled native GitHub release assets by default. Rust/Cargo compilation is confined to explicit developer `--build` / `-Build`. The offline transaction helpers live in `scripts/install_macos.sh`, `scripts/install_linux.sh`, and the local-input path in `install.ps1`. Canonical customer instructions are [installation](../en/install.md), with five additional translated versions.
 
-The manual native CI matrix runs `scripts/release_bundle.py --candidate` after package and install checks. `package.py` owns the optimized build; the workflow does not issue a duplicate release build. Kit preparation wraps that compiled current-source payload without compiling again. Before any manifest is written, the collector opens each real TAR/ZIP, rejects unsafe entries, reads its embedded release/native identity, hashes its actual executable and matches these against the descriptor. Recomputing an outer archive checksum cannot make arbitrary bytes or a different executable a valid kit.
+The legacy GUI candidate path runs `scripts/release_bundle.py --candidate` after package and install checks. `package.py` owns the optimized build; the workflow does not issue a duplicate release build. Kit preparation wraps that compiled current-source payload without compiling again. Before any manifest is written, the collector opens each real TAR/ZIP, rejects unsafe entries, reads its embedded release/native identity, hashes its actual executable and matches these against the descriptor. Recomputing an outer archive checksum cannot make arbitrary bytes or a different executable a valid kit.
 
-The assembly job retrieves only the current run's six native artifacts. All descriptors must match the run ID, commit, repository and current checked-out source, and must cover exactly six distinct targets. It writes a **candidate** `maris-release.tsv`; a normal online installer refuses this channel. Actions artifacts are the authenticated development channel, not the stable public download URL.
+For legacy GUI candidates, the assembly job retrieves only the current run's six native artifacts. All descriptors must match the run ID, commit, repository and current checked-out source, and must cover exactly six distinct targets. It writes a **candidate** `maris-release.tsv`; a normal online installer refuses this channel. Actions artifacts are the authenticated development channel, not the stable public download URL.
 
 After every actual product requirement and native signing/acceptance gate is satisfied, prepare an approved kit on each native target using the final reviewed payload, never an unsigned rebuild:
 

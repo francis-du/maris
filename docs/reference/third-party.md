@@ -126,3 +126,13 @@ built with Rust 1.94.0 for `aarch64-unknown-linux-gnu` in the default debug
 profile. The published dependency fails with eleven `fullfp16` assembler
 errors; selecting this patch compiles without target-feature overrides.
 The native Linux ARM build workflow additionally compiles and tests Maris itself.
+
+## CLI/TUI archive notice inventory
+
+`scripts/dependency_notices.py` selects the final native normal-dependency graph with locked Cargo metadata and `cargo tree --edges normal --target TARGET`. Every selected package contributes its declared license and actual shipped license/copyright/AUTHORS/NOTICE texts. When a published crate omits shared repository licenses, `third_party/rust-notices/index.json` binds texts fetched from its recorded `.cargo_vcs_info.json` source revision. The generated package index includes file hashes and source-archive pointers; locally patched crates also point to the exact Maris source commit.
+
+The published `dispatch 0.2.0` and `realfft 3.5.0` sources provide MIT and author declarations but no standalone license/copyright file. Their notice records preserve that omission and the published declarations, with the standard MIT permission and disclaimer. No missing copyright year or original notice is invented. This inventory does not claim legal clearance.
+
+CLI archives also retain the original eqMac, AutoEq, MusicNN and flexaudio-core license/provenance records. MusicNN's port declares Apache-2.0 and the converted original checkpoint retains its ISC notice. A full Apache-2.0 text is included beside the original ISC record. The archive records the project's own license as declared or unspecified, matching the source; it adds no new open-source grant when none exists.
+
+The CLI release collector checks these actual archived bytes against the native package's notice index and software evidence. GUI publisher signatures and physical-device/listening acceptance are separate, accurately reported boundaries.

@@ -1,5 +1,7 @@
 # 安裝 Maris
 
+0.1.0 以 CLI/TUI 預編譯封存檔發行，不宣稱程式已取得發行者簽章。安裝器核對原生執行檔、正式下載清單與 SHA-256；GUI 應用簽章屬於另一種發行流程。實體耳機、藍牙與主觀聽感仍未完成驗收。來源未宣告專案授權時，封存檔如實記錄該狀態，不自行新增開源授權。
+
 安裝程式下載適合電腦的安裝包，不需要下載原始碼或安裝 Rust、Cargo、Xcode、C++ 編譯器。只有開發者主動選擇時才從原始碼編譯；下載失敗會停止安裝。
 
 > 線上安裝需要已通過驗收並發布的正式版本。目前仍在開發；版本不存在、網路失敗或候選套件會使安裝停止，既有應用程式保持不變。
@@ -24,13 +26,13 @@ irm https://francis-du.github.io/maris/install.ps1 | iex
 
 ```sh
 bash install.sh --dry-run
-bash install.sh --version v1.2.3 --yes
+bash install.sh --version v0.1.0 --yes
 bash install.sh --prefix "$HOME/Audio Tools" --yes
 ```
 
 ```powershell
 .\install.ps1 -DryRun
-.\install.ps1 -Version v1.2.3 -Yes
+.\install.ps1 -Version v0.1.0 -Yes
 .\install.ps1 -Prefix "$env:LOCALAPPDATA\Programs\Audio Tools" -Yes
 ```
 
@@ -38,7 +40,7 @@ bash install.sh --prefix "$HOME/Audio Tools" --yes
 
 | 系統 | 架構 | 預設位置 | 現有工具 |
 | --- | --- | --- | --- |
-| macOS | x86_64 / ARM64；辨識 Rosetta | `~/Applications/Maris.app` | Bash、curl、tar、gzip、SHA-256、系統簽章工具 |
+| macOS | x86_64 / ARM64；辨識 Rosetta | `~/.local/lib/maris; ~/.local/bin/maris` | Bash、curl、tar、gzip、SHA-256 |
 | Linux | x86_64 / ARM64 | `~/.local/lib/maris`；`~/.local/bin/maris` | Bash、curl、tar、gzip、SHA-256、執行函式庫；升級檢查需 psmisc |
 | Windows | x86_64 / ARM64 | `%LOCALAPPDATA%/Programs/Maris` | PowerShell 5.1+ 與既有 .NET HTTP/ZIP |
 
@@ -50,7 +52,7 @@ bash install.sh --prefix "$HOME/Audio Tools" --yes
 
 封存內容必須留在指定根目錄。路徑穿越、重複與大小寫衝突、符號連結、特殊檔案、過多檔案及異常解壓大小都會被攔截。安裝包資訊、應用版本與程式檔案的校驗值都符合下載清單後，才開始替換安裝。
 
-macOS 保留簽章與 Gatekeeper，Windows 保留 Authenticode，Linux 使用清單核驗的執行檔摘要。摘要僅驗證位元組，不取代發行者身分、簽章審查或聽感驗收。
+CLI/TUI 安裝核對正式下載清單、平台、架構、版本、長度、封存路徑與程式 SHA-256，拒絕候選套件、GUI/CLI 身分混用與變更檔案。GUI 套件保留獨立的 macOS 簽章/Gatekeeper 與 Windows Authenticode 檢查。摘要本身不能獨立證明發行者身分或音質。
 
 ## 升級、復原與啟動 {#recovery}
 
@@ -58,13 +60,13 @@ macOS 保留簽章與 Gatekeeper，Windows 保留 Authenticode，Linux 使用清
 
 可指定先前正式標籤回復，或使用完整離線套件及備份路徑的 `--from` / `-From`。不要移除使用中的鎖；斷電或強制結束後先檢查保留路徑。
 
-安裝不啟動音訊、不改系統音量或預設輸出。macOS 使用者自行開啟 Maris.app 並授權；其他平台先檢查 `--help` 與明確裝置/離線功能。已執行的舊程序不會被熱替換。
+使用安裝器印出的命令；macOS/Linux 可自行把 `~/.local/bin` 加入 shell PATH。執行 `maris` 開啟 TUI，`maris --help` 查看命令。macOS 真正啟動擷取後可能要求授予啟動終端音訊錄製權限，安裝不會代為授權。關閉 TUI 不停止既有音訊工作階段；使用 `maris stop` 停止。
 
 ## CI 與正式發布 {#ci}
 
 Push 檢查不發布應用。獨立手動 CI 產生六個原生目標、暫時產物和標示 candidate 的安裝套件。Actions 產物是有存取限制且會到期的開發測試渠道；核准後的 GitHub Release 附件才用於公開穩定下載。
 
-清單為 `maris-release.tsv`，Unix 使用 `.tar.gz`，Windows 使用 `.zip`。正式封裝對最終簽章/驗收材料及解壓後內容重做檢查；六個目標須來自同一版本與來源，所有先前需求均須驗收。200 輪不能代替這些條件。
+CLI 清單明確標示發行類型，六個原生封存檔須對應同一次 CI、同一來源與版本。安裝、升級與 200 輪紀錄提供軟體驗證證據，實體裝置驗收仍另行記錄。簽章門檻適用於 GUI 發行流程。
 
 ## 離線與開發選項 {#development}
 

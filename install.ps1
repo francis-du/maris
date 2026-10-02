@@ -5,6 +5,7 @@ param(
     [string]$From = '',
     [string]$Prefix = '',
     [string]$Version = '',
+    [string]$Sha256 = '',
     [switch]$Build,
     [switch]$AllowUnsigned,
     [switch]$Yes,
@@ -22,6 +23,7 @@ An offline source is a Maris directory containing bin\maris.exe and .maris-packa
 Default destination: %LOCALAPPDATA%\Programs\Maris. No administrator account is required.
 -From and -Build are mutually exclusive. -DryRun never builds or writes files.
 Unsigned development payloads require explicit -AllowUnsigned; signed payloads use Authenticode.
+CLI/TUI release payloads use native PE validation and a trusted SHA-256; GUI payloads retain Authenticode validation.
 An upgrade retains its previous payload. No PATH, drivers, services, login items or audio settings are changed.
 Maris uses WASAPI process loopback for its Windows system-audio path; installation itself does not start or reroute audio.
 '@
@@ -36,6 +38,7 @@ if ($Version) {
     if ($Version -cnotmatch '^\d+\.\d+\.\d+$') { throw '-Version must be a stable X.Y.Z or vX.Y.Z.' }
 }
 if ($online -and $AllowUnsigned) { throw 'Online installation cannot bypass release verification. Use -From for explicit development/offline packages.' }
+if ($Sha256 -and ($online -or $Sha256 -cnotmatch '^[a-fA-F0-9]{64}$')) { throw '-Sha256 requires a trusted 64-digit checksum with an offline -From payload.' }
 if ([string]::IsNullOrWhiteSpace($env:USERPROFILE)) { throw 'USERPROFILE is required.' }
 if ([string]::IsNullOrWhiteSpace($Prefix)) {
     if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) { throw 'LOCALAPPDATA is required.' }
@@ -96,12 +99,14 @@ function Check-Marker([string]$Path) {
     $marker = Join-Path $Path '.maris-package'
     if (-not [IO.File]::Exists($marker) -or (Get-Item -LiteralPath $marker).Length -gt 128) { throw 'Missing or oversized Maris package identity.' }
     $lines = [IO.File]::ReadAllLines($marker)
-    if ($lines.Length -ne 4 -or $lines[0] -cne 'maris-package-v1' -or $lines[1] -cne 'windows' -or
+    $cli = $lines.Length -eq 5 -and $lines[0] -ceq 'maris-package-v2' -and $lines[4] -ceq 'cli'
+    if ((-not $cli -and ($lines.Length -ne 4 -or $lines[0] -cne 'maris-package-v1')) -or $lines[1] -cne 'windows' -or
         $lines[2] -cne $arch -or $lines[3] -notmatch '^\d+\.\d+\.\d+$') { throw 'Incorrect Maris package platform, architecture or version.' }
+    return $cli
 }
 function Validate-Payload([string]$Path) {
     $null = Payload-Files $Path
-    Check-Marker $Path
+    $cli = Check-Marker $Path
     $binary = Join-Path $Path 'bin\maris.exe'
     $stream = [IO.File]::OpenRead($binary)
     $reader = [IO.BinaryReader]::new($stream)
@@ -116,7 +121,11 @@ function Validate-Payload([string]$Path) {
         $characteristics = $reader.ReadUInt16()
         if (($characteristics -band 2) -eq 0 -or ($characteristics -band 0x2000) -ne 0 -or $reader.ReadUInt16() -ne 0x20b) { throw 'Expected a 64-bit executable image, not a DLL.' }
     } finally { $reader.Dispose(); $stream.Dispose() }
-    if (-not $AllowUnsigned) {
+    if ($cli) {
+        if ($Sha256) {
+            if ((File-Sha256 $binary).ToLowerInvariant() -cne $Sha256.ToLowerInvariant()) { throw 'CLI executable SHA-256 differs from the trusted checksum.' }
+        } elseif (-not $AllowUnsigned) { throw 'Offline CLI payloads require a trusted -Sha256 or explicit local-development -AllowUnsigned.' }
+    } elseif (-not $AllowUnsigned) {
         $signature = Get-AuthenticodeSignature -LiteralPath $binary
         if ($signature.Status -ne 'Valid' -or $null -eq $signature.SignerCertificate) { throw 'Authenticode validation failed. Use -AllowUnsigned only for trusted local development.' }
     }
@@ -150,7 +159,8 @@ function Payload-Digest([string]$Path) {
 function Read-MarisManifest([string]$Text, [string]$Architecture, [string]$RequestedVersion) {
     if ($Text.Length -gt 32768 -or $Text.Contains("`r")) { throw 'Invalid manifest size or line endings.' }
     $rows = $Text.TrimEnd([char]10).Split([char]10)
-    if ($rows.Count -ne 10 -or $rows[0] -cne 'maris-release-v1') { throw 'Incomplete release manifest.' }
+    $cli = $rows.Count -eq 11 -and $rows[0] -ceq 'maris-release-v2' -and $rows[4] -ceq "interface`tcli"
+    if (-not $cli -and ($rows.Count -ne 10 -or $rows[0] -cne 'maris-release-v1')) { throw 'Incomplete release manifest.' }
     $versionRow = $rows[1].Split([char]9); $sourceRow = $rows[2].Split([char]9); $channelRow = $rows[3].Split([char]9)
     if ($versionRow.Count -ne 2 -or $versionRow[0] -cne 'version' -or $versionRow[1] -cnotmatch '^\d+\.\d+\.\d+$') { throw 'Invalid release version.' }
     if ($sourceRow.Count -ne 2 -or $sourceRow[0] -cne 'source_sha256' -or $sourceRow[1] -cnotmatch '^[a-f0-9]{64}$') { throw 'Invalid release source digest.' }
@@ -159,7 +169,8 @@ function Read-MarisManifest([string]$Text, [string]$Architecture, [string]$Reque
     if ($RequestedVersion -and $RequestedVersion -cne $resolvedVersion) { throw 'Requested version and release manifest differ.' }
     $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $selected = $null
-    foreach ($row in $rows[4..9]) {
+    $first = if ($cli) { 5 } else { 4 }
+    foreach ($row in $rows[$first..($first+5)]) {
         $parts = $row.Split([char]9)
         if ($parts.Count -ne 7 -or $parts[0] -cne 'asset' -or $parts[1] -cnotmatch '^(macos|linux|windows)$' -or $parts[2] -cnotmatch '^(x86_64|arm64)$') { throw 'Invalid asset target.' }
         $extension = if ($parts[1] -ceq 'windows') { '.zip' } else { '.tar.gz' }
@@ -168,7 +179,7 @@ function Read-MarisManifest([string]$Text, [string]$Architecture, [string]$Reque
         if ($parts[5] -cnotmatch '^[1-9][0-9]{0,8}$' -or [long]$parts[5] -gt 134217728) { throw 'Invalid asset size.' }
         if (-not $seen.Add($parts[1] + '/' + $parts[2])) { throw 'Duplicate release target.' }
         if ($parts[1] -ceq 'windows' -and $parts[2] -ceq $Architecture) {
-            $selected = [pscustomobject]@{ Version=$resolvedVersion; Source=$sourceRow[1]; Name=$name; Sha256=$parts[4]; Bytes=[long]$parts[5]; BinarySha256=$parts[6] }
+            $selected = [pscustomobject]@{ Version=$resolvedVersion; Source=$sourceRow[1]; Name=$name; Sha256=$parts[4]; Bytes=[long]$parts[5]; BinarySha256=$parts[6]; Cli=$cli }
         }
     }
     if ($null -eq $selected) { throw 'No approved release for this Windows architecture.' }
@@ -283,15 +294,17 @@ function Receive-MarisPackage([string]$RequestedVersion, [string]$Architecture) 
         $marker = Join-Path $kit '.maris-release'
         if (-not [IO.File]::Exists($marker) -or (Get-Item -LiteralPath $marker).Length -gt 512) { throw 'Missing or oversized release identity.' }
         $expected = @('maris-install-kit-v1',$asset.Version,'windows',$Architecture,$asset.Source,'stable',$asset.BinarySha256)
+        if ($asset.Cli) { $expected = @('maris-install-kit-v2',$asset.Version,'windows',$Architecture,$asset.Source,'stable',$asset.BinarySha256,'cli') }
         $actual = [IO.File]::ReadAllLines($marker)
         if ($actual.Count -ne $expected.Count -or ($actual -join "`n") -cne ($expected -join "`n")) { throw 'Package identity/channel differs from its approved manifest.' }
         $payload = Join-Path $kit 'Maris'
         $packageMarker = Join-Path $payload '.maris-package'
         if (-not [IO.File]::Exists($packageMarker) -or (Get-Item -LiteralPath $packageMarker).Length -gt 128) { throw 'Missing or oversized native payload identity.' }
         $packageLines = [IO.File]::ReadAllLines($packageMarker)
-        if ($packageLines.Count -ne 4 -or ($packageLines -join "`n") -cne "maris-package-v1`nwindows`n$Architecture`n$($asset.Version)") { throw 'Native payload version differs from its release manifest.' }
+        $expectedPackage = if ($asset.Cli) { "maris-package-v2`nwindows`n$Architecture`n$($asset.Version)`ncli" } else { "maris-package-v1`nwindows`n$Architecture`n$($asset.Version)" }
+        if (($packageLines -join "`n") -cne $expectedPackage) { throw 'Native payload version/interface differs from its release manifest.' }
         if ((File-Sha256 (Join-Path $payload 'bin\maris.exe')).ToLowerInvariant() -cne $asset.BinarySha256) { throw 'Executable SHA-256 mismatch.' }
-        return [pscustomobject]@{ Directory=$work; Payload=$payload }
+        return [pscustomobject]@{ Directory=$work; Payload=$payload; BinarySha256=$asset.BinarySha256; Cli=$asset.Cli }
     } catch {
         if ([IO.Directory]::Exists($work)) { Remove-Item -LiteralPath $work -Recurse -Force }
         throw
@@ -309,7 +322,7 @@ function Check-Destination {
     $null = Safe-Path $destination
     if (Test-Path -LiteralPath $destination) {
         $null = Payload-Files $destination
-        Check-Marker $destination
+        $null = Check-Marker $destination
         $binary = Join-Path $destination 'bin\maris.exe'
         # An exclusive write handle fails for an in-use or read-only executable. Never kill it.
         try { $probe = [IO.File]::Open($binary, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None) }
@@ -330,6 +343,7 @@ try {
         $download = Receive-MarisPackage $Version $arch
         $downloadDirectory = $download.Directory
         $From = Safe-Path $download.Payload
+        if ($download.Cli) { $Sha256 = $download.BinarySha256 }
     }
     if ($Build) {
         if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'Cargo.lock'))) { throw '-Build requires a source checkout.' }

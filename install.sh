@@ -25,7 +25,7 @@ No sudo, drivers, audio activation, OS volume/default-output changes or security
 HELP
 }
 ARGS=("$@")
-VERSION=''; PREFIX=''; YES=0; DRY=0; LOCAL=0; BUILD=0; FROM=0; UNTRUSTED=0
+VERSION=''; PREFIX=''; LOCAL_PAYLOAD=''; YES=0; DRY=0; LOCAL=0; BUILD=0; FROM=0; UNTRUSTED=0
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --version|--prefix|--from|--sha256)
@@ -34,7 +34,7 @@ while [ "$#" -gt 0 ]; do
             case "$1" in
                 --version) [ -z "$VERSION" ] || fail 'Duplicate --version'; VERSION=${2#v} ;;
                 --prefix) PREFIX=$2 ;;
-                --from) LOCAL=1; FROM=1 ;;
+                --from) LOCAL=1; FROM=1; LOCAL_PAYLOAD=$2 ;;
                 --sha256) UNTRUSTED=1 ;;
             esac
             shift 2 ;;
@@ -50,6 +50,9 @@ done
 if [ "$LOCAL" -eq 1 ]; then
     [ -z "$VERSION" ] || fail '--version cannot be combined with --from or --build'
     ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+    if [ "$FROM" -eq 1 ] && [ -f "$LOCAL_PAYLOAD/.maris-package" ] && [ "$(sed -n '1p' "$LOCAL_PAYLOAD/.maris-package")" = maris-package-v2 ]; then
+        exec /bin/bash "$ROOT/scripts/install_cli.sh" "${ARGS[@]}"
+    fi
     case "$(uname -s)" in
         Linux) exec /bin/bash "$ROOT/scripts/install_linux.sh" "${ARGS[@]}" ;;
         Darwin) exec /bin/bash "$ROOT/scripts/install_macos.sh" "${ARGS[@]}" ;;
@@ -69,6 +72,7 @@ case "$(uname -m)" in
     aarch64|arm64) ARCH=arm64 ;;
     *) fail 'Only x86_64 and ARM64 release packages are supported' ;;
 esac
+PREFIX_PROVIDED=$PREFIX
 [ -n "$PREFIX" ] || PREFIX=$DEFAULT_PREFIX
 BASE=https://github.com/francis-du/maris/releases
 if [ -n "$VERSION" ]; then MANIFEST_URL="$BASE/download/v$VERSION/maris-release.tsv";
@@ -113,10 +117,11 @@ fetch "$MANIFEST_URL" "$WORK/manifest.tsv" 32768 || fail 'Approved release manif
 SELECTED=$(awk -F '\t' -v target_os="$SYSTEM" -v arch="$ARCH" -v requested="$VERSION" '
 function bad() { invalid=1; exit 2 }
 function hash(s) { return length(s)==64 && s !~ /[^a-f0-9]/ }
-NR==1 { if ($0!="maris-release-v1") bad(); next }
+NR==1 { if ($0!="maris-release-v1" && $0!="maris-release-v2") bad(); v2=($0=="maris-release-v2"); interface="gui"; next }
 NR==2 { if (NF!=2 || $1!="version" || $2 !~ /^[0-9]+\.[0-9]+\.[0-9]+$/) bad(); version=$2; next }
 NR==3 { if (NF!=2 || $1!="source_sha256" || !hash($2)) bad(); source=$2; next }
 NR==4 { if (NF!=2 || $1!="channel" || $2!="stable") bad(); next }
+NR==5 && v2 { if (NF!=2 || $1!="interface" || $2!="cli") bad(); interface=$2; next }
 NR>4 {
     if (NF!=7 || $1!="asset" || $2 !~ /^(macos|linux|windows)$/ || $3 !~ /^(x86_64|arm64)$/) bad()
     name="Maris-" version "-" $2 "-" $3 ($2=="windows" ? ".zip" : ".tar.gz")
@@ -124,9 +129,10 @@ NR>4 {
     if (seen[$2 "/" $3]++) bad()
     if ($2==target_os && $3==arch) selected=version "\t" source "\t" $4 "\t" $5 "\t" $6 "\t" $7
 }
-END { if (invalid || NR!=10 || selected=="" || (requested!="" && version!=requested)) exit 2; print selected }
+END { if (invalid || NR!=10+v2 || selected=="" || (requested!="" && version!=requested)) exit 2; print selected "\t" interface }
 ' "$WORK/manifest.tsv") || fail 'Release manifest is incomplete, unapproved, malformed or does not match the requested version/target'
-IFS=$'\t' read -r VERSION SOURCE_HASH NAME ARCHIVE_HASH ARCHIVE_BYTES BINARY_HASH <<< "$SELECTED"
+IFS=$'\t' read -r VERSION SOURCE_HASH NAME ARCHIVE_HASH ARCHIVE_BYTES BINARY_HASH INTERFACE <<< "$SELECTED"
+[ "$INTERFACE" != cli ] || [ -n "$PREFIX_PROVIDED" ] || PREFIX="${HOME}/.local"
 # Pin all remaining requests to the resolved tag, so latest cannot race a second release.
 printf 'Version: %s\nAsset: %s\n' "$VERSION" "$NAME"
 fetch "$BASE/download/v$VERSION/$NAME" "$WORK/package.tar.gz" "$ARCHIVE_BYTES" || fail 'Package download failed; existing installation is unchanged'
@@ -159,9 +165,13 @@ EXTRACT_OPTIONS=(--no-same-owner --no-same-permissions)
 tar "${EXTRACT_OPTIONS[@]}" -xf "$WORK/package.tar" -C "$WORK/extracted" || fail 'Package extraction failed'
 PAYLOAD="$WORK/extracted/$KIT"
 EXPECTED_MARKER=$(printf 'maris-install-kit-v1\n%s\n%s\n%s\n%s\nstable\n%s' "$VERSION" "$SYSTEM" "$ARCH" "$SOURCE_HASH" "$BINARY_HASH")
+if [ "$INTERFACE" = cli ]; then EXPECTED_MARKER=$(printf 'maris-install-kit-v2\n%s\n%s\n%s\n%s\nstable\n%s\ncli' "$VERSION" "$SYSTEM" "$ARCH" "$SOURCE_HASH" "$BINARY_HASH"); fi
 [ -f "$PAYLOAD/.maris-release" ] && [ "$(cat "$PAYLOAD/.maris-release")" = "$EXPECTED_MARKER" ] || fail 'Package identity/channel differs from the approved manifest'
 [ -z "$(find "$PAYLOAD" ! -type d ! -type f -print -quit)" ] || fail 'Extracted package contains linked or special files'
-if [ "$SYSTEM" = macos ]; then
+if [ "$INTERFACE" = cli ]; then
+    SOURCE="$PAYLOAD/Maris"; BINARY="$SOURCE/bin/maris"
+    [ -f "$SOURCE/.maris-package" ] && [ "$(cat "$SOURCE/.maris-package")" = "$(printf 'maris-package-v2\n%s\n%s\n%s\ncli' "$SYSTEM" "$ARCH" "$VERSION")" ] || fail 'CLI payload identity differs from its release manifest'
+elif [ "$SYSTEM" = macos ]; then
     SOURCE="$PAYLOAD/Maris.app"; BINARY="$SOURCE/Contents/MacOS/maris"
     [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$SOURCE/Contents/Info.plist" 2>/dev/null)" = "$VERSION" ] || fail 'Application version differs from its release manifest'
 else
@@ -171,8 +181,9 @@ fi
 ACTUAL=$("${SHA[@]}" "$BINARY"); ACTUAL=${ACTUAL%% *}
 [ "$ACTUAL" = "$BINARY_HASH" ] || fail 'Executable checksum does not match the release manifest'
 HELPER="$PAYLOAD/scripts/install_$SYSTEM.sh"
+[ "$INTERFACE" != cli ] || HELPER="$PAYLOAD/scripts/install_cli.sh"
 [ -f "$HELPER" ] || fail 'Verified package is missing its native installer'
 OPTIONS=(--from "$SOURCE" --prefix "$PREFIX" --yes)
-[ "$SYSTEM" != linux ] || OPTIONS+=(--sha256 "$BINARY_HASH")
+[ "$SYSTEM" != linux ] && [ "$INTERFACE" != cli ] || OPTIONS+=(--sha256 "$BINARY_HASH")
 # Execute only the installer from the hash-verified release kit; no arbitrary URL/code parameter.
 /bin/bash "$HELPER" "${OPTIONS[@]}"

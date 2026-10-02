@@ -1,0 +1,7 @@
+# Locked Rust notice fallbacks
+
+These texts come from the exact source revision recorded in each published crate's `.cargo_vcs_info.json`. `index.json` records the original license expression, upstream source URL and SHA-256 of each retained text. Native packages select only their actual `cargo tree --locked --edges normal --target TARGET` runtime dependencies.
+
+The published `dispatch 0.2.0` and `realfft 3.5.0` archives and their pinned source trees provide an MIT declaration and author metadata but no standalone license/copyright notice. Their declaration files reproduce those facts and the standard MIT permission/disclaimer; they do not invent a copyright year or a missing upstream copyright notice. This is a notice inventory, not a claim of legal clearance.
+
+The package collector also retains license/copyright/AUTHORS/NOTICE files shipped by each selected Cargo package, plus the pinned eqMac, AutoEq, MusicNN and flexaudio-core provenance. The MusicNN port card declares Apache-2.0; its converted original weights retain the original ISC notice. Actual redistribution terms remain attached to their respective components.

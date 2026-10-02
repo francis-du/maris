@@ -81,26 +81,26 @@ jobs:
         run: cargo run --locked --example menu_probe -- --event-loop
       - name: 200 recorded offline regression rounds
         run: python scripts/verify_rounds.py --rounds 200
-      - name: Build once and package explicitly local development artifacts
-        run: python scripts/package.py --local
+      - name: Build once and package the portable CLI/TUI artifacts
+        run: python scripts/package.py --local --cli
       - name: Native Linux audio integration with private silent outputs
         if: runner.os == 'Linux'
         run: python3 tests/support/pulse_smoke.py --binary target/release/maris
       - name: Validate archive and perform an isolated native install
         run: python scripts/package_smoke.py
-      - name: Prepare CI-built online installation candidate (no compilation, no release)
-        run: python scripts/release_bundle.py --candidate
-      - name: Upload application and checksum
+      - name: Verify the native CLI contract and prepare its release kit (no publication)
+        run: python scripts/release_bundle.py --cli
+      - name: Upload CLI/TUI archive and checksum
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: maris-local-${{ matrix.os }}-${{ github.sha }}
+          name: maris-cli-${{ matrix.os }}-${{ github.sha }}
           path: |
             dist/packages/*.zip
             dist/packages/*.tar.gz
             dist/packages/*.sha256
-            dist/online-candidate/*.tar.gz
-            dist/online-candidate/*.zip
-            dist/online-candidate/*.release.json
+            dist/online-approved/*.tar.gz
+            dist/online-approved/*.zip
+            dist/online-approved/*.release.json
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verification evidence, including failures
@@ -112,7 +112,7 @@ jobs:
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 14
-  assemble-candidate:
+  assemble-cli:
     needs: native
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -126,17 +126,17 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.13'
-      - name: Retrieve only this successful run's six native candidate outputs
+      - name: Retrieve only this successful run's six native CLI outputs
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh run download "$GITHUB_RUN_ID" --pattern 'maris-local-*' --dir .maris-review/ci-kits
-      - name: Validate all targets and assemble the non-public candidate manifest
-        run: python scripts/release_bundle.py --collect .maris-review/ci-kits --output dist/candidate-manifest/maris-release.tsv
+        run: gh run download "$GITHUB_RUN_ID" --pattern 'maris-cli-*' --dir .maris-review/ci-kits
+      - name: Validate all native CLI kits and assemble the install manifest
+        run: python scripts/release_bundle.py --collect .maris-review/ci-kits --output dist/cli-manifest/maris-release.tsv
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: maris-candidate-manifest-${{ github.sha }}
-          path: dist/candidate-manifest/maris-release.tsv
+          name: maris-cli-manifest-${{ github.sha }}
+          path: dist/cli-manifest/maris-release.tsv
           if-no-files-found: error
           retention-days: 14
-# Candidate manifests are rejected by normal installation. No GitHub Release is published here.
+# CLI manifests bind six exact native CI outputs. No GitHub Release is published here.

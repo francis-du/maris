@@ -45,7 +45,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--local", action="store_true", required=True,
                         help="Acknowledge this is a development artifact, not an approved public release")
-    parser.parse_args()
+    parser.add_argument("--cli", action="store_true", help="Portable CLI/TUI distribution; no GUI application bundle")
+    args = parser.parse_args()
     system, arch = host_target()
     source = source_digest()
     build_env = dict(os.environ, MARIS_BUNDLE_SMALL_MODELS="1", MARIS_BUNDLE_AUTOEQ_PROFILES="1")
@@ -69,7 +70,7 @@ def main() -> None:
         staging = Path(temporary)
         payload = staging / stem
         payload.mkdir()
-        if system == "macos":
+        if system == "macos" and not args.cli:
             subprocess.run(["/usr/bin/lipo", str(executable), "-verify_arch", arch], check=True, capture_output=True)
             result = subprocess.run([str(executable), "--json", "package"], cwd=staging,
                                     capture_output=True, text=True, check=True,
@@ -84,7 +85,17 @@ def main() -> None:
             shutil.copyfile(ROOT / "docs/reference/third-party.md", resources / "THIRD_PARTY.md")
             shutil.copytree(ROOT / "third_party/eqmac", resources / "eqmac")
         else:
-            create_payload(ROOT, executable, payload / "Maris", system, arch, version)
+            create_payload(ROOT, executable, payload / "Maris", system, arch, version, cli=args.cli)
+        if args.cli:
+            from dependency_notices import collect
+            resources = payload / "Maris/resources"
+            collect(ROOT, resources / "notices", system, arch)
+            if (ROOT / "LICENSE").is_file():
+                shutil.copyfile(ROOT / "LICENSE", resources / "MARIS_LICENSE.txt")
+            else:
+                (resources / "MARIS_LICENSE_STATUS.txt").write_text(
+                    "This source revision declares no project license grant. This package does not add an open-source license grant.\n"
+                    "Third-party components retain the license terms reproduced in resources/notices.\n", encoding="utf-8", newline="\n")
         for source_doc, artifact_name in [("docs/en/install.md", "INSTALL.md"),
                                           ("docs/development/product-gates.md", "PRODUCT_GATES.md")]:
             shutil.copyfile(ROOT / source_doc, payload / artifact_name)
@@ -94,10 +105,11 @@ def main() -> None:
             shutil.copyfile(ROOT / "install.sh", payload / "install.sh")
             (payload / "install.sh").chmod(0o755)
             (payload / "scripts").mkdir()
-            for helper in ["install_linux.sh", "install_macos.sh"]:
+            for helper in ["install_linux.sh", "install_macos.sh", "install_cli.sh"] if args.cli else ["install_linux.sh", "install_macos.sh"]:
                 shutil.copyfile(ROOT / "scripts" / helper, payload / "scripts" / helper)
         (payload / "BUILD.json").write_text(json.dumps({
             "version": version, "platform": system, "architecture": arch, "source_sha256": source,
+            "interface": "cli" if args.cli else "gui",
             "executable_sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
             "channel": "local-development", "developer_id_signed": False if system == "macos" else None,
             "authenticode_signed": False if system == "windows" else None,

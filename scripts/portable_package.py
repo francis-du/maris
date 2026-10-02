@@ -21,7 +21,7 @@ def host_target() -> tuple[str, str]:
 
 
 def validate_binary(path: Path, system: str, arch: str) -> None:
-    if arch not in ("x86_64", "arm64") or system not in ("linux", "windows"):
+    if arch not in ("x86_64", "arm64") or system not in ("macos", "linux", "windows"):
         raise ValueError("Unsupported portable binary target")
     if path.is_symlink() or not path.is_file():
         raise ValueError("Binary is missing or linked")
@@ -29,7 +29,12 @@ def validate_binary(path: Path, system: str, arch: str) -> None:
         header = file.read(64)
         if len(header) != 64:
             raise ValueError("Truncated executable")
-        if system == "linux":
+        if system == "macos":
+            machine = 0x01000007 if arch == "x86_64" else 0x0100000C
+            if (header[:4] != b"\xcf\xfa\xed\xfe" or struct.unpack_from("<I", header, 4)[0] != machine
+                    or struct.unpack_from("<I", header, 12)[0] != 2):
+                raise ValueError("Mach-O platform or architecture mismatch")
+        elif system == "linux":
             machine = 62 if arch == "x86_64" else 183
             if (header[:7] != b"\x7fELF\x02\x01\x01" or struct.unpack_from("<H", header, 18)[0] != machine
                     or struct.unpack_from("<H", header, 16)[0] not in (2, 3)):
@@ -47,7 +52,7 @@ def validate_binary(path: Path, system: str, arch: str) -> None:
                 raise ValueError("PE platform or architecture mismatch")
 
 
-def create_payload(root: Path, executable: Path, destination: Path, system: str, arch: str, version: str) -> None:
+def create_payload(root: Path, executable: Path, destination: Path, system: str, arch: str, version: str, *, cli: bool = False) -> None:
     validate_binary(executable, system, arch)
     if destination.exists() or destination.is_symlink():
         raise ValueError("Portable payload destination already exists")
@@ -59,5 +64,5 @@ def create_payload(root: Path, executable: Path, destination: Path, system: str,
     binary.chmod(0o755)
     shutil.copyfile(root / "docs/reference/third-party.md", resources / "THIRD_PARTY.md")
     shutil.copytree(root / "third_party/eqmac", resources / "eqmac")
-    (destination / ".maris-package").write_text(
-        f"maris-package-v1\n{system}\n{arch}\n{version}\n", encoding="utf-8", newline="\n")
+    marker = f"maris-package-v2\n{system}\n{arch}\n{version}\ncli\n" if cli else f"maris-package-v1\n{system}\n{arch}\n{version}\n"
+    (destination / ".maris-package").write_text(marker, encoding="utf-8", newline="\n")

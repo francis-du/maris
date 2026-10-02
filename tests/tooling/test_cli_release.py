@@ -1,0 +1,117 @@
+"""Exercise real typed archive/installer paths; fixtures never claim native acceptance."""
+from pathlib import Path
+import hashlib
+import json
+import os
+import struct
+import subprocess
+import sys
+import tempfile
+import unittest
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / 'scripts'))
+from dependency_notices import validate as validate_notices
+from portable_package import create_payload, validate_binary
+from release_bundle import inspect_kit
+from test_online import fixture
+import test_online
+from test_portable import fixture as binary_fixture
+
+
+class CliContracts(unittest.TestCase):
+    def test_all_six_cli_payloads_have_native_headers_and_a_distinct_identity(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            binary = root / 'non-executed-header-fixture'
+            for system in ('macos', 'linux', 'windows'):
+                for arch in ('x86_64', 'arm64'):
+                    binary.write_bytes(binary_fixture(system, arch))
+                    output = root / (system + '-' + arch)
+                    create_payload(ROOT, binary, output, system, arch, '0.1.0', cli=True)
+                    self.assertEqual((output / '.maris-package').read_text(encoding='utf-8').splitlines(),
+                                     ['maris-package-v2', system, arch, '0.1.0', 'cli'])
+                    validate_binary(binary, system, arch)
+                    with self.assertRaises(ValueError):
+                        validate_binary(binary, system, 'arm64' if arch == 'x86_64' else 'x86_64')
+            malformed = binary_fixture('macos', 'arm64')
+            struct.pack_into('<I', malformed, 12, 6)  # A dylib is not a CLI executable.
+            binary.write_bytes(malformed)
+            with self.assertRaises(ValueError):
+                validate_binary(binary, 'macos', 'arm64')
+
+    def test_actual_archive_identity_prevents_relabeling_gui_as_cli_or_the_reverse(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            for system in ('macos', 'linux', 'windows'):
+                for cli in (False, True):
+                    manifest, _ = fixture(directory, system, 'arm64', cli=cli)
+                    asset = next(line.split('\t') for line in manifest.splitlines() if line.startswith(f'asset\t{system}\tarm64\t'))
+                    record = {'platform': system, 'architecture': 'arm64', 'version': '1.2.3',
+                              'source_sha256': 'a' * 64, 'channel': 'stable', 'binary_sha256': asset[6],
+                              'interface': 'cli' if cli else 'gui'}
+                    inspect_kit(directory / 'archive', record)
+                    if cli:
+                        # Self-reported success cannot stand in for actual archived proof/notices.
+                        record['native_gate'] = {'release_ready': True, 'notice_index_sha256': '0' * 64}
+                        with self.assertRaises(ValueError):
+                            inspect_kit(directory / 'archive', record)
+                        record.pop('native_gate')
+                    record['interface'] = 'gui' if cli else 'cli'
+                    with self.assertRaises(ValueError):
+                        inspect_kit(directory / 'archive', record)
+
+    def test_notice_validation_reads_real_bytes_and_rejects_changed_or_escaping_notices(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            notice = directory / 'LICENSE.txt'
+            notice.write_bytes(b'Actual fixture license text; not a legal approval.\n')
+            entry = {'path': notice.name, 'sha256': hashlib.sha256(notice.read_bytes()).hexdigest()}
+            record = {'schema_version': 1, 'target': 'fixture-native-target', 'runtime_dependencies':
+                      [{'name': 'fixture', 'license': 'MIT', 'files': [entry]}], 'bundled_assets': []}
+            index = directory / 'index.json'
+            index.write_text(json.dumps(record), encoding='utf-8')
+            validate_notices(directory, 'fixture-native-target')
+            notice.write_bytes(b'Changed after notice generation')
+            with self.assertRaises(ValueError):
+                validate_notices(directory, 'fixture-native-target')
+            entry['path'] = '../outside'
+            index.write_text(json.dumps(record), encoding='utf-8')
+            with self.assertRaises(ValueError):
+                validate_notices(directory, 'fixture-native-target')
+
+    @unittest.skipUnless(os.name == 'nt', 'Native PowerShell production parser/extractor required')
+    def test_native_windows_download_accepts_cli_contract_and_still_rejects_bad_inputs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            arch = 'arm64' if os.environ.get('PROCESSOR_ARCHITEW6432', os.environ.get('PROCESSOR_ARCHITECTURE', '')).lower() == 'arm64' else 'x86_64'
+            fixture(directory, 'windows', arch, cli=True)
+            result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-File',
+                str(ROOT / 'tests/support/download_probe.ps1'), '-Fixture', str(directory), '-Architecture', arch],
+                capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn('offline_download_paths_passed', result.stdout)
+
+
+@unittest.skipIf(os.name == 'nt', 'Unix production bootstrap required')
+class OnlineCliUnix(test_online.OnlineUnix):
+    def setUp(self):
+        super().setUp()
+        fixture(self.transport, self.system, self.arch, cli=True)
+
+    def test_cli_contract_cannot_silently_switch_to_the_gui_interface(self):
+        manifest = (self.transport / 'manifest').read_text(encoding='utf-8')
+        (self.transport / 'manifest').write_text(manifest.replace('interface\tcli', 'interface\tgui'), encoding='utf-8')
+        self.unchanged(self.run_installer('--yes'))
+
+    def test_cli_identity_is_required_in_the_actual_payload_not_only_manifest(self):
+        manifest, _ = fixture(self.transport, self.system, self.arch, cli=False)
+        rows = manifest.splitlines()
+        rows[0] = 'maris-release-v2'
+        rows.insert(4, 'interface\tcli')
+        (self.transport / 'manifest').write_bytes(('\n'.join(rows) + '\n').encode('ascii'))
+        self.unchanged(self.run_installer('--yes'))
+
+
+if __name__ == '__main__':
+    unittest.main()

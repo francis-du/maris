@@ -1,6 +1,6 @@
 # Product checklist
 
-Maris is still in development. This checklist describes the work required before a public release; it is not release approval.
+Maris is still in development. This checklist describes full product and GUI acceptance. The scoped CLI/TUI 0.1.0 distribution uses the separate [CLI release contract](releasing.md), which requires native software, packaging and installation evidence while recording physical-device/listening boundaries and unsigned status honestly. It does not mark the following unfinished product checks as complete.
 
 ## What the app should do
 
@@ -22,7 +22,7 @@ Keep common controls on the main screen. E/M/V/I/H open settings, apps, device d
 
 The source includes per-user installers for macOS, Linux and Windows, system-audio implementations, separate source-check/build/website workflows, package checksums, and a recorded offline-test runner. Each platform still needs its own observed build and runtime results. A workflow declaration, archive header or passing Mac test is not a Windows or Linux result.
 
-A local package is a development build until the public-release checks pass. The release script requires the matching source, test report, final reviewed package and platform signature checks. It does not invent device or listening-test approval.
+A local package is a development build until its applicable CLI or GUI release checks pass. The release script requires the matching source, test report, final reviewed package and platform signature checks. It does not invent device or listening-test approval.
 
 Pushing source to the owner's repository, producing test packages, publishing the website and distributing an application are separate actions. Permission to push source does not authorize a release or signing operation. All previously requested work remains listed in [requirements](requirements.json).
 

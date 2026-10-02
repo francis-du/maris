@@ -1,4 +1,6 @@
 use sha2::{Digest, Sha256};
+#[path = "src/devices/catalog_link.rs"]
+mod catalog_link;
 use std::{
     collections::BTreeSet,
     fs,
@@ -239,10 +241,9 @@ fn autoeq_catalog_paths(index: &str) -> Vec<String> {
             continue;
         };
         let after = &rest[close + 2..];
-        let Some(end) = after.find(')') else {
+        let Some(path) = catalog_link::destination(after) else {
             continue;
         };
-        let path = &after[..end];
         if path.starts_with("./") {
             paths.insert(path.to_owned());
         }
