@@ -60,7 +60,7 @@ jobs:
       - name: Prepare CI-built online installation candidate (no compilation, no release)
         run: python scripts/release_bundle.py --candidate
       - name: Upload application and checksum
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: maris-local-${{ matrix.os }}-${{ github.sha }}
           path: |
@@ -74,7 +74,7 @@ jobs:
           retention-days: 14
       - name: Preserve verification evidence, including failures
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: verification-${{ matrix.os }}-${{ github.sha }}
           path: .maris-review/verification/
@@ -102,7 +102,7 @@ jobs:
         run: gh run download "$GITHUB_RUN_ID" --pattern 'maris-local-*' --dir .maris-review/ci-kits
       - name: Validate all targets and assemble the non-public candidate manifest
         run: python scripts/release_bundle.py --collect .maris-review/ci-kits --output dist/candidate-manifest/maris-release.tsv
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: maris-candidate-manifest-${{ github.sha }}
           path: dist/candidate-manifest/maris-release.tsv
