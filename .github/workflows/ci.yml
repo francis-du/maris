@@ -58,11 +58,11 @@ jobs:
         run: |
           set -euo pipefail
           tree="$(cargo tree --locked --edges normal)"
-          if printf '%s\n' "$tree" | grep -Eq '(^|[[:space:]├└─])glib v0\.18\.5([[:space:]]|$)'; then
+          if grep -Eq '(^|[[:space:]├└─])glib v0\.18\.5([[:space:]]|$)' <<< "$tree"; then
             echo "glib 0.18.5 is reachable on $RUNNER_OS; target is not release-safe" >&2
             exit 1
           fi
-          if printf '%s\n' "$tree" | grep -Eq '(^|[[:space:]├└─])ringbuf v0\.[0-4]\.'; then
+          if grep -Eq '(^|[[:space:]├└─])ringbuf v0\.[0-4]\.' <<< "$tree"; then
             echo "an unpatched ringbuf version is reachable on $RUNNER_OS" >&2
             exit 1
           fi
