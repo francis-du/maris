@@ -265,6 +265,9 @@ fn git(directory: &Path, args: &[&str]) {
         args.join(" "),
         String::from_utf8_lossy(&output.stderr)
     );
+    for line in String::from_utf8_lossy(&output.stderr).lines() {
+        println!("cargo:warning=AutoEq git {}: {line}", args[0]);
+    }
 }
 
 fn validate_autoeq_pack(pack: &[u8], expected_count: usize) {
@@ -334,6 +337,11 @@ fn generate_autoeq_profiles(manifest: &Path) {
         }
         fs::create_dir_all(&checkout).expect("create AutoEq build checkout");
         git(&checkout, &["init", "--quiet"]);
+        if cfg!(windows) {
+            // Profile names can exceed MAX_PATH below Cargo's nested OUT_DIR.
+            // Opt only this temporary checkout into Git for Windows long paths.
+            git(&checkout, &["config", "--local", "core.longpaths", "true"]);
+        }
         git(
             &checkout,
             &[
