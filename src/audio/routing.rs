@@ -24,7 +24,7 @@ pub fn plan(_output: Option<&str>) -> Result<RoutePlan> {
 pub fn activate(_store: &Store, _plan: &RoutePlan) -> Result<RouteGuard> {
     anyhow::bail!("Automatic routing is unavailable on this platform")
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub fn restore(_store: &Store) -> Result<()> {
     anyhow::bail!(
         "Maris did not change system routing on this platform; restore it in system audio settings"

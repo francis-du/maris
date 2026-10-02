@@ -99,6 +99,10 @@ class PortablePackages(unittest.TestCase):
         for forbidden in ['systemctl ', 'sudo ', 'ldd ', 'curl ', 'killall ']:
             self.assertNotIn(forbidden, linux)
         self.assertIn('Get-AuthenticodeSignature', windows)
+        self.assertNotIn('Get-FileHash', windows)
+        self.assertIn('$sha.ComputeHash($stream)', windows)
+        self.assertIn('File-Sha256 $file.FullName', windows)
+        self.assertIn('File-Sha256 $archive', windows)
         self.assertIn('FileShare]::None', windows)
         self.assertIn('PE architecture', windows)
         self.assertIn('ELF machine', linux)

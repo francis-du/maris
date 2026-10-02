@@ -30,6 +30,22 @@ class ToolchainRequirements(unittest.TestCase):
                 self.assertNotIn('RUSTC_BOOTSTRAP', text)
                 self.assertNotIn('continue-on-error', text)
 
+    def test_push_checks_execute_the_bundled_model_not_only_the_absent_model_case(self):
+        text = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+        self.assertRegex(text, r"MARIS_BUNDLE_SMALL_MODELS:\s*'1'\s*\n\s*run: \|\s*\n\s*cargo test --locked --lib models:: -- --nocapture")
+        self.assertNotIn('--skip', text)
+
+    def test_single_line_commands_do_not_turn_rust_paths_into_yaml_mappings(self):
+        # A colon followed by whitespace is invalid in an unquoted run value.
+        # This guards the observed models:: regression; it is not a YAML parser.
+        for path in (ROOT / '.github/workflows').glob('*.yml'):
+            for line_number, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+                match = re.match(r'^\s+run:\s+(.+)$', line)
+                if match and not match[1].startswith(('"', "'", '|', '>')):
+                    with self.subTest(workflow=path.name, line=line_number):
+                        self.assertNotRegex(match[1], r':(?:\s|$)',
+                                            'Use a quoted value or a YAML block for this command')
+
     def test_developer_install_instructions_match_cargo(self):
         required = 'Rust ' + minimum_rust()
         paths = [ROOT / 'docs' / language / 'install.md'
