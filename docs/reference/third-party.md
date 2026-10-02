@@ -102,3 +102,7 @@ Normal UI/CLI/MCP inventory contains only local backends. MusicNN is bundled in 
 BlackHole and VB-CABLE are separately installed third-party virtual devices. Maris does not redistribute their drivers or imply affiliation. eqMac source snapshots used for the built-in preset catalog are redistributed only under the recorded Apache-2.0 terms and attribution above; no private or Pro preset data is included.
 
 Maris's tonal planner is original bounded heuristic code, not a pretrained neural model. Its algorithm identifier and limitations are exposed with every generated proposal. Local model execution does not imply that external agent clients keep numeric summaries on-device; their own provider settings control that behavior.
+
+## flexaudio-core security patch
+
+Maris vendors the unmodified flexaudio-core v0.2.0 source under `third_party/flexaudio-core` and retains its MIT license. The local Cargo manifest changes only its ringbuf dependency from the upstream 0.4 range to ringbuf 0.5.2 so the Windows loopback path does not ship the memory-safety issue fixed by RUSTSEC-2026-0293. The vendored source remains attributable to Studio Sadola; Maris-specific rationale is recorded in `MARIS_PATCH.md`.
