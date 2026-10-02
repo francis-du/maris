@@ -14,9 +14,9 @@ use windows::{
     Win32::{
         Foundation::{CloseHandle, ERROR_NO_MORE_FILES, HANDLE, RPC_E_CHANGED_MODE, S_OK},
         Media::Audio::{
-            eRender, AudioSessionStateActive, AudioSessionStateExpired, IAudioSessionControl2,
-            IAudioSessionManager2, IMMDeviceEnumerator, ISimpleAudioVolume, MMDeviceEnumerator,
-            DEVICE_STATE_ACTIVE,
+            eRender, AudioSessionStateActive, AudioSessionStateExpired, AudioSessionStateInactive,
+            IAudioSessionControl2, IAudioSessionManager2, IMMDeviceEnumerator, ISimpleAudioVolume,
+            MMDeviceEnumerator, DEVICE_STATE_ACTIVE,
         },
         System::{
             Com::{
@@ -111,10 +111,13 @@ pub(super) fn validate_capture_pids(pids: &[i32]) -> Result<()> {
 }
 
 fn process_parents() -> Result<BTreeMap<u32, u32>> {
-    process_snapshot(|_| {})
+    Ok(process_snapshot()?
+        .into_iter()
+        .map(|(pid, (parent, _))| (pid, parent))
+        .collect())
 }
 
-fn process_snapshot(mut observe: impl FnMut(&PROCESSENTRY32W)) -> Result<BTreeMap<u32, u32>> {
+fn process_snapshot() -> Result<BTreeMap<u32, (u32, String)>> {
     let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) }
         .context("Create Windows process snapshot")?;
     struct Snapshot(HANDLE);
@@ -124,7 +127,7 @@ fn process_snapshot(mut observe: impl FnMut(&PROCESSENTRY32W)) -> Result<BTreeMa
         }
     }
     let snapshot = Snapshot(snapshot);
-    let mut parents = BTreeMap::<u32, u32>::new();
+    let mut processes = BTreeMap::new();
     let mut entry = PROCESSENTRY32W {
         dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
         ..Default::default()
@@ -133,32 +136,40 @@ fn process_snapshot(mut observe: impl FnMut(&PROCESSENTRY32W)) -> Result<BTreeMa
     // failures into an apparently valid empty process tree.
     unsafe { Process32FirstW(snapshot.0, &mut entry) }.context("Read first Windows process")?;
     loop {
-        parents.insert(entry.th32ProcessID, entry.th32ParentProcessID);
-        ensure!(parents.len() <= 65_536, "Windows process list is too large");
-        observe(&entry);
+        let end = entry
+            .szExeFile
+            .iter()
+            .position(|value| *value == 0)
+            .unwrap_or(entry.szExeFile.len());
+        let name = String::from_utf16_lossy(&entry.szExeFile[..end]);
+        processes.insert(entry.th32ProcessID, (entry.th32ParentProcessID, name));
+        ensure!(
+            processes.len() <= 65_536,
+            "Windows process list is too large"
+        );
         match unsafe { Process32NextW(snapshot.0, &mut entry) } {
             Ok(()) => {}
             Err(error) if error.code() == ERROR_NO_MORE_FILES.to_hresult() => break,
             Err(error) => return Err(error).context("Continue Windows process snapshot"),
         }
     }
-    Ok(parents)
+    Ok(processes)
 }
 
-pub(super) struct ProcessInfo {
-    pub pid: u32,
-    pub name: String,
-    pub executable: Option<String>,
-    pub is_output_active: bool,
-}
-
-/// Enumerate real render sessions without starting capture or acquiring mute controls.
-/// The published flexaudio 0.2.0 does not export the processes API in its newer source.
-pub(super) fn processes() -> Result<Vec<ProcessInfo>> {
+/// Read audio sessions and process names without opening capture or mute controls.
+/// One app may have several sessions; merge by PID and retain all output IDs.
+pub(super) fn applications() -> Result<Vec<serde_json::Value>> {
+    let processes = process_snapshot()?;
+    let parents = processes
+        .iter()
+        .map(|(&pid, (parent, _))| (pid, *parent))
+        .collect();
+    let (_, excluded) =
+        super::windows_scope::selection(&BTreeSet::new(), std::process::id(), &parents)?;
     let initialized = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
     ensure!(
         initialized.is_ok() || initialized == RPC_E_CHANGED_MODE,
-        "Initialize Windows application-list COM apartment: {initialized:?}"
+        "Initialize Windows audio discovery: {initialized:?}"
     );
     struct Apartment(bool);
     impl Drop for Apartment {
@@ -168,73 +179,68 @@ pub(super) fn processes() -> Result<Vec<ProcessInfo>> {
             }
         }
     }
-    // Do not uninitialize an apartment already owned by the desktop event loop.
+    // Declared before the interfaces so they are released before the apartment.
     let _apartment = Apartment(initialized.is_ok());
-    let mut names = BTreeMap::new();
-    let parents = process_snapshot(|entry| {
-        let end = entry
-            .szExeFile
-            .iter()
-            .position(|value| *value == 0)
-            .unwrap_or(entry.szExeFile.len());
-        names.insert(
-            entry.th32ProcessID,
-            String::from_utf16_lossy(&entry.szExeFile[..end]),
-        );
-    })?;
-    let (_, excluded) =
-        super::windows_scope::selection(&BTreeSet::new(), std::process::id(), &parents)?;
     let enumerator: IMMDeviceEnumerator =
-        unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL) }
-            .context("Create Windows audio endpoint enumerator")?;
-    let collection = unsafe { enumerator.EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE) }
-        .context("Enumerate Windows render endpoints")?;
-    let endpoints = unsafe { collection.GetCount() }.context("Count Windows render endpoints")?;
-    ensure!(endpoints <= 256, "Too many Windows render endpoints");
-    let mut applications = BTreeMap::<u32, ProcessInfo>::new();
-    for endpoint in 0..endpoints {
-        let device =
-            unsafe { collection.Item(endpoint) }.context("Open Windows render endpoint")?;
-        let manager: IAudioSessionManager2 =
-            unsafe { device.Activate(CLSCTX_ALL, None) }.context("Open Windows audio sessions")?;
-        let sessions = unsafe { manager.GetSessionEnumerator() }
-            .context("Enumerate Windows audio sessions")?;
-        let count = unsafe { sessions.GetCount() }.context("Count Windows audio sessions")?;
-        ensure!((0..=4096).contains(&count), "Too many Windows audio sessions");
+        unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL) }?;
+    let endpoints = unsafe { enumerator.EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE) }?;
+    let count = unsafe { endpoints.GetCount() }?;
+    ensure!(count <= 256, "Too many Windows audio outputs");
+    let mut apps = BTreeMap::<u32, (String, bool, BTreeSet<String>)>::new();
+    let mut total_sessions = 0;
+    for index in 0..count {
+        let device = unsafe { endpoints.Item(index) }?;
+        let pointer = unsafe { device.GetId() }?;
+        let identifier = unsafe { pointer.to_string() };
+        unsafe { CoTaskMemFree(Some(pointer.0.cast())) };
+        let identifier = identifier?;
+        let manager: IAudioSessionManager2 = unsafe { device.Activate(CLSCTX_ALL, None) }?;
+        let sessions = unsafe { manager.GetSessionEnumerator() }?;
+        let count = unsafe { sessions.GetCount() }?;
+        ensure!(
+            (0..=4096).contains(&count),
+            "Invalid Windows audio session count"
+        );
+        total_sessions += count;
+        ensure!(total_sessions <= 16384, "Too many Windows audio sessions");
         for index in 0..count {
-            let control =
-                unsafe { sessions.GetSession(index) }.context("Read Windows audio session")?;
-            let control2: IAudioSessionControl2 = control
-                .cast()
-                .context("Read Windows audio session identity")?;
-            if unsafe { control2.IsSystemSoundsSession() } == S_OK {
+            let control = unsafe { sessions.GetSession(index) }?;
+            let identity: IAudioSessionControl2 = control.cast()?;
+            if unsafe { identity.IsSystemSoundsSession() } == S_OK {
                 continue;
             }
-            let pid = unsafe { control2.GetProcessId() }.context("Read audio application PID")?;
+            let pid = unsafe { identity.GetProcessId() }?;
             if pid == 0 || pid > i32::MAX as u32 || excluded.contains(&pid) {
                 continue;
             }
-            let Some(name) = names.get(&pid) else {
+            let Some((_, name)) = processes.get(&pid) else {
                 continue;
             };
-            let state = unsafe { control.GetState() }.context("Read audio application state")?;
+            let state = unsafe { control.GetState() }?;
             if state == AudioSessionStateExpired {
                 continue;
             }
-            let active = state == AudioSessionStateActive;
-            applications
+            ensure!(
+                state == AudioSessionStateActive || state == AudioSessionStateInactive,
+                "Unknown Windows audio session state"
+            );
+            let app = apps
                 .entry(pid)
-                .and_modify(|application| application.is_output_active |= active)
-                .or_insert_with(|| ProcessInfo {
-                    pid,
-                    name: name.clone(),
-                    // ToolHelp supplies a file name, not a verified full executable path.
-                    executable: None,
-                    is_output_active: active,
-                });
+                .or_insert_with(|| (name.clone(), false, BTreeSet::new()));
+            app.1 |= state == AudioSessionStateActive;
+            app.2.insert(format!("wasapi:{identifier}"));
         }
     }
-    Ok(applications.into_values().collect())
+    Ok(apps
+        .into_iter()
+        .map(|(pid, (name, active, devices))| {
+            serde_json::json!({
+                "object_id":pid, "pid":pid, "name":name, "display_name":name,
+                "bundle_id":serde_json::Value::Null, "executable":serde_json::Value::Null,
+                "running_output":active, "devices":devices, "is_maris":false
+            })
+        })
+        .collect())
 }
 
 fn session_key(control: &IAudioSessionControl2) -> Result<String> {

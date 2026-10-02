@@ -23,12 +23,14 @@ pub(super) struct CaptureWorker {
 }
 impl CaptureWorker {
     fn config(pid: Option<i32>) -> Result<StreamConfig> {
-        let mut config = StreamConfig::default();
-        config.output = OutputFormat {
-            sample_rate: RATE,
-            channels: CHANNELS,
+        let mut config = StreamConfig {
+            output: OutputFormat {
+                sample_rate: RATE,
+                channels: CHANNELS,
+            },
+            ring_capacity_chunks: 50,
+            ..StreamConfig::default()
         };
-        config.ring_capacity_chunks = 50;
         match pid {
             Some(pid) => {
                 ensure!(pid > 0, "Invalid Windows application PID");
@@ -583,23 +585,7 @@ impl Session {
 }
 
 pub(super) fn applications() -> Result<serde_json::Value> {
-    let current = std::process::id();
-    let applications = super::windows_route::processes()?
-        .into_iter()
-        .filter(|process| process.pid != current)
-        .map(|process| {
-            serde_json::json!({
-                "object_id":0,
-                "pid":process.pid,
-                "bundle_id":serde_json::Value::Null,
-                "name":process.name,
-                "executable":process.executable,
-                "running_output":process.is_output_active,
-                "devices":[],
-                "is_maris":false
-            })
-        })
-        .collect::<Vec<_>>();
+    let applications = super::windows_route::applications()?;
     Ok(serde_json::json!({
         "available":true,
         "backend":"wasapi_audio_sessions",
@@ -614,7 +600,7 @@ pub(super) fn applications() -> Result<serde_json::Value> {
 }
 
 pub(super) fn doctor() -> serde_json::Value {
-    match super::windows_route::processes() {
+    match super::windows_route::applications() {
         Ok(processes) => serde_json::json!({
             "available":true,
             "backend":"wasapi_process_loopback",

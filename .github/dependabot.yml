@@ -5,8 +5,22 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 5
+    groups:
+      workflow-actions:
+        applies-to: version-updates
+        patterns:
+          - "actions/*"
   - package-ecosystem: cargo
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      cargo-patches:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - patch
+# Keep Rust minor/major migrations separate: 0.x minor upgrades can break APIs.
+# Security updates remain enabled and are not delayed by version-update groups.
