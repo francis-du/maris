@@ -18,9 +18,9 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-schemars = "1.2"
-ratatui = "0.29"
-crossterm = "0.28"
+schemars = "1.2.2"
+ratatui = "0.30.2"
+crossterm = "0.29"
 cpal = "0.16.0"
 crossbeam-queue = "0.3"
 ctrlc = { version = "3", features = ["termination"] }
@@ -33,7 +33,7 @@ rustfft = "6"
 ebur128 = "0.1.10"
 candle-core = { version = "0.11.0", default-features = false }
 candle-nn = { version = "0.11.0", default-features = false }
-sha2 = "0.10"
+sha2 = "0.11"
 nnnoiseless = { version = "=0.5.2", default-features = false, optional = true }
 
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
@@ -55,10 +55,12 @@ objc2-foundation = "0.3.2"
 libc = "0.2"
 
 [build-dependencies]
-ureq = "3.4"
-sha2 = "0.10"
+hex = "0.4"
+ureq = "3.4.2"
+sha2 = "0.11"
 
 [dev-dependencies]
+hex = "0.4"
 
 [[example]]
 name = "ui_probe"

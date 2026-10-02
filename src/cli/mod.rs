@@ -535,7 +535,11 @@ fn run(cli: Cli) -> Result<()> {
             Ok(())
         })?),
         Command::Undo => print(store.undo(revision)?),
-        Command::Schema => print(schemars::schema_for!(Profile)),
+        Command::Schema => print(
+            schemars::generate::SchemaSettings::draft07()
+                .into_generator()
+                .into_root_schema_for::<Profile>(),
+        ),
         Command::Apply { file, dry_run } => {
             let p: Profile = store::read_json(&file)?;
             p.validate()?;

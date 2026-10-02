@@ -58,7 +58,7 @@ fn windows_checksum_helper_handles_empty_binary_and_multiblock_files_without_cmd
     ] {
         fs::write(directory.path().join(name), &data).unwrap();
         cases.push(
-            serde_json::json!({"name":name,"expected":format!("{:X}", Sha256::digest(&data))}),
+            serde_json::json!({"name":name,"expected":hex::encode_upper(Sha256::digest(&data))}),
         );
     }
     fs::write(

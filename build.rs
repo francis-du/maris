@@ -126,7 +126,7 @@ fn verify_musicnn(bytes: &[u8]) {
         MUSICNN_BYTES,
         "pinned MusicNN weight size changed"
     );
-    let digest = format!("{:x}", Sha256::digest(bytes));
+    let digest = hex::encode(Sha256::digest(bytes));
     assert_eq!(
         digest, MUSICNN_SHA256,
         "pinned MusicNN weight digest changed"
@@ -408,7 +408,7 @@ fn generate_autoeq_profiles(manifest: &Path) {
     };
 
     validate_autoeq_pack(&pack, keys.len());
-    let digest = format!("{:x}", Sha256::digest(&pack));
+    let digest = hex::encode(Sha256::digest(&pack));
     let target = out.join("autoeq-profiles.pack");
     fs::write(&target, pack).expect("write verified AutoEq profile pack");
     fs::write(
