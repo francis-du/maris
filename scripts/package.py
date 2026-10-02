@@ -70,7 +70,7 @@ def main() -> None:
         payload = staging / stem
         payload.mkdir()
         if system == "macos":
-            subprocess.run(["/usr/bin/lipo", "-verify_arch", arch, str(executable)], check=True, capture_output=True)
+            subprocess.run(["/usr/bin/lipo", str(executable), "-verify_arch", arch], check=True, capture_output=True)
             result = subprocess.run([str(executable), "--json", "package"], cwd=staging,
                                     capture_output=True, text=True, check=True,
                                     env=dict(os.environ, MARIS_STATE_DIR=str(staging / "isolated-state")))

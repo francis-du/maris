@@ -7,12 +7,22 @@ $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $tokens = $null; $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'install.ps1'), [ref]$tokens, [ref]$errors)
 if ($errors.Count -ne 0) { throw ('PowerShell syntax errors: ' + ($errors -join '; ')) }
-$names = @('Safe-Path','Read-MarisManifest','Expand-MarisArchive','Receive-MarisPackage')
+$names = @('Safe-Path','File-Sha256','Read-MarisManifest','Expand-MarisArchive','Receive-MarisPackage')
 foreach ($name in $names) {
     $functions = @($ast.FindAll({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name }, $true))
     if ($functions.Count -ne 1) { throw "Missing or ambiguous production function: $name" }
     . ([ScriptBlock]::Create($functions[0].Extent.Text))
 }
+# Exercise the production hash without any PowerShell file-hash module.
+$hashFile = Join-Path $Fixture 'hash fixture.bin'
+[IO.File]::WriteAllBytes($hashFile, [byte[]]@())
+if ((File-Sha256 $hashFile).ToLowerInvariant() -cne 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855') { throw 'Empty file hash differs.' }
+[IO.File]::WriteAllBytes($hashFile, [Text.Encoding]::ASCII.GetBytes('abc'))
+if ((File-Sha256 $hashFile).ToLowerInvariant() -cne 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad') { throw 'Known file hash differs.' }
+[IO.File]::Delete($hashFile)
+$missingRejected = $false
+try { $null = File-Sha256 $hashFile } catch { $missingRejected = $true }
+if (-not $missingRejected) { throw 'Missing file produced a successful hash.' }
 function Receive-ReleaseFile([string]$Url, [string]$Output, [long]$Limit) {
     if (-not $Url.StartsWith('https://github.com/francis-du/maris/releases/', [StringComparison]::Ordinal)) { throw 'Unexpected request host.' }
     $source = if ($Url.EndsWith('/maris-release.tsv')) { Join-Path $Fixture 'manifest' } else {

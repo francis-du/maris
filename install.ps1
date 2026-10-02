@@ -121,10 +121,23 @@ function Validate-Payload([string]$Path) {
         if ($signature.Status -ne 'Valid' -or $null -eq $signature.SignerCertificate) { throw 'Authenticode validation failed. Use -AllowUnsigned only for trusted local development.' }
     }
 }
+function File-Sha256([string]$Path) {
+    # Use the built-in .NET implementation in both Windows PowerShell and PowerShell.
+    # Module search paths inherited from another shell must not disable file verification.
+    $stream = $null; $sha = $null
+    try {
+        $stream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+        $sha = [Security.Cryptography.SHA256]::Create()
+        return ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '')
+    } finally {
+        if ($null -ne $sha) { $sha.Dispose() }
+        if ($null -ne $stream) { $stream.Dispose() }
+    }
+}
 function Payload-Digest([string]$Path) {
     $lines = foreach ($file in @(Payload-Files $Path)) {
         $relative = $file.FullName.Substring($Path.Length).Replace('\', '/')
-        $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+        $hash = File-Sha256 $file.FullName
         "$relative`0$hash"
     }
     $sha = [Security.Cryptography.SHA256]::Create()
@@ -263,7 +276,7 @@ function Receive-MarisPackage([string]$RequestedVersion, [string]$Architecture) 
         $archive = Join-Path $work 'package.zip'
         Write-Output "Downloading CI-built Maris $($asset.Version), Windows/$Architecture" | Out-Host
         Receive-ReleaseFile "$base/download/v$($asset.Version)/$($asset.Name)" $archive $asset.Bytes
-        if ((Get-Item -LiteralPath $archive).Length -ne $asset.Bytes -or (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -cne $asset.Sha256) { throw 'Archive size or SHA-256 mismatch; extraction refused.' }
+        if ((Get-Item -LiteralPath $archive).Length -ne $asset.Bytes -or (File-Sha256 $archive).ToLowerInvariant() -cne $asset.Sha256) { throw 'Archive size or SHA-256 mismatch; extraction refused.' }
         $rootName = "Maris-$($asset.Version)-windows-$Architecture"
         Expand-MarisArchive $archive (Join-Path $work 'extracted') $rootName
         $kit = Join-Path (Join-Path $work 'extracted') $rootName
@@ -277,7 +290,7 @@ function Receive-MarisPackage([string]$RequestedVersion, [string]$Architecture) 
         if (-not [IO.File]::Exists($packageMarker) -or (Get-Item -LiteralPath $packageMarker).Length -gt 128) { throw 'Missing or oversized native payload identity.' }
         $packageLines = [IO.File]::ReadAllLines($packageMarker)
         if ($packageLines.Count -ne 4 -or ($packageLines -join "`n") -cne "maris-package-v1`nwindows`n$Architecture`n$($asset.Version)") { throw 'Native payload version differs from its release manifest.' }
-        if ((Get-FileHash -LiteralPath (Join-Path $payload 'bin\maris.exe') -Algorithm SHA256).Hash.ToLowerInvariant() -cne $asset.BinarySha256) { throw 'Executable SHA-256 mismatch.' }
+        if ((File-Sha256 (Join-Path $payload 'bin\maris.exe')).ToLowerInvariant() -cne $asset.BinarySha256) { throw 'Executable SHA-256 mismatch.' }
         return [pscustomobject]@{ Directory=$work; Payload=$payload }
     } catch {
         if ([IO.Directory]::Exists($work)) { Remove-Item -LiteralPath $work -Recurse -Force }

@@ -51,7 +51,7 @@ impl LiveSource {
             capture_metrics: None,
         })
     }
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(target_os = "macos")]
     pub fn system(queue: Arc<ArrayQueue<[f32; 2]>>, rate: u32) -> Self {
         Self {
             bridge: crate::dsp::resample::ClockBridge::new(queue, (rate as usize / 20).max(2048)),

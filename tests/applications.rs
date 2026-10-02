@@ -27,5 +27,17 @@ fn application_metadata_is_read_only_and_matches_platform_capabilities() {
             assert!(application["running_output"].is_boolean());
             assert!(application["devices"].as_array().is_some());
         }
+        #[cfg(target_os = "windows")]
+        {
+            let mut pids = std::collections::BTreeSet::new();
+            for application in state["applications"].as_array().unwrap() {
+                let pid = application["pid"].as_u64().unwrap();
+                assert!((1..=i32::MAX as u64).contains(&pid));
+                assert_ne!(pid, u64::from(std::process::id()));
+                assert!(pids.insert(pid), "duplicate Windows application PID");
+                assert!(application["name"].as_str().is_some());
+                assert!(application["executable"].is_null());
+            }
+        }
     }
 }
