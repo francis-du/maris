@@ -98,7 +98,7 @@ enum Capture {
         pid: i32,
     },
     #[cfg(target_os = "linux")]
-    ApplicationPulse(super::pulse::ApplicationCapture),
+    ApplicationPulse(Box<super::pulse::ApplicationCapture>),
     #[cfg(target_os = "windows")]
     ApplicationWindows(super::windows::ApplicationCapture),
 }
@@ -309,7 +309,7 @@ impl Session {
                             metrics.clone(),
                         )?;
                         input_rate = 48_000;
-                        captures.push(Capture::ApplicationPulse(capture));
+                        captures.push(Capture::ApplicationPulse(Box::new(capture)));
                     }
                     #[cfg(target_os = "windows")]
                     {

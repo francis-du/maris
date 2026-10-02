@@ -36,7 +36,9 @@ pub fn read_input() -> std::io::Result<Option<crossterm::event::Event>> {
         let mut wait = Duration::from_millis(33);
         next_input(|| {
             let result = input.next(wait, &mut |timeout| {
-                if event::poll(timeout)? {
+                // The level-triggered Unix backend skips even buffered events for
+                // a zero timeout. Keep burst draining bounded but actually poll.
+                if event::poll(timeout.max(Duration::from_millis(1)))? {
                     event::read().map(Some)
                 } else {
                     Ok(None)

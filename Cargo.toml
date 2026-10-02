@@ -53,6 +53,8 @@ objc2-foundation = "0.3.2"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+# Level-triggered polling keeps unread terminal bytes ready after a bounded read.
+crossterm = { version = "0.29", features = ["use-dev-tty"] }
 
 [build-dependencies]
 hex = "0.4"

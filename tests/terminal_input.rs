@@ -114,12 +114,7 @@ fn click(rect: Rect) -> String {
     format!("\x1b[<0;{x};{y}M\x1b[<0;{x};{y}m")
 }
 
-#[test]
-fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = Store::at(dir.path());
-    let _lease = store.session_lock().unwrap();
-    let _heartbeat = Heartbeat::start(store.clone());
+fn spawn_console(dir: &std::path::Path) -> ConsoleProcess {
     let mut master = -1;
     let mut slave = -1;
     let mut size = libc::winsize {
@@ -154,7 +149,7 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
     let mut command = Command::new(env!("CARGO_BIN_EXE_maris"));
     command
         .args(["--no-tray", "--lang", "en", "tui"])
-        .env("MARIS_STATE_DIR", dir.path())
+        .env("MARIS_STATE_DIR", dir)
         .env("TERM", "xterm-256color")
         .env_remove("COLUMNS")
         .env_remove("LINES")
@@ -192,6 +187,17 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
         );
         std::thread::sleep(Duration::from_millis(20));
     }
+    process
+}
+
+#[test]
+fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path());
+    let _lease = store.session_lock().unwrap();
+    let _heartbeat = Heartbeat::start(store.clone());
+    let mut process = spawn_console(dir.path());
+    let mut output = String::new();
     process.send("e");
     output.clear();
     let start = Instant::now();
@@ -304,3 +310,6 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
     }
     assert_eq!(control_panel::EQ_ROW_START, 16);
 }
+
+#[path = "unit/terminal_presets.rs"]
+mod preset_tests;
