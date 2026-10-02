@@ -70,6 +70,18 @@ jobs:
           text2, count = pattern.subn("\n", text)
           if count == 0:
               raise SystemExit("did not find Tao Unix desktop target dependency section")
+
+          # The removed Unix target deps were optional feature targets too.
+          # Keep only the raw-window-handle default needed by Maris' native
+          # macOS/Windows event loop.
+          features = re.search(r"(?ms)^\[features\]\n(.*?)(?=^\[)", text2)
+          if not features:
+              raise SystemExit("Tao features table missing")
+          body = features.group(1)
+          body = re.sub(r"(?ms)^default\s*=\s*\[.*?\]\n", 'default = ["rwh_06"]\n', body)
+          body = re.sub(r"(?ms)^dbus\s*=\s*\[.*?\]\n", "", body)
+          body = re.sub(r"(?ms)^x11\s*=\s*\[.*?\]\n", "", body)
+          text2 = text2[:features.start(1)] + body + text2[features.end(1):]
           tao.write_text(text2, encoding="utf-8")
           PY
 
