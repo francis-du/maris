@@ -69,6 +69,32 @@ pub(super) fn capture_menu(
     path: &Path,
     appearance: &str,
 ) -> Result<Value> {
+    // A competing native popup can dismiss this isolated review before its
+    // timer fires. Retry only that explicit interruption, never a render or
+    // persistence error, and retain a finite failure boundary.
+    for attempt in 1..=3 {
+        match capture_menu_once(menu, header, button, path, appearance) {
+            Ok(mut result) => {
+                result["capture_attempts"] = json!(attempt);
+                return Ok(result);
+            }
+            Err(error)
+                if attempt < 3
+                    && error.to_string()
+                        == "Isolated menu closed before native capture completed" => {}
+            Err(error) => return Err(error),
+        }
+    }
+    unreachable!("Every final native capture attempt returns its result")
+}
+
+fn capture_menu_once(
+    menu: &Menu,
+    header: &AnyObject,
+    button: &AnyObject,
+    path: &Path,
+    appearance: &str,
+) -> Result<Value> {
     let main = MainThreadMarker::new().context("Menu capture requires the main thread")?;
     ensure!(
         matches!(appearance, "light" | "dark"),
