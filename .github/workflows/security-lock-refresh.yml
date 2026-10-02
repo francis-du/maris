@@ -10,8 +10,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - name: Install Rust
-        run: rustup toolchain install 1.94.0 --profile minimal
+      - name: Install Rust and Linux audio headers
+        run: |
+          rustup toolchain install 1.94.0 --profile minimal
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev pkg-config
       - name: Resolve patched dependency and test vendored core
         run: |
           cargo +1.94.0 check
