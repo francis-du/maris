@@ -238,10 +238,18 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
     let saved = store.load().unwrap();
     assert_eq!(saved.revision, 1);
     assert_eq!(
-        saved.profile.bands[0].gain_db, 4.0,
+        saved.profile.bands[0].gain_db,
+        4.0,
         "A physical +/- click was lost or duplicated; first output: {}\nterminal tail: {}",
         process.first_output,
-        output.chars().rev().take(6000).collect::<String>().chars().rev().collect::<String>()
+        output
+            .chars()
+            .rev()
+            .take(6000)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect::<String>()
     );
     assert_eq!(listening::load(&store).unwrap().revision, 0);
     assert!(!dir.path().join("control.json").exists());
