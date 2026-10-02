@@ -107,7 +107,7 @@ fn settings_entry_stages_first_band_and_requires_explicit_apply() {
     navigate(&mut workspace, &mut cursor, &mut memory, destination);
     assert_eq!(cursor, EQ_ROW_START);
     assert_eq!(store.load().unwrap().revision, 0);
-    let runtime = serde_json::json!({
+    let mut runtime = serde_json::json!({
         "active":true, "session_id":"offline-settings-test", "output":"Fixture",
         "profile_key":"Fixture", "sample_rate":48000,
         "device_capability":crate::device_profile::Capability::default(),
@@ -117,19 +117,34 @@ fn settings_entry_stages_first_band_and_requires_explicit_apply() {
     let eq = store.load().unwrap();
     let library = crate::listening::load(&store).unwrap();
     let mut editor = crate::configuration::Editor::default();
-    let context = crate::configuration::Context {
-        runtime: &runtime,
-        eq: &eq,
-        listening: &library,
-    };
+    renew_settings_telemetry(&store, &mut runtime);
     editor
-        .handle(&store, context, &mut cursor, KeyCode::Char('+'))
+        .handle(
+            &store,
+            crate::configuration::Context {
+                runtime: &runtime,
+                eq: &eq,
+                listening: &library,
+            },
+            &mut cursor,
+            KeyCode::Char('+'),
+        )
         .unwrap();
     assert_eq!(store.load().unwrap().revision, 0);
     assert_eq!(store.load().unwrap().profile.bands[0].gain_db, 0.0);
     assert!(editor.pending());
+    renew_settings_telemetry(&store, &mut runtime);
     editor
-        .handle(&store, context, &mut cursor, KeyCode::Enter)
+        .handle(
+            &store,
+            crate::configuration::Context {
+                runtime: &runtime,
+                eq: &eq,
+                listening: &library,
+            },
+            &mut cursor,
+            KeyCode::Enter,
+        )
         .unwrap();
     let profile = store.load().unwrap();
     assert_eq!(profile.profile.bands[0].gain_db, 0.5);
@@ -144,6 +159,100 @@ fn settings_entry_stages_first_band_and_requires_explicit_apply() {
     );
     store.undo(Some(profile.revision)).unwrap();
     assert_eq!(store.load().unwrap().profile.bands[0].gain_db, 0.0);
+}
+
+fn renew_settings_telemetry(store: &Store, displayed: &mut serde_json::Value) {
+    let mut current: serde_json::Value =
+        crate::store::read_json(&store.directory.join("runtime.json")).unwrap();
+    let now = serde_json::json!(crate::analysis::now_ms());
+    current["updated_at_ms"] = now.clone();
+    displayed["updated_at_ms"] = now;
+    store.write_json("runtime.json", &current).unwrap();
+}
+
+#[test]
+fn expired_settings_cannot_apply_and_recovery_requires_an_explicit_new_draft() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = Store::at(directory.path());
+    let mut runtime = serde_json::json!({
+        "active":true, "session_id":"offline-settings-aging", "output":"Fixture",
+        "profile_key":"Fixture", "sample_rate":48000,
+        "device_capability":crate::device_profile::Capability::default(),
+        "updated_at_ms":crate::analysis::now_ms()
+    });
+    store.write_json("runtime.json", &runtime).unwrap();
+    let eq = store.load().unwrap();
+    let library = crate::listening::load(&store).unwrap();
+    let mut editor = crate::configuration::Editor::default();
+    let mut cursor = EQ_ROW_START;
+    renew_settings_telemetry(&store, &mut runtime);
+    editor
+        .handle(
+            &store,
+            crate::configuration::Context {
+                runtime: &runtime,
+                eq: &eq,
+                listening: &library,
+            },
+            &mut cursor,
+            KeyCode::Char('+'),
+        )
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(2000));
+    assert!(editor
+        .handle(
+            &store,
+            crate::configuration::Context {
+                runtime: &runtime,
+                eq: &eq,
+                listening: &library,
+            },
+            &mut cursor,
+            KeyCode::Enter
+        )
+        .is_err());
+    assert!(editor.invalidated());
+    assert_eq!(store.load().unwrap().revision, 0);
+    let pinned = runtime.clone();
+    renew_settings_telemetry(&store, &mut runtime);
+    let mut refreshed = runtime.clone();
+    refreshed["updated_at_ms"] = pinned["updated_at_ms"].clone();
+    assert_eq!(refreshed, pinned);
+    assert!(
+        editor
+            .handle(
+                &store,
+                crate::configuration::Context {
+                    runtime: &runtime,
+                    eq: &eq,
+                    listening: &library,
+                },
+                &mut cursor,
+                KeyCode::Enter
+            )
+            .is_err(),
+        "renewal cannot revive an invalidated draft"
+    );
+    editor.cancel();
+    for key in [KeyCode::Char('+'), KeyCode::Enter] {
+        renew_settings_telemetry(&store, &mut runtime);
+        editor
+            .handle(
+                &store,
+                crate::configuration::Context {
+                    runtime: &runtime,
+                    eq: &eq,
+                    listening: &library,
+                },
+                &mut cursor,
+                key,
+            )
+            .unwrap();
+    }
+    assert_eq!(store.load().unwrap().revision, 1);
+    assert_eq!(store.load().unwrap().profile.bands[0].gain_db, 0.5);
+    assert_eq!(crate::listening::load(&store).unwrap().revision, 0);
+    assert!(!store.directory.join("control.json").exists());
 }
 
 #[test]

@@ -173,15 +173,21 @@ struct Pending {
 pub struct Controller {
     pending: Option<Pending>,
     displayed: Option<Guard>,
+    observed: bool,
     pub notice: Option<Notice>,
 }
 impl Controller {
     /// Bind immediate native actions to the state used to draw their labels.
     pub fn observe(&mut self, summary: &Summary) {
+        self.observed = true;
         self.displayed = summary.guard.clone();
     }
     fn check_displayed(&self, current: &Current) -> Result<()> {
-        if let Some(guard) = &self.displayed {
+        if self.observed {
+            let guard = self
+                .displayed
+                .as_ref()
+                .context("No current audio telemetry")?;
             guard.validate(current, crate::analysis::now_ms())?;
         }
         Ok(())

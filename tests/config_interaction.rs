@@ -1,4 +1,7 @@
 //! Configuration-page regressions: browsing must not move targets or change playback policy.
+#[path = "support/live_telemetry.rs"]
+mod live_telemetry;
+
 use crossterm::event::KeyCode;
 use maris::{
     configuration::{self, Context, Editor},
@@ -118,6 +121,7 @@ fn adjusting_a_draft_never_implicitly_enables_processing_or_exits_reference() {
         "device_capability":Capability::default(),"updated_at_ms":maris::analysis::now_ms()
     });
     store.write_json("runtime.json", &runtime).unwrap();
+    let runtime = live_telemetry::refresh(&store);
     let context = Context {
         runtime: &runtime,
         eq: &eq,
@@ -129,6 +133,12 @@ fn adjusting_a_draft_never_implicitly_enables_processing_or_exits_reference() {
         .handle(&store, context, &mut selected, KeyCode::Char('+'))
         .unwrap();
     assert_eq!(listening::load(&store).unwrap().revision, 1);
+    let runtime = live_telemetry::refresh(&store);
+    let context = Context {
+        runtime: &runtime,
+        eq: &eq,
+        listening: &library,
+    };
     editor
         .handle(&store, context, &mut selected, KeyCode::Enter)
         .unwrap();

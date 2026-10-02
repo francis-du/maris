@@ -1,3 +1,6 @@
+#[path = "support/live_telemetry.rs"]
+mod live_telemetry;
+
 use maris::{
     analysis,
     device_profile::Capability,
@@ -271,6 +274,7 @@ fn apply_rejects_tampering_and_accepts_matching_live_state() {
     let evidence = analysis::measure(&tone(1000.0), 48_000).unwrap();
     let context = MusicContext::signal_only(&evidence);
     live_runtime(&store, "Unknown Output", &evidence, &context);
+    live_telemetry::refresh(&store);
     let proposal = music_tuning::from_live(&store, "soft").unwrap();
 
     let mut tampered = proposal.clone();
@@ -278,6 +282,7 @@ fn apply_rejects_tampering_and_accepts_matching_live_state() {
     assert!(music_tuning::apply(&store, &tampered).is_err());
     assert_eq!(listening::load(&store).unwrap().revision, 0);
 
+    live_telemetry::refresh(&store);
     let applied = music_tuning::apply(&store, &proposal).unwrap();
     assert_eq!(applied.revision, 1);
     assert_eq!(applied.effective("Unknown Output"), &proposal.profile);
@@ -290,6 +295,7 @@ fn live_apply_rejects_session_and_device_rebind_but_accepts_fresh_analysis() {
     let evidence = analysis::measure(&tone(1000.0), 48_000).unwrap();
     let context = MusicContext::signal_only(&evidence);
     live_runtime(&store, "Headphones", &evidence, &context);
+    live_telemetry::refresh(&store);
     let proposal = music_tuning::from_live(&store, "soft").unwrap();
     let original: serde_json::Value =
         maris::store::read_json(&store.directory.join("runtime.json")).unwrap();
@@ -327,6 +333,7 @@ fn apply_rejects_output_change_after_preview() {
     let evidence = analysis::measure(&tone(1000.0), 48_000).unwrap();
     let context = MusicContext::signal_only(&evidence);
     live_runtime(&store, "Headphones", &evidence, &context);
+    live_telemetry::refresh(&store);
     let proposal = music_tuning::from_live(&store, "balanced").unwrap();
     let mut runtime: serde_json::Value =
         maris::store::read_json(&store.directory.join("runtime.json")).unwrap();
@@ -475,6 +482,7 @@ fn no_op_preview_preserves_revision_and_the_previous_undo_snapshot() {
     let context = MusicContext::signal_only(&evidence);
     let before = library.effective("Fixture");
     live_runtime(&store, "Fixture", &evidence, &context);
+    live_telemetry::refresh(&store);
     let proposal = music_tuning::from_live(&store, "balanced").unwrap();
     assert_eq!(&proposal.profile, before);
     assert!(proposal.changes.is_empty());
@@ -484,6 +492,7 @@ fn no_op_preview_preserves_revision_and_the_previous_undo_snapshot() {
     let mut future = proposal.clone();
     future.created_at_ms = analysis::now_ms() + 60_000;
     assert!(music_tuning::apply(&store, &future).is_err());
+    live_telemetry::refresh(&store);
     assert_eq!(music_tuning::apply(&store, &proposal).unwrap().revision, 2);
     assert_eq!(
         listening::undo(&store, Some(2))
