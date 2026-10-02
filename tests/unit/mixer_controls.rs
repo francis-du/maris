@@ -57,6 +57,22 @@ fn key(
     )
 }
 
+// Valid-action cases model the live heartbeat without changing the pinned
+// session, device or revision. Rejection cases deliberately use the raw path.
+fn renew_telemetry(store: &Store, displayed: &mut Value) {
+    let mut current: Value =
+        crate::store::read_json(&store.directory.join("runtime.json")).unwrap();
+    let now = json!(crate::analysis::now_ms());
+    current["updated_at_ms"] = now.clone();
+    displayed["updated_at_ms"] = now;
+    store.write_json("runtime.json", &current).unwrap();
+}
+
+fn fresh_key(store: &Store, runtime: &mut Value, row: usize, input: KeyCode) {
+    renew_telemetry(store, runtime);
+    key(store, runtime, row, input).unwrap();
+}
+
 #[test]
 fn channel_controls_change_only_the_selected_strip_and_never_start_audio() {
     for (input, field, expected) in [
@@ -67,8 +83,9 @@ fn channel_controls_change_only_the_selected_strip_and_never_start_audio() {
         (KeyCode::Char('['), "pan", json!(-0.05)),
         (KeyCode::Char(']'), "pan", json!(0.05)),
     ] {
-        let (_directory, store, runtime) = fixture();
+        let (_directory, store, mut runtime) = fixture();
         let before = mixer::load(&store).unwrap();
+        renew_telemetry(&store, &mut runtime);
         assert!(key(&store, &runtime, 1, input).unwrap().is_some());
         let after = mixer::load(&store).unwrap();
         assert_eq!(after.revision, before.revision + 1);
@@ -134,22 +151,22 @@ fn capped_gain_is_a_no_op_and_undo_uses_only_mixer_history() {
     .unwrap();
     runtime["mixer_control"] = serde_json::to_value(&capped).unwrap();
     let bytes = std::fs::read(store.directory.join("mixer.json")).unwrap();
-    key(&store, &runtime, 0, KeyCode::Left).unwrap();
+    fresh_key(&store, &mut runtime, 0, KeyCode::Left);
     assert_eq!(
         std::fs::read(store.directory.join("mixer.json")).unwrap(),
         bytes
     );
-    key(&store, &runtime, 0, KeyCode::Char('u')).unwrap();
+    fresh_key(&store, &mut runtime, 0, KeyCode::Char('u'));
     assert_eq!(mixer::load(&store).unwrap().config.strips[0].gain_db, 0.0);
     assert!(!store.directory.join("listening.json").exists());
 }
 
 #[test]
 fn browsing_and_enter_never_write_and_a_removed_selection_does_not_retarget() {
-    let (_directory, store, runtime) = fixture();
+    let (_directory, store, mut runtime) = fixture();
     let before = std::fs::read(store.directory.join("mixer.json")).unwrap();
     for input in [KeyCode::Up, KeyCode::Down, KeyCode::Enter] {
-        key(&store, &runtime, 0, input).unwrap();
+        fresh_key(&store, &mut runtime, 0, input);
     }
     assert!(key(&store, &runtime, usize::MAX, KeyCode::Right).is_err());
     assert_eq!(
@@ -171,6 +188,7 @@ fn browsing_and_enter_never_write_and_a_removed_selection_does_not_retarget() {
 fn header_waits_for_the_actual_mixer_revision() {
     let (_directory, _store, mut runtime) = fixture();
     let now = crate::analysis::now_ms();
+    runtime["updated_at_ms"] = json!(now);
     assert_eq!(controls::application_state(&runtime, 0, now), "Applied");
     runtime["mixer_control"]["revision"] = json!(2);
     assert_eq!(
@@ -182,4 +200,27 @@ fn header_waits_for_the_actual_mixer_revision() {
         controls::application_state(&runtime, 0, now),
         "Apply state unknown"
     );
+}
+
+#[test]
+fn a_real_expired_heartbeat_rejects_a_channel_until_the_same_target_is_live_again() {
+    let (_directory, store, mut displayed) = fixture();
+    let before = std::fs::read(store.directory.join("mixer.json")).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(2000));
+    assert!(key(&store, &displayed, 1, KeyCode::Right).is_err());
+    assert_eq!(
+        std::fs::read(store.directory.join("mixer.json")).unwrap(),
+        before
+    );
+    let pinned = displayed.clone();
+    fresh_key(&store, &mut displayed, 1, KeyCode::Right);
+    let mut refreshed = displayed.clone();
+    refreshed["updated_at_ms"] = pinned["updated_at_ms"].clone();
+    assert_eq!(
+        refreshed, pinned,
+        "heartbeat must preserve every target field"
+    );
+    assert_eq!(mixer::load(&store).unwrap().config.strips[1].gain_db, 0.5);
+    assert!(!store.directory.join("control.json").exists());
+    assert!(!store.directory.join("listening.json").exists());
 }
