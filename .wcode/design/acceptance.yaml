@@ -88,7 +88,7 @@
 - schema_version: 1
   id: AC-UI-001
   title: Production interfaces remain readable across capabilities and states
-  statement: All six workspaces, compact monitoring, and overlays render with true color, indexed color, basic ANSI color, and no color. Reduced motion preserves measured numeric status without animated meters. Desktop monitoring rejects stale or missing measurements. Offline documentation figures come from the current production renderer.
+  statement: All six workspaces, compact monitoring, and overlays render with true color, indexed color, basic ANSI color, and no color. Reduced motion preserves measured numeric status without animated meters. Desktop monitoring and the native status mark reject stale or missing measurements. The menu-bar mark uses a macOS template at 18 logical points and bounds changes to 8 Hz; static states and hidden monitoring suppress unnecessary rendering. Offline documentation figures come from the current production renderer.
   verification:
   - kind: check
     id: rust-format

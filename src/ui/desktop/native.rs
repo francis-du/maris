@@ -10,119 +10,20 @@ use std::sync::{
 };
 use tray_icon::{
     menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu},
-    Icon, TrayIcon, TrayIconBuilder,
+    TrayIcon, TrayIconBuilder,
 };
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-pub(super) fn menu_review() -> Result<Value> {
-    let _events = tao::event_loop::EventLoop::new();
-    let mut locales = Vec::new();
-    for code in crate::i18n::LANGUAGES {
-        let directory = tempfile::tempdir()?;
-        let store = Store::at(directory.path());
-        crate::i18n::configure(&store, Some(code))?;
-        store.write_json("runtime.json", &json!({"active":true,"music_processing":true,
-                "session_id":"offline-menu-fixture","output":"OFFLINE fixture output","profile_key":"OFFLINE fixture output",
-                "sample_rate":48000,"device_identity":{"stable_id":"offline-fixture"},
-                "device_binding_revision":0,"rebind_count":0,"applied_revision":0,"applied_music_revision":0,
-                "system_backend":"coreaudio_process_tap","output_mode":"follow_system_default",
-                "updated_at_ms":crate::analysis::now_ms()}))?;
-        let mut view = Indicator::new(store.clone(), false)?;
-        view.icon.set_title(Some("Maris Review"));
-        view.status
-            .set_text("OFFLINE MENU FIXTURE · no audio capture");
-        // The review never polls the menu event receiver or starts the application loop.
-        view.refresh_quick_controls()?;
-        let normal_items = view.menu.items().len();
-        view.controller.select_preset(&store, "night-dialogue")?;
-        view.refresh_quick_controls()?;
-        let pending_items = view.menu.items().len();
-        ensure!(
-            pending_items == normal_items + 3,
-            "Pending menu controls were not inserted correctly"
-        );
-        ensure!(
-            view.apply_selection.is_enabled(),
-            "Native preview confirmation is disabled"
-        );
-        ensure!(
-            !store.directory.join("control.json").exists()
-                && !store.directory.join("listening.json").exists(),
-            "Menu preview mutated audio configuration"
-        );
-        locales.push(json!({"language":code,"normal_items":normal_items,"pending_items":pending_items,
-                "output":view.output_caption.text(),"listening":view.profile.text(),"eq":view.tone_caption.text(),
-                "apply":view.apply_selection.text(),"cancel":view.cancel_selection.text(),
-                "presets":view.presets.iter().map(|(item,_)|item.text()).collect::<Vec<_>>(),
-                "preview":view.preview_rows.iter().map(MenuItem::text).collect::<Vec<_>>(),
-                "languages":view.languages.iter().map(|(item,_)|item.text()).collect::<Vec<_>>() }));
-        view.controller.cancel();
-        view.refresh_quick_controls()?;
-        ensure!(
-            view.menu.items().len() == normal_items,
-            "Cancelled preview left hidden menu actions behind"
-        );
-        // Dispatch real native item IDs through the production handler. Only the final
-        // modal response is injected; edits stay in this temporary state namespace.
-        let selected = view
-            .presets
-            .iter()
-            .find(|(_, id)| id == "focus")
-            .context("Missing focus menu item")?
-            .0
-            .id()
-            .clone();
-        view.menu_action(
-            MenuEvent {
-                id: selected.clone(),
-            },
-            |_, lines| {
-                ensure!(!lines.is_empty(), "No visible selection details");
-                Ok(Some(false))
-            },
-        )?;
-        ensure!(
-            !store.directory.join("listening.json").exists(),
-            "Cancel wrote settings"
-        );
-        view.menu_action(MenuEvent { id: selected }, |_, _| Ok(Some(true)))?;
-        ensure!(
-            crate::tuning::preferences::load(&store)?.revision == 1,
-            "Native action did not apply"
-        );
-        for _ in 0..2 {
-            view.menu_action(
-                MenuEvent {
-                    id: view.compare.id().clone(),
-                },
-                |_, _| bail!("A/B unexpectedly requested a modal"),
-            )?;
-        }
-        view.menu_action(
-            MenuEvent {
-                id: view.undo.id().clone(),
-            },
-            |_, _| bail!("Undo unexpectedly requested a modal"),
-        )?;
-        let restored = crate::tuning::preferences::load(&store)?;
-        ensure!(
-            restored.revision == 4 && restored.effective("OFFLINE fixture output").bass_db == 0.0,
-            "Native comparison or undo failed"
-        );
-        ensure!(
-            !store.directory.join("control.json").exists(),
-            "Review queued audio control"
-        );
-    }
-    Ok(
-        json!({"source":"isolated offline fixture","native_menu_construction":true,
-            "native_event_dispatch":true,"native_dialog_clicked":false,
-            "audio_started":false,"hardware_validated":false,"locales":locales}),
-    )
+mod menu_review;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub(super) fn menu_review(capture: bool) -> Result<Value> {
+    menu_review::run(capture)
 }
 
 struct Indicator {
     icon: TrayIcon,
+    mark: super::native_mark::Mark,
+    reduced_motion: bool,
     menu: Menu,
     pending_rows_visible: bool,
     status: MenuItem,
@@ -159,25 +60,15 @@ struct Indicator {
     last_visual: Instant,
     cached_runtime: Value,
     application_status: &'static str,
+    recovery_error: Option<String>,
     #[cfg(target_os = "macos")]
     mini: MenuItem,
     #[cfg(target_os = "macos")]
     hud: crate::ui::desktop::monitor::Hud,
+    #[cfg(target_os = "macos")]
+    header: super::menu_header::Header,
 }
-fn wave_icon() -> Result<Icon> {
-    let mut rgba = vec![0_u8; 32 * 32 * 4];
-    for x in 3..29_usize {
-        let wave = ((x as f64 - 3.0) * std::f64::consts::PI * 2.0 / 25.0).sin();
-        for offset in [-6.0, 0.0, 6.0] {
-            let y = (16.0 + offset + 2.5 * wave).round() as usize;
-            for dy in 0..2 {
-                let index = ((y + dy) * 32 + x) * 4;
-                rgba[index..index + 4].copy_from_slice(&[180, 192, 224, 255]);
-            }
-        }
-    }
-    Ok(Icon::from_rgba(rgba, 32, 32)?)
-}
+
 impl Indicator {
     fn new(store: Store, auto_start: bool) -> Result<Self> {
         let menu = Menu::new();
@@ -251,18 +142,24 @@ impl Indicator {
             &stop,
             &quit,
         ])?;
-        let icon = TrayIconBuilder::new()
-            .with_menu(Box::new(menu.clone()))
-            .with_tooltip(format!("Maris - {}", t("Standby")))
-            .with_icon(wave_icon()?)
+        let mark = super::native_mark::Mark::new()?;
+        let icon = mark
+            .build(
+                TrayIconBuilder::new()
+                    .with_menu(Box::new(menu.clone()))
+                    .with_tooltip(format!("Maris - {}", t("Standby"))),
+            )
             .build()?;
-        icon.set_title(Some("Maris"));
+        #[cfg(target_os = "macos")]
+        let header = super::menu_header::Header::new(&icon, &menu)?;
         store.write_json("desktop.json", &json!({"active":true,"pid":std::process::id(),"updated_at_ms":crate::analysis::now_ms()}))?;
         if auto_start {
             start_system(store.clone());
         }
         Ok(Self {
             icon,
+            mark,
+            reduced_motion: reduce_motion(),
             menu,
             pending_rows_visible: false,
             status,
@@ -299,10 +196,13 @@ impl Indicator {
             last_visual: Instant::now() - Duration::from_secs(1),
             cached_runtime: json!({"active":false}),
             application_status: "Apply state unknown",
+            recovery_error: None,
             #[cfg(target_os = "macos")]
             mini,
             #[cfg(target_os = "macos")]
             hud: crate::ui::desktop::monitor::Hud::new(auto_start)?,
+            #[cfg(target_os = "macos")]
+            header,
         })
     }
     fn refresh_quick_controls(&mut self) -> Result<()> {
@@ -342,6 +242,11 @@ impl Indicator {
             .set_text(desktop_controls::menu_text(&summary.listening));
         self.tone_caption
             .set_text(desktop_controls::menu_text(&summary.eq));
+        #[cfg(target_os = "macos")]
+        self.header.update(
+            t(summary.status),
+            &desktop_controls::menu_text(&summary.output),
+        );
         self.compare.set_text(format!(
             "{} · {}",
             t("Compare reference / enhanced"),
@@ -483,6 +388,26 @@ impl Indicator {
             None
         }
     }
+    fn wait_interval(&self) -> Duration {
+        #[cfg(target_os = "macos")]
+        let visible = self.hud.is_visible();
+        #[cfg(not(target_os = "macos"))]
+        let visible = false;
+        Duration::from_millis(super::status_icon::poll_interval_ms(
+            &self.cached_runtime,
+            crate::analysis::now_ms(),
+            self.reduced_motion,
+            visible,
+        ))
+    }
+    fn show_status(&mut self, state: &str, output: &str) {
+        self.status.set_text(format!("Maris · {state}"));
+        #[cfg(target_os = "macos")]
+        self.header.update(state, output);
+        let _ = self
+            .icon
+            .set_tooltip(Some(format!("Maris · {state} · {output}")));
+    }
     /// Dispatch exactly one native event. Telemetry refresh never repeats an action.
     /// The confirmer is the OS presentation boundary; the same controller commits in tests.
     fn menu_action(
@@ -490,6 +415,21 @@ impl Indicator {
         event: MenuEvent,
         confirm: impl FnOnce(&str, &[String]) -> Result<Option<bool>>,
     ) -> Result<()> {
+        let passive = event.id == *self.open.id()
+            || self
+                .languages
+                .iter()
+                .any(|(item, _)| event.id == *item.id());
+        #[cfg(target_os = "macos")]
+        let passive = passive || event.id == *self.mini.id();
+        if self.closing
+            && !passive
+            && event.id != *self.stop.id()
+            && event.id != *self.quit.id()
+            && event.id != *self.cancel_selection.id()
+        {
+            bail!("Stopping audio");
+        }
         #[cfg(target_os = "macos")]
         if event.id == *self.mini.id() {
             self.hud.toggle();
@@ -576,19 +516,32 @@ impl Indicator {
             self.last_refresh = Instant::now() - Duration::from_secs(1);
         }
         if self.closing {
-            self.status
-                .set_text(format!("Maris - {}", t("Stopping audio")));
+            self.toggle.set_enabled(false);
+            self.output_menu.set_enabled(false);
+            self.preset_menu.set_enabled(false);
+            self.compare.set_enabled(false);
+            self.undo.set_enabled(false);
+            self.apply_selection.set_enabled(false);
+            self.resume.set_enabled(false);
+            self.show_status(t("Stopping audio"), &self.output_caption.text());
             if control::is_stopped(&self.store) {
                 // A previous crash can leave a route journal even after the engine releases its lock.
                 if let Err(error) = audio::restore(&self.store) {
                     #[cfg(target_os = "macos")]
                     {
-                        self.status.set_text(format!(
+                        let failure = format!(
                             "{}: {}",
                             t("Restore failed"),
                             crate::i18n::diagnostic(&error.to_string())
+                        );
+                        self.show_status(&failure, &self.output_caption.text());
+                        self.recovery_error = Some(failure.clone());
+                        self.controller.notice = Some(Notice::error(failure));
+                        self.notice.set_text(desktop_controls::menu_text(
+                            &self.controller.notice.as_ref().unwrap().render(),
                         ));
                         self.closing = false;
+                        self.resume.set_enabled(true);
                         return Ok(false);
                     }
                     #[cfg(not(target_os = "macos"))]
@@ -597,16 +550,24 @@ impl Indicator {
                 return Ok(true);
             }
         }
-        if self.last_visual.elapsed() >= Duration::from_millis(80) {
+        let visual_interval = self.wait_interval().max(Duration::from_millis(80));
+        if self.last_visual.elapsed() >= visual_interval {
             self.cached_runtime = audio::runtime_status(&self.store);
             self.last_visual = Instant::now();
         }
+        self.mark.update(
+            &self.icon,
+            &self.cached_runtime,
+            crate::analysis::now_ms(),
+            self.reduced_motion,
+        )?;
         #[cfg(target_os = "macos")]
         self.hud.tick(
             &self.cached_runtime,
             self.cached_runtime["tonal_bypass"] == true,
         );
         if self.last_refresh.elapsed() >= Duration::from_millis(500) && !self.closing {
+            self.reduced_motion = reduce_motion();
             self.language.refresh(&self.store);
             if let Err(error) = self.refresh_quick_controls() {
                 self.application_status = "Apply state unknown";
@@ -629,28 +590,22 @@ impl Indicator {
             let runtime = audio::runtime_status(&self.store);
             let startup = read_json::<Value>(&self.store.directory.join("startup.json"))
                 .unwrap_or(Value::Null);
-            let mode = if self.application_status == "Awaiting telemetry" {
-                "Awaiting telemetry"
-            } else if runtime["active"] != true {
-                if startup["phase"] == "requesting_system_audio"
-                    && !control::is_stopped(&self.store)
-                {
-                    "Awaiting authorization"
-                } else if startup["phase"] == "failed" {
-                    "Audio unavailable"
-                } else {
-                    "Standby"
-                }
-            } else if self.application_status != "Applied" {
-                self.application_status
-            } else if runtime["tonal_bypass"] == true {
-                "Processing bypassed"
-            } else if runtime["neural"].is_object() {
-                "Voice AI"
-            } else {
-                "Processing"
-            };
-            self.status.set_text(format!("Maris - {}", t(mode)));
+            let mode = super::monitor_state::menu_mode(
+                &runtime,
+                &startup,
+                self.application_status,
+                control::is_stopped(&self.store),
+            );
+            // A failed restore remains visible until its journal is successfully
+            // resolved; the next telemetry refresh must not hide the diagnostic.
+            if !self.store.directory.join("route.json").exists() {
+                self.recovery_error = None;
+            }
+            let display = self
+                .recovery_error
+                .clone()
+                .unwrap_or_else(|| t(mode).to_owned());
+            self.show_status(&display, &self.output_caption.text());
             if runtime["active"] != true && startup["phase"] == "failed" {
                 self.profile.set_text(format!(
                     "{}: {}",
@@ -665,12 +620,6 @@ impl Indicator {
             } else {
                 "Bypass processing (keep safety gain)"
             }));
-            let _ = self.icon.set_tooltip(Some(format!(
-                "Maris - {} - {}",
-                t(mode),
-                runtime["output"].as_str().unwrap_or(t("Unavailable"))
-            )));
-            self.icon.set_title(Some("Maris"));
             #[cfg(target_os = "macos")]
             self.mini.set_text(t("Compact monitor"));
             self.store.write_json("desktop.json", &json!({"active":true,"pid":std::process::id(),"mode":mode,"compact_window_id":self.compact_window_id(),"updated_at_ms":crate::analysis::now_ms()}))?;
@@ -697,6 +646,16 @@ fn start_system(store: Store) {
         }
     });
 }
+fn reduce_motion() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        super::menu_header::reduced_motion()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        crate::ui::tui::studio::appearance::Appearance::from_environment().reduced_motion
+    }
+}
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub fn event_loop(store: Store, quitting: Arc<AtomicBool>, auto_start: bool) -> Result<()> {
     use tao::{
@@ -713,7 +672,12 @@ pub fn event_loop(store: Store, quitting: Arc<AtomicBool>, auto_start: bool) -> 
     let mut indicator = None;
     let mut failure = None;
     event_loop.run_return(|event, _, flow| {
-        *flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(33));
+        *flow = ControlFlow::WaitUntil(
+            Instant::now()
+                + indicator
+                    .as_ref()
+                    .map_or(Duration::from_millis(500), Indicator::wait_interval),
+        );
         if matches!(event, Event::NewEvents(StartCause::Init)) && indicator.is_none() {
             match Indicator::new(store.clone(), auto_start) {
                 Ok(icon) => indicator = Some(icon),
@@ -734,7 +698,9 @@ pub fn event_loop(store: Store, quitting: Arc<AtomicBool>, auto_start: bool) -> 
             if let Some(icon) = indicator.as_mut() {
                 match icon.tick(quitting.load(Ordering::Relaxed)) {
                     Ok(true) => *flow = ControlFlow::Exit,
-                    Ok(false) => {}
+                    Ok(false) => {
+                        *flow = ControlFlow::WaitUntil(Instant::now() + icon.wait_interval())
+                    }
                     Err(error) => {
                         failure = Some(error);
                         *flow = ControlFlow::Exit;
@@ -755,7 +721,7 @@ pub fn event_loop(store: Store, quitting: Arc<AtomicBool>, auto_start: bool) -> 
     ensure!(std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_some(), "A desktop D-Bus session and StatusNotifier tray host are required; use --no-tray on headless Linux");
     let mut indicator = Indicator::new(store, auto_start)?;
     while !indicator.tick(quitting.load(Ordering::Relaxed))? {
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(indicator.wait_interval());
     }
     Ok(())
 }

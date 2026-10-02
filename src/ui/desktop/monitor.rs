@@ -121,7 +121,15 @@ impl Hud {
             }
         }
     }
+    pub fn is_visible(&self) -> bool {
+        // SAFETY: retained NSPanel, main-thread-only owner and BOOL return.
+        unsafe { msg_send![&self.panel, isVisible] }
+    }
     pub fn tick(&mut self, runtime: &serde_json::Value, bypass: bool) {
+        if !self.is_visible() {
+            self.last = Instant::now();
+            return;
+        }
         let dt = self.last.elapsed().as_secs_f64();
         self.last = Instant::now();
         let now = crate::analysis::now_ms();
