@@ -22,7 +22,38 @@ fn mouse(kind: MouseEventKind) -> Event {
         modifiers: KeyModifiers::NONE,
     })
 }
-fn fixture() -> (tempfile::TempDir, Store) {
+struct Heartbeat {
+    stop: std::sync::mpsc::Sender<()>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+impl Heartbeat {
+    fn start(store: Store) -> Self {
+        let (stop, receiver) = std::sync::mpsc::channel();
+        let thread = std::thread::spawn(move || {
+            while matches!(
+                receiver.recv_timeout(Duration::from_millis(100)),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+            ) {
+                store.write_json("runtime.json", &json!({
+                    "active":true,"music_processing":true,"session_id":"click-fixture",
+                    "profile_key":"Headphones","output":"Headphones","sample_rate":48000,
+                    "updated_at_ms":maris::analysis::now_ms(),
+                    "applied_revision":0,"applied_music_revision":0
+                })).unwrap();
+            }
+        });
+        Self { stop, thread: Some(thread) }
+    }
+}
+impl Drop for Heartbeat {
+    fn drop(&mut self) {
+        let _ = self.stop.send(());
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+fn fixture() -> (tempfile::TempDir, Store, Heartbeat) {
     let temp = tempfile::tempdir().unwrap();
     let store = Store::at(temp.path());
     store.write_json("runtime.json", &json!({
@@ -30,7 +61,8 @@ fn fixture() -> (tempfile::TempDir, Store) {
         "profile_key":"Headphones","output":"Headphones","sample_rate":48000,
         "updated_at_ms":maris::analysis::now_ms(),"applied_revision":0,"applied_music_revision":0
     })).unwrap();
-    (temp, store)
+    let heartbeat = Heartbeat::start(store.clone());
+    (temp, store, heartbeat)
 }
 
 #[test]
@@ -89,7 +121,7 @@ fn enter_after_a_deliberate_adjustment_is_not_dropped_as_repeat() {
 
 #[test]
 fn successive_native_menu_actions_do_not_conflict_with_their_own_saved_revision() {
-    let (_temp, store) = fixture();
+    let (_temp, store, _heartbeat) = fixture();
     let mut controller = Controller::default();
     controller.observe(
         &Summary::read(
@@ -116,7 +148,7 @@ fn successive_native_menu_actions_do_not_conflict_with_their_own_saved_revision(
 
 #[test]
 fn confirmed_menu_scene_can_be_compared_immediately_without_a_refresh() {
-    let (_temp, store) = fixture();
+    let (_temp, store, _heartbeat) = fixture();
     let mut controller = Controller::default();
     controller.observe(
         &Summary::read(
@@ -182,7 +214,7 @@ fn rapid_deliberate_plus_minus_clicks_are_not_throttled_as_keyboard_toggles() {
 
 #[test]
 fn removing_label_revision_guards_would_overwrite_an_external_edit() {
-    let (_temp, store) = fixture();
+    let (_temp, store, _heartbeat) = fixture();
     let mut controller = Controller::default();
     controller.observe(
         &Summary::read(
