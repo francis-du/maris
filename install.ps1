@@ -297,12 +297,13 @@ function Receive-MarisPackage([string]$RequestedVersion, [string]$Architecture) 
         throw
     }
 }
-if (-not $online) { $From = Safe-Path $From }
+# A developer build has no input payload until compilation has completed.
+if (-not $online -and -not $Build) { $From = Safe-Path $From }
 $Prefix = Safe-Path $Prefix
 $profileRoot = Safe-Path $env:USERPROFILE
 if (-not $Prefix.StartsWith($profileRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Choose an installation prefix inside your user profile; system-wide installation is not supported.' }
 $destination = Join-Path $Prefix 'Maris'
-if (-not $online -and $From.Equals($destination, [StringComparison]::OrdinalIgnoreCase)) { throw 'Source and destination must differ.' }
+if (-not $online -and -not $Build -and $From.Equals($destination, [StringComparison]::OrdinalIgnoreCase)) { throw 'Source and destination must differ.' }
 function Check-Destination {
     $null = Safe-Path $Prefix
     $null = Safe-Path $destination
