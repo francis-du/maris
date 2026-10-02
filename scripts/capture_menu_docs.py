@@ -26,7 +26,7 @@ SOURCES = ('Cargo.toml', 'Cargo.lock', 'src/ui/desktop/native.rs',
            'src/ui/desktop/menu_capture.rs', 'src/ui/desktop/monitor_state.rs',
            'src/ui/desktop/controls.rs', 'src/ui/desktop/events.rs', 'src/ui/desktop/mod.rs',
            'src/i18n/mod.rs', 'src/i18n/console.rs', 'src/i18n/surface.rs',
-           'src/i18n/messages.rs', 'tests/support/menu_probe.rs')
+           'src/i18n/messages.rs', 'tests/support/menu_probe.rs', 'scripts/capture_menu_docs.py')
 MANIFEST = 'menu-bar-review-manifest.json'
 LIMIT = 2_000_000
 LABELS = {
@@ -201,7 +201,7 @@ def main() -> None:
         return
     before = source_hashes(root)
     environment = dict(os.environ, CARGO_BUILD_JOBS='2')
-    subprocess.run(['cargo', 'run', '--locked', '--quiet', '--example', 'menu_probe'], cwd=root,
+    subprocess.run(['cargo', 'run', '--locked', '--quiet', '--example', 'menu_probe', '--', '--capture'], cwd=root,
                    env=environment, check=True, timeout=240, stdout=subprocess.DEVNULL)
     if source_hashes(root) != before:
         raise ValueError('Native render sources changed during the probe; rerun after source ownership is settled')
