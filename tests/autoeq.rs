@@ -13,6 +13,37 @@ fn parses_autoeq_recommended_index() {
     assert_eq!(entries.len(), 4);
     assert_eq!(entries[0].source, "oratory1990");
     assert_eq!(entries[0].form_factor, "over-ear");
+    assert_eq!(
+        entries[1].path,
+        "./Example/over-ear/Sony%20WH-1000XM5%20(ANC%20On)"
+    );
+}
+
+#[test]
+fn pinned_parenthesized_models_keep_the_full_profile_destination() {
+    let entries = autoeq::catalog().unwrap();
+    let entry = entries
+        .iter()
+        .find(|entry| entry.name == "Beyerdynamic DT 880 (250 Ohm)")
+        .unwrap();
+    assert_eq!(
+        entry.path,
+        "./Auriculares%20Argentina/over-ear/Beyerdynamic%20DT%20880%20(250%20Ohm)"
+    );
+    let nested = autoeq::parse_index("- [Nested](./fixture/over-ear/Headphone%20(outer%20(inner)))\n- [Broken](./fixture/Headphone%20unclosed\n");
+    assert_eq!(nested.len(), 1);
+    assert_eq!(
+        nested[0].path,
+        "./fixture/over-ear/Headphone%20(outer%20(inner))"
+    );
+    let unmatched = entries
+        .iter()
+        .find(|entry| entry.name == "Alpha Omega Omega on-off-off)")
+        .unwrap();
+    assert_eq!(
+        unmatched.path,
+        "./Super%20Review/in-ear/Alpha%20Omega%20Omega%20on-off-off)"
+    );
 }
 
 #[test]
@@ -70,6 +101,13 @@ fn bundled_profile_pack_contains_known_profile() {
         .correction_source
         .as_deref()
         .is_some_and(|source| source.contains("AutoEq@")));
+    let parenthesized = autoeq::catalog()
+        .unwrap()
+        .into_iter()
+        .find(|entry| entry.name == "Beyerdynamic DT 880 (250 Ohm)")
+        .unwrap();
+    let corrected = autoeq::bundled_profile(&parenthesized).unwrap();
+    assert!(corrected.correction.len() >= 5);
 }
 
 #[test]

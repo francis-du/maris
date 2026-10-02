@@ -34,15 +34,23 @@ def digest(path: Path) -> str:
 def inspect_kit(archive: Path, item: dict) -> None:
     """Bind catalog metadata to the actual package before any publication manifest exists."""
     system, arch, version = item['platform'], item['architecture'], item['version']
+    cli = item.get('interface') == 'cli'
+    if item.get('native_gate') is not None and not isinstance(item['native_gate'], dict):
+        raise ValueError('Invalid native acceptance record')
     stem = f'Maris-{version}-{system}-{arch}'
-    payload = 'Maris.app' if system == 'macos' else 'Maris'
-    executable = 'Contents/MacOS/maris' if system == 'macos' else ('bin/maris.exe' if system == 'windows' else 'bin/maris')
+    payload = 'Maris.app' if system == 'macos' and not cli else 'Maris'
+    executable = 'Contents/MacOS/maris' if system == 'macos' and not cli else ('bin/maris.exe' if system == 'windows' else 'bin/maris')
     binary_name = f'{stem}/{payload}/{executable}'
     marker_name = f'{stem}/.maris-release'
-    identity_name = f'{stem}/{payload}/' + ('Contents/Info.plist' if system == 'macos' else '.maris-package')
-    helper_name = f'{stem}/install.ps1' if system == 'windows' else f'{stem}/scripts/install_{system}.sh'
+    identity_name = f'{stem}/{payload}/' + ('Contents/Info.plist' if system == 'macos' and not cli else '.maris-package')
+    helper_name = f'{stem}/install.ps1' if system == 'windows' else f'{stem}/scripts/install_{"cli" if cli else system}.sh'
+    proof_name = f'{stem}/CLI_VERIFICATION.json'
+    notice_name = f'{stem}/{payload}/resources/notices/index.json'
+    license_name = f'{stem}/{payload}/resources/' + ('MARIS_LICENSE.txt' if item.get('native_gate', {}).get('project_license_status') == 'declared' else 'MARIS_LICENSE_STATUS.txt') if cli and item.get('native_gate') else ''
+    acceptance = cli and bool(item.get('native_gate'))
     seen, spelling, kinds = set(), {}, {}
     captured = {}
+    file_hashes = {}
     total = count = 0
 
     def inspect(name, size, mode, directory, open_entry):
@@ -76,9 +84,10 @@ def inspect_kit(archive: Path, item: dict) -> None:
             if size:
                 raise ValueError('Directory payload rejected')
             return
-        if path not in (binary_name, marker_name, identity_name, helper_name):
+        relevant = path in (binary_name, marker_name, identity_name, helper_name) or acceptance and path in (proof_name, notice_name, license_name)
+        if not relevant and not acceptance:
             return
-        bound = 134217728 if path == binary_name else (1048576 if path == helper_name else 65536)
+        bound = 134217728 if path == binary_name else (1048576 if path in (helper_name, notice_name, license_name) else (65536 if relevant else 536870912))
         if not 0 < size <= bound:
             raise ValueError('Missing or oversized executable/installer/identity')
         hasher = hashlib.sha256(); chunks = []; read = 0
@@ -91,11 +100,13 @@ def inspect_kit(archive: Path, item: dict) -> None:
                 if read > bound or read > size:
                     raise ValueError('Release entry exceeds its declared size')
                 hasher.update(chunk)
-                if path != binary_name:
+                if relevant and path != binary_name:
                     chunks.append(chunk)
         if read != size:
             raise ValueError('Truncated release kit entry')
-        captured[path] = hasher.hexdigest() if path == binary_name else b''.join(chunks)
+        file_hashes[path] = hasher.hexdigest()
+        if relevant:
+            captured[path] = hasher.hexdigest() if path == binary_name else b''.join(chunks)
 
     try:
         if system == 'windows':
@@ -113,16 +124,33 @@ def inspect_kit(archive: Path, item: dict) -> None:
                     inspect(entry.name, entry.size, entry.mode, entry.isdir(), lambda e=entry: source.extractfile(e))
         if not all(name in captured for name in (binary_name, marker_name, identity_name, helper_name)):
             raise ValueError('Release kit is missing its executable, installer or identity')
-        expected = '\n'.join(['maris-install-kit-v1', version, system, arch,
-                              item['source_sha256'], item['channel'], item['binary_sha256']]) + '\n'
+        expected = '\n'.join(['maris-install-kit-v2' if cli else 'maris-install-kit-v1', version, system, arch,
+                              item['source_sha256'], item['channel'], item['binary_sha256']] + (['cli'] if cli else [])) + '\n'
         if captured[marker_name] != expected.encode('ascii') or captured[binary_name] != item['binary_sha256']:
             raise ValueError('Release record differs from embedded identity or executable')
-        if system == 'macos':
+        if system == 'macos' and not cli:
             metadata = plistlib.loads(captured[identity_name])
             if metadata.get('CFBundleShortVersionString') != version:
                 raise ValueError('Bundle and catalog versions differ')
-        elif captured[identity_name] != f'maris-package-v1\n{system}\n{arch}\n{version}\n'.encode('ascii'):
+        elif captured[identity_name] != (f'maris-package-v2\n{system}\n{arch}\n{version}\ncli\n' if cli else f'maris-package-v1\n{system}\n{arch}\n{version}\n').encode('ascii'):
             raise ValueError('Native payload identity differs from catalog')
+        if acceptance:
+            proof = item['native_gate']
+            if (json.loads(captured.get(proof_name, b'null')) != proof
+                    or file_hashes.get(notice_name) != proof.get('notice_index_sha256')
+                    or file_hashes.get(license_name) != proof.get('project_license_sha256')):
+                raise ValueError('CLI acceptance differs from the actual archived proof, notices or license status')
+            notices = json.loads(captured[notice_name])
+            from dependency_notices import target
+            if notices.get('target') != target(system, arch) or not notices.get('runtime_dependencies'):
+                raise ValueError('Archived notice inventory belongs to another native target')
+            entries = [entry for package in notices['runtime_dependencies'] for entry in package['files']] + notices['bundled_assets']
+            if any(not package.get('license') or not package.get('files') for package in notices['runtime_dependencies']):
+                raise ValueError('Archived dependency has no actual notice text')
+            for entry in entries:
+                name = f'{stem}/{payload}/resources/notices/' + entry['path']
+                if file_hashes.get(name) != entry['sha256']:
+                    raise ValueError('Actual archived dependency notice is missing or modified')
     except (tarfile.TarError, zipfile.BadZipFile, EOFError, plistlib.InvalidFileException) as error:
         raise ValueError('Unreadable release kit') from error
 
@@ -135,7 +163,9 @@ def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: di
         if file.stat().st_size > 32768:
             raise ValueError('Oversized release record')
         item = json.loads(file.read_text(encoding='utf-8'))
-        if item.get('schema_version') != 1 or item.get('channel') not in ('candidate', 'stable'):
+        if (item.get('schema_version') not in (1, 2) or item.get('channel') not in ('candidate', 'stable')
+                or (item.get('schema_version') == 2 and item.get('interface') != 'cli')
+                or (item.get('schema_version') == 1 and item.get('interface') not in (None, 'gui'))):
             raise ValueError('Unsupported release record schema or channel')
         version, system, arch = item['version'], item['platform'], item['architecture']
         suffix = '.zip' if system == 'windows' else '.tar.gz'
@@ -156,6 +186,10 @@ def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: di
     versions = {r['version'] for r in records}; sources = {r['source_sha256'] for r in records}; channels = {r['channel'] for r in records}
     if len(versions) != 1 or len(sources) != 1 or len(channels) != 1 or not channels <= {'candidate', 'stable'}:
         raise ValueError('Mixed source revisions, versions or channels rejected')
+    interfaces = {r.get('interface', 'gui') for r in records}
+    if len(interfaces) != 1:
+        raise ValueError('Mixed CLI and GUI distribution contracts rejected')
+    cli = interfaces == {'cli'}
     identities = {(r.get('ci_run'), r.get('ci_commit'), r.get('ci_repository')) for r in records}
     if len(identities) != 1:
         raise ValueError('Mixed CI runs, commits or repositories rejected')
@@ -172,7 +206,9 @@ def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: di
             raise ValueError('CI kits differ from the checked-out source')
     channel = records[0]['channel']
     if channel == 'stable':
-        if blockers(root):
+        if cli and expected_ci is None:
+            raise ValueError('CLI publication requires the exact six-target CI run identity')
+        if not cli and blockers(root):
             raise ValueError('Unfinished product requirements prohibit a stable manifest')
         if next(iter(sources)) != source_digest():
             raise ValueError('Approved kits do not match the current source')
@@ -183,8 +219,14 @@ def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: di
                     or proof.get('platform') != record['platform']
                     or proof.get('architecture') != record['architecture']):
                 raise ValueError('Missing matching native signature and acceptance preflight')
-    lines = ['maris-release-v1', 'version\t' + records[0]['version'],
+            if cli and (proof.get('interface') != 'cli' or proof.get('publisher_signed') is not False
+                        or proof.get('completed_rounds', 0) < 200 or proof.get('package_smoke_passed') is not True
+                        or not re.fullmatch('[a-f0-9]{64}', str(proof.get('notice_index_sha256', '')))):
+                raise ValueError('Missing native CLI software, notice and installation evidence')
+    lines = ['maris-release-v2' if cli else 'maris-release-v1', 'version\t' + records[0]['version'],
              'source_sha256\t' + records[0]['source_sha256'], 'channel\t' + channel]
+    if cli:
+        lines.append('interface\tcli')
     for item in sorted(records, key=lambda r: (r['platform'], r['architecture'])):
         lines.append('\t'.join(['asset', item['platform'], item['architecture'], item['archive'],
                                 item['sha256'], str(item['bytes']), item['binary_sha256']]))
@@ -246,6 +288,7 @@ def gate(args, bundle: Path) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--candidate', action='store_true')
+    parser.add_argument('--cli', action='store_true', help='Prepare a checksum-verified CLI/TUI stable kit; GUI gates are separate')
     parser.add_argument('--bundle', type=Path)
     parser.add_argument('--approval', type=Path)
     parser.add_argument('--report', type=Path)
@@ -255,6 +298,12 @@ def main() -> None:
     parser.add_argument('--collect', type=Path)
     parser.add_argument('--output', type=Path)
     args = parser.parse_args()
+    if args.cli:
+        if args.candidate or args.collect or args.output or args.bundle or args.approval or args.signature or args.digest_file or args.keyring:
+            parser.error('--cli uses only the current native CI package and its actual software reports')
+        from cli_release import prepare
+        print(json.dumps(prepare(args.report)))
+        return
     if args.collect is not None:
         if args.output is None or args.candidate or any([args.bundle, args.approval, args.report]):
             parser.error('--collect requires only --output')

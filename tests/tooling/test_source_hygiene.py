@@ -34,20 +34,26 @@ class SourceHygiene(unittest.TestCase):
         self.assertFalse((ROOT / 'run.sh').exists())
         self.assertFalse((ROOT / 'run.ps1').exists())
 
-    def test_vendored_flexaudio_core_is_audited_for_credentials(self):
-        vendor = self.root / 'third_party/flexaudio-core'
-        (vendor / 'src').mkdir(parents=True)
-        (vendor / 'Cargo.toml').write_text('[package]\nname = "flexaudio-core"\n', encoding='utf-8')
-        source = vendor / 'src/lib.rs'
-        source.write_text('// Audited vendored source\n', encoding='utf-8')
-        names = {p.relative_to(self.root).as_posix() for p in source_audit.source_files(self.root)}
-        self.assertIn('third_party/flexaudio-core/Cargo.toml', names)
-        self.assertIn('third_party/flexaudio-core/src/lib.rs', names)
-        credential = '-----BEGIN ' + 'PRIVATE KEY-----'
-        source.write_text(credential + '\n', encoding='utf-8')
-        with self.assertRaisesRegex(ValueError, 'Potential credential') as failure:
-            source_audit.source_files(self.root)
-        self.assertNotIn(credential, str(failure.exception))
+    def test_approved_vendored_crates_are_audited_for_credentials(self):
+        for package in ('flexaudio-core', 'gemm-common'):
+            with self.subTest(package=package):
+                vendor = self.root / 'third_party' / package
+                (vendor / 'src').mkdir(parents=True)
+                (vendor / 'Cargo.toml').write_text(
+                    f'[package]\nname = "{package}"\n', encoding='utf-8')
+                source = vendor / 'src/lib.rs'
+                clean = '// Audited vendored source\n'
+                source.write_text(clean, encoding='utf-8')
+                names = {p.relative_to(self.root).as_posix()
+                         for p in source_audit.source_files(self.root)}
+                self.assertIn(f'third_party/{package}/Cargo.toml', names)
+                self.assertIn(f'third_party/{package}/src/lib.rs', names)
+                credential = '-----BEGIN ' + 'PRIVATE KEY-----'
+                source.write_text(credential + '\n', encoding='utf-8')
+                with self.assertRaisesRegex(ValueError, 'Potential credential') as failure:
+                    source_audit.source_files(self.root)
+                self.assertNotIn(credential, str(failure.exception))
+                source.write_text(clean, encoding='utf-8')
 
     def test_unreviewed_third_party_packages_are_not_publishable(self):
         vendor = self.root / 'third_party/unreviewed/src'

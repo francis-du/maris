@@ -14,6 +14,7 @@ TOP = {".gitignore", ".gitattributes", "AGENTS.md", "README.md", "Cargo.lock", "
        ".wcode/project.yaml"}
 PREFIXES = ("src/", "tests/", "scripts/", "docs/", ".github/", "third_party/eqmac/",
             "third_party/autoeq/", "third_party/musicnn/", "third_party/flexaudio-core/",
+            "third_party/gemm-common/", "third_party/rust-notices/",
             ".wcode/design/")
 SECRET_PATTERNS = [re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
                    re.compile(r"gh[pousr]_[A-Za-z0-9]{30,}"),

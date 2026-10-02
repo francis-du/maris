@@ -71,7 +71,7 @@ class Documentation(unittest.TestCase):
             root = Path(temporary)
             shutil.copytree(ROOT / 'docs/locales', root / 'docs/locales')
             file = root / 'docs/locales/ja.json'
-            data = json.loads(file.read_text()); del data['requirements']['brand-readme']; file.write_text(json.dumps(data))
+            data = json.loads(file.read_text(encoding='utf-8')); del data['requirements']['brand-readme']; file.write_text(json.dumps(data))
             with self.assertRaises(ValueError): translations(root)
             path = root / 'docs/development/requirements.json'; path.parent.mkdir()
             records = [{'id': key, 'status':'pending'} for key in REQUIRED[:-1]]
@@ -142,13 +142,13 @@ class Documentation(unittest.TestCase):
             root = Path(temporary); output = root / '_site'; output.mkdir()
             (output / 'keep.txt').write_text('unrelated')
             with self.assertRaises(ValueError): site.stage(self.output, root)
-            self.assertEqual((output / 'keep.txt').read_text(), 'unrelated')
+            self.assertEqual((output / 'keep.txt').read_text(encoding='utf-8'), 'unrelated')
             self.assertFalse((root / '.maris-review/site-build.lock').exists())
             (output / '.maris-generated').write_text(site.MARKER)
             site.stage(self.output, root)
             retained = list((root / '.maris-review').glob('site-previous-*'))
             self.assertEqual(len(retained), 1)
-            self.assertEqual((retained[0] / 'keep.txt').read_text(), 'unrelated')
+            self.assertEqual((retained[0] / 'keep.txt').read_text(encoding='utf-8'), 'unrelated')
             self.assertTrue((output / 'zh-CN/install.html').is_file())
 
     def test_every_install_language_documents_download_before_developer_build(self):
@@ -159,7 +159,7 @@ class Documentation(unittest.TestCase):
             self.assertLess(text.index('{#online}'), text.index('{#development}'))
             for option in ('--dry-run', '--version', '-Version', 'SHA-256'):
                 self.assertIn(option, text)
-        readme = (ROOT / 'README.md').read_text()
+        readme = (ROOT / 'README.md').read_text(encoding='utf-8')
         self.assertIn('curl -fsSL https://francis-du.github.io/maris/install.sh | bash', readme)
         self.assertIn('irm https://francis-du.github.io/maris/install.ps1 | iex', readme)
 

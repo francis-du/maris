@@ -19,7 +19,11 @@ SPEC.loader.exec_module(package)
 
 def fixture(system, arch):
     value = bytearray(256)
-    if system == 'linux':
+    if system == 'macos':
+        value[:4] = b'\xcf\xfa\xed\xfe'
+        struct.pack_into('<I', value, 4, 0x01000007 if arch == 'x86_64' else 0x0100000C)
+        struct.pack_into('<I', value, 12, 2)
+    elif system == 'linux':
         value[:7] = b'\x7fELF\x02\x01\x01'
         struct.pack_into('<H', value, 16, 3)
         struct.pack_into('<H', value, 18, 62 if arch == 'x86_64' else 183)

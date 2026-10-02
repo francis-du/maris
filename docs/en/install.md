@@ -1,5 +1,7 @@
 # Installation
 
+Version 0.1.0 distributes CLI/TUI archives. The portable binary is not labeled as publisher-signed. The installer verifies its native executable, release manifest and SHA-256; GUI application signing is a separate distribution contract. Physical headphones/Bluetooth and subjective listening acceptance remain explicitly unverified. If the source has no project license declaration, the archive records that fact without adding an open-source license grant.
+
 The installer downloads a native package built by GitHub CI. You do not need a source checkout, Rust or a compiler.
 
 > Maris is in development. These commands require the documentation site and an approved GitHub Release to be available. If either download fails, installation stops; it does not build from source.
@@ -27,7 +29,7 @@ To inspect the script first, download [install.sh](https://francis-du.github.io/
 | Purpose | macOS / Linux | Windows |
 | --- | --- | --- |
 | Show the plan without network or file changes | `bash install.sh --dry-run` | `.\install.ps1 -DryRun` |
-| Install a specific published version | `bash install.sh --version v1.2.3` | `.\install.ps1 -Version v1.2.3` |
+| Install a specific published version | `bash install.sh --version v0.1.0` | `.\install.ps1 -Version v0.1.0` |
 | Choose a user-owned destination | `bash install.sh --prefix "$HOME/Audio Tools"` | `.\install.ps1 -Prefix "$env:LOCALAPPDATA\Programs\Audio Tools"` |
 | Skip the installation question | `bash install.sh --yes` | `.\install.ps1 -Yes` |
 
@@ -37,7 +39,7 @@ Replace the example version with a published tag. Without a version, the install
 
 | System | Architectures | Default installation |
 | --- | --- | --- |
-| macOS 14.2+ | x86_64, ARM64; detects Rosetta | `~/Applications/Maris.app` |
+| macOS 14.2+ | x86_64, ARM64; detects Rosetta | `~/.local/lib/maris; ~/.local/bin/maris` |
 | Linux | x86_64, ARM64 | `~/.local/lib/maris`, with a launcher at `~/.local/bin/maris` |
 | Windows | x86_64, ARM64 | `%LOCALAPPDATA%/Programs/Maris` |
 
@@ -51,13 +53,13 @@ Close the installed Maris before an upgrade. The installer will not terminate a 
 
 Rerun the installer to upgrade. For rollback, select a previously published version or use a complete local installation kit with `--from` / `-From` pointing to the retained backup. After an interrupted installation, inspect the printed paths and running processes before removing a lock.
 
-On macOS, open Maris.app when ready and grant the audio-recording permission. For CLI use, call the executable at the location printed by the installer. `--help` does not start capture. Closing the TUI leaves an existing session running; `maris stop` stops it.
+Use the command printed by the installer, or add `~/.local/bin` to your own shell PATH on macOS/Linux. Start `maris` for the TUI and `maris --help` for commands. On macOS, grant audio-recording permission to the launching terminal when requested; installation grants no permission. Closing the TUI leaves an existing audio session running; `maris stop` stops it.
 
 To uninstall, stop Maris and remove only its installed app/payload and owned launcher. Keeping the preferences allows a later installation to reuse them.
 
 ## Verification and errors {#verification}
 
-The installer checks release status, OS, architecture, version, download length, archive paths and archive/executable SHA-256. It rejects candidate packages, unsafe archive entries and mismatched files. Downloads have HTTPS, time and size limits. macOS uses signature/Gatekeeper checks; Windows uses Authenticode. Linux checks the executable digest from the release manifest. Checksums alone do not independently identify a publisher.
+The CLI/TUI installer checks release status, OS, architecture, version, download length, archive paths and archive/executable SHA-256. It rejects candidate packages, unsafe entries, GUI/CLI identity mismatches and changed files. HTTPS downloads have time and size limits. GUI packages retain their separate macOS signing/Gatekeeper and Windows Authenticode checks. Checksums alone do not independently identify a publisher.
 
 A missing release or HTTP error leaves the current installation unchanged. A checksum, archive or signature failure requires checking the release source. A busy-installation error requires closing Maris or inspecting its lock. Do not turn off OS security protections to install a rejected package.
 

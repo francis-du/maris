@@ -95,8 +95,7 @@ pub fn parse_index(text: &str) -> Vec<Entry> {
             let close = rest.find("](")?;
             let name = &rest[..close];
             let after = &rest[close + 2..];
-            let end = after.find(')')?;
-            let path = &after[..end];
+            let path = super::catalog_link::destination(after)?;
             if !path.starts_with("./") || name.trim().is_empty() {
                 return None;
             }

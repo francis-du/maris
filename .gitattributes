@@ -7,3 +7,5 @@ third_party/eqmac/Equalizer.swift -text whitespace=-blank-at-eol
 # Preserve the pinned MusicNN source/license snapshots exactly as fetched from upstream.
 third_party/musicnn/LICENSE-original-ISC.md -text whitespace=-blank-at-eol,-blank-at-eof
 third_party/musicnn/original/*.py -text whitespace=-blank-at-eol,-blank-at-eof,-space-before-tab
+# License provenance hashes bind the original upstream bytes on every native runner.
+third_party/rust-notices/**/LICENSE* -text whitespace=-blank-at-eol,-blank-at-eof

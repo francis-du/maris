@@ -40,6 +40,8 @@ fn inventory() -> Vec<DeviceInfo> {
 
 #[test]
 fn native_output_selectors_work_without_assuming_a_macos_uid() {
+    // This case models a continuing audio writer, independent of runner scheduling.
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     for (backend, selector) in [
         ("coreaudio_process_tap", "uid:headphones-b"),
         (
@@ -75,6 +77,8 @@ fn native_output_selectors_work_without_assuming_a_macos_uid() {
 
 #[test]
 fn native_output_items_enable_the_current_backend_and_check_only_the_pinned_device() {
+    // This case models a continuing audio writer, independent of runner scheduling.
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     for (backend, prefix) in [
         ("coreaudio_process_tap", "uid:"),
         ("pulse_server", "pulse:"),

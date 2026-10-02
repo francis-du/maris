@@ -1,5 +1,7 @@
 # Maris をインストールする
 
+0.1.0 は CLI/TUI のビルド済みアーカイブを配布します。配布者署名済みとは表示しません。導入時にはネイティブ実行形式、公開一覧と SHA-256 を検証し、GUI アプリの署名は別の配布条件として扱います。実機のヘッドフォン・Bluetooth と主観的な聴感の確認は未完了です。プロジェクトのライセンス宣言がなければ、その事実を記録し、独自にオープンソースの許諾を追加しません。
+
 インストーラーは、このコンピューター用にコンパイルされたアプリをダウンロードします。ソースコードや Rust、Cargo、Xcode、C++ コンパイラーは不要です。ソースからのビルドは開発者が選ぶ別の操作です。ダウンロードに失敗した場合はインストールを止めます。
 
 > 公開・承認済みの正式版が必要です。現在は開発段階です。未公開の版、通信失敗、候補パッケージでは導入を止め、既存アプリを変更しません。
@@ -24,13 +26,13 @@ irm https://francis-du.github.io/maris/install.ps1 | iex
 
 ```sh
 bash install.sh --dry-run
-bash install.sh --version v1.2.3 --yes
+bash install.sh --version v0.1.0 --yes
 bash install.sh --prefix "$HOME/Audio Tools" --yes
 ```
 
 ```powershell
 .\install.ps1 -DryRun
-.\install.ps1 -Version v1.2.3 -Yes
+.\install.ps1 -Version v0.1.0 -Yes
 .\install.ps1 -Prefix "$env:LOCALAPPDATA\Programs\Audio Tools" -Yes
 ```
 
@@ -38,7 +40,7 @@ bash install.sh --prefix "$HOME/Audio Tools" --yes
 
 | OS | アーキテクチャ | 標準の保存先 | 既存の実行ツール |
 | --- | --- | --- | --- |
-| macOS | x86_64 / ARM64、Rosetta を検出 | `~/Applications/Maris.app` | Bash、curl、tar、gzip、SHA-256、Apple 署名ツール |
+| macOS | x86_64 / ARM64、Rosetta を検出 | `~/.local/lib/maris; ~/.local/bin/maris` | Bash、curl、tar、gzip、SHA-256 |
 | Linux | x86_64 / ARM64 | `~/.local/lib/maris`、`~/.local/bin/maris` | Bash、curl、tar、gzip、SHA-256、実行ライブラリー、更新確認用 psmisc |
 | Windows | x86_64 / ARM64 | `%LOCALAPPDATA%/Programs/Maris` | PowerShell 5.1+ と既存 .NET HTTP/ZIP |
 
@@ -50,7 +52,7 @@ bash install.sh --prefix "$HOME/Audio Tools" --yes
 
 展開するファイルはパッケージのフォルダー内に限ります。フォルダー外に書き込むパス、重複名、大文字・小文字だけが違う名前、リンク、特殊ファイル、異常に多いファイルや大きな内容は受け付けません。アプリの版と実行ファイルの SHA-256 がダウンロード一覧と一致してから、インストール済みのアプリを置き換えます。
 
-macOS では署名と Gatekeeper、Windows では Authenticode を確認します。Linux では正式なダウンロード一覧の SHA-256 と実行ファイルを照合します。チェックサムはファイルの変更を検出するためのもので、それだけで配布者の身元や音質を証明するものではありません。
+CLI/TUI の導入では公開一覧、OS、CPU、版、サイズ、展開パスと SHA-256 を照合し、候補版、GUI/CLI の取り違え、改変を拒否します。GUI には別途 macOS の署名/Gatekeeper と Windows の Authenticode 検証を維持します。チェックサムだけでは配布者の身元や音質を証明できません。
 
 ## 更新、復元、初回起動 {#recovery}
 
@@ -58,13 +60,13 @@ macOS では署名と Gatekeeper、Windows では Authenticode を確認しま�
 
 前の正式タグを指定するか、完全なオフラインキットでバックアップを `--from` / `-From` に渡して戻せます。使用中のロックを削除しないでください。停電や強制終了後は残った場所を確認してください。
 
-導入は音声を起動せず、OS 音量・既定出力も変更しません。macOS は準備後に Maris.app を開いて承認し、他の OS は `--help` と明示デバイス・オフライン機能を確認します。実行中の旧プロセスは自動で差し替わりません。
+導入時に表示されたコマンドを使い、macOS/Linux では必要なら自分で `~/.local/bin` を PATH に加えます。`maris` は TUI、`maris --help` はコマンド説明です。macOS の音声録音許可は実際の取り込み開始時に起動元ターミナルへ付与します。導入は許可を変更しません。TUI を閉じても音声処理は続くため、停止には `maris stop` を使います。
 
 ## CI と正式配布 {#ci}
 
 push 検査と手動ネイティブビルドを分離します。CI は六つの対象と candidate キットを作りますが、通常の導入は候補を拒否します。Actions のテスト用パッケージにはアクセス権限と有効期限があります。一般向けのアプリは、確認済みのパッケージを GitHub Releases に公開します。
 
-マニフェストは `maris-release.tsv`、Unix は `.tar.gz`、Windows は `.zip`。正式キットは署名・受け入れ確認と展開後の再検証を必要とし、六対象の版とソースが一致しなければなりません。200 回のテストだけでは承認されません。
+CLI の配布一覧は配布方式を明記し、六対象のネイティブ CI 実行、ソースと版の一致を要求します。導入・更新と 200 回の実行はソフトウェアの証拠であり、実機の受け入れ確認とは別です。署名条件は GUI 配布に適用します。
 
 ## オフラインと開発モード {#development}
 

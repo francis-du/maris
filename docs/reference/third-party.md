@@ -106,3 +106,33 @@ Maris's tonal planner is original bounded heuristic code, not a pretrained neura
 ## flexaudio-core security patch
 
 Maris vendors the unmodified flexaudio-core v0.2.0 source under `third_party/flexaudio-core` and retains its MIT license. The local Cargo manifest changes only its ringbuf dependency from the upstream 0.4 range to ringbuf 0.5.2 so the Windows loopback path does not ship the memory-safety issue fixed by RUSTSEC-2026-0293. The vendored source remains attributable to Studio Sadola; Maris-specific rationale is recorded in `MARIS_PATCH.md`.
+
+## gemm-common AArch64 FP16 patch
+
+`third_party/gemm-common` retains the MIT-licensed published `0.19.0` crate from
+upstream revision `86102c5b712737978371ac9ef7a11982f686d7bc`. The four vector
+half-precision assembly helpers now declare their required `fp16` target feature,
+matching the existing scalar helpers. This fixes baseline AArch64 debug
+compilation; it leaves runtime CPU detection and non-FP16 fallback paths intact.
+It does not raise the application-wide CPU requirement or disable model support.
+
+`UPSTREAM.json` records the original and patched SIMD file hashes, and
+`PATCHES.md` describes the four attribute additions. All other vendored crate
+source and its license are unchanged. The source publication audit covers this
+package with the same credential and path checks as other approved vendors.
+
+The regression reproducer is a library depending on `gemm-f16 = "=0.19.0"`,
+built with Rust 1.94.0 for `aarch64-unknown-linux-gnu` in the default debug
+profile. The published dependency fails with eleven `fullfp16` assembler
+errors; selecting this patch compiles without target-feature overrides.
+The native Linux ARM build workflow additionally compiles and tests Maris itself.
+
+## CLI/TUI archive notice inventory
+
+`scripts/dependency_notices.py` selects the final native normal-dependency graph with locked Cargo metadata and `cargo tree --edges normal --target TARGET`. Every selected package contributes its declared license and actual shipped license/copyright/AUTHORS/NOTICE texts. When a published crate omits shared repository licenses, `third_party/rust-notices/index.json` binds texts fetched from its recorded `.cargo_vcs_info.json` source revision. The generated package index includes file hashes and source-archive pointers; locally patched crates also point to the exact Maris source commit.
+
+The published `dispatch 0.2.0` and `realfft 3.5.0` sources provide MIT and author declarations but no standalone license/copyright file. Their notice records preserve that omission and the published declarations, with the standard MIT permission and disclaimer. No missing copyright year or original notice is invented. This inventory does not claim legal clearance.
+
+CLI archives also retain the original eqMac, AutoEq, MusicNN and flexaudio-core license/provenance records. MusicNN's port declares Apache-2.0 and the converted original checkpoint retains its ISC notice. A full Apache-2.0 text is included beside the original ISC record. The archive records the project's own license as declared or unspecified, matching the source; it adds no new open-source grant when none exists.
+
+The CLI release collector checks these actual archived bytes against the native package's notice index and software evidence. GUI publisher signatures and physical-device/listening acceptance are separate, accurately reported boundaries.

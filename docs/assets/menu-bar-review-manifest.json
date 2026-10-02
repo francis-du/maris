@@ -4,8 +4,8 @@
   "audio_started": false,
   "whole_desktop_captured": false,
   "source_sha256": {
-    "Cargo.toml": "7cec1cd6243955eab7614d38b827005a741913da93f3446000f0def9d2b21918",
-    "Cargo.lock": "52632a7f1e057f0e325d3d0e83e557461767f7523bd9ca66f7b7528af16976c9",
+    "Cargo.toml": "a6f6c2a25af90bb50621bf0e37c03de7a6bd16b4db98193577a5684875a8e3ff",
+    "Cargo.lock": "f024ac4ebb8dea9e41084c0e5a7b8ba122f48e65231dfe9f067f54e7d1f7f4fb",
     "src/ui/desktop/native.rs": "1d98a2c0f002949b7679afbc8c20b4fe69ed66f1ffd60b2a0ee2ed2b3e7c5eaf",
     "src/ui/desktop/native/menu_review.rs": "9f3b1e237244f1ad8b706cfdac3ab7ca6baf9a72e3341c1b56b2a1f69fdb7c33",
     "src/ui/desktop/native/native_loop.rs": "f853ab83941c53fb543d0c27e67402355a192415cd1db00ad2ef8d637af0d49f",
@@ -24,10 +24,10 @@
     "tests/support/menu_probe.rs": "c091339a019699fd424b22f5980032fc1315ddbc93589b223abb8ba68056fe24",
     "scripts/capture_menu_docs.py": "27173d8c1870a08158080ea6453c90f9adb165a23ac82bc706e45573bb82e1d0"
   },
-  "probe_sha256": "ee2d8812eb7a5ca6ffb5e895b4bb44135a54979c44daea836356d9f30fee51cf",
+  "probe_sha256": "e2f8b1590d7095e4effc4d151b0193048a1a5b5e5ead6e16bf1fa8773762c4b6",
   "images": {
     "menu-bar-en.svg": {
-      "sha256": "ed2527517c524cd76d5899304866002ced6d1b64d1e912e20fbd3ac29c4b54de",
+      "sha256": "e906ef33959ae610a6a6caad81ab089cdd56f291a957d76a24c5d3aa76f0b7b0",
       "locale": "en",
       "width": 1100,
       "height": 1300,
@@ -443,7 +443,7 @@
           }
         },
         {
-          "sha256": "9042db3dd198541cb8fb441b977c32288db596dd7ffa609cfdaaefdf58a29f74",
+          "sha256": "860f99271213aefa6a60ec5aac55ed7f4c40adf657c5883534c363159290b93b",
           "pixel_width": 52,
           "pixel_height": 44,
           "capture": {
@@ -452,7 +452,7 @@
             "logical_width": 26.0,
             "pixel_height": 44,
             "pixel_width": 52,
-            "png_bytes": 4043,
+            "png_bytes": 4011,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -511,7 +511,7 @@
           }
         },
         {
-          "sha256": "9042db3dd198541cb8fb441b977c32288db596dd7ffa609cfdaaefdf58a29f74",
+          "sha256": "860f99271213aefa6a60ec5aac55ed7f4c40adf657c5883534c363159290b93b",
           "pixel_width": 52,
           "pixel_height": 44,
           "capture": {
@@ -520,7 +520,7 @@
             "logical_width": 26.0,
             "pixel_height": 44,
             "pixel_width": 52,
-            "png_bytes": 4043,
+            "png_bytes": 4011,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -581,7 +581,7 @@
       ]
     },
     "menu-bar-zh-CN.svg": {
-      "sha256": "c085904cc29ea4aa7da63c0b2d63d311dcd6bd8b37ab784014615ae112635e68",
+      "sha256": "5b5b89b6ce67317e57de1901cca260038e9ff37192d8e1c295abbb303c376ac8",
       "locale": "zh-CN",
       "width": 1100,
       "height": 1300,
@@ -997,7 +997,7 @@
           }
         },
         {
-          "sha256": "9042db3dd198541cb8fb441b977c32288db596dd7ffa609cfdaaefdf58a29f74",
+          "sha256": "860f99271213aefa6a60ec5aac55ed7f4c40adf657c5883534c363159290b93b",
           "pixel_width": 52,
           "pixel_height": 44,
           "capture": {
@@ -1006,7 +1006,7 @@
             "logical_width": 26.0,
             "pixel_height": 44,
             "pixel_width": 52,
-            "png_bytes": 4043,
+            "png_bytes": 4011,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -1065,7 +1065,7 @@
           }
         },
         {
-          "sha256": "9042db3dd198541cb8fb441b977c32288db596dd7ffa609cfdaaefdf58a29f74",
+          "sha256": "860f99271213aefa6a60ec5aac55ed7f4c40adf657c5883534c363159290b93b",
           "pixel_width": 52,
           "pixel_height": 44,
           "capture": {
@@ -1074,7 +1074,7 @@
             "logical_width": 26.0,
             "pixel_height": 44,
             "pixel_width": 52,
-            "png_bytes": 4043,
+            "png_bytes": 4011,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false

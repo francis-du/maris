@@ -29,11 +29,11 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def fixture(folder, system, arch, channel='stable', extra=None):
+def fixture(folder, system, arch, channel='stable', extra=None, *, cli=False):
     version = '1.2.3'; source = 'a' * 64; binary = b'offline fixture, not executable audio software\n'
     stem = f'Maris-{version}-{system}-{arch}'
-    marker = '\n'.join(['maris-install-kit-v1', version, system, arch, source, channel, sha(binary)]) + '\n'
-    binary_name = 'Maris.app/Contents/MacOS/maris' if system == 'macos' else ('Maris/bin/maris.exe' if system == 'windows' else 'Maris/bin/maris')
+    marker = '\n'.join(['maris-install-kit-v2' if cli else 'maris-install-kit-v1', version, system, arch, source, channel, sha(binary)] + (['cli'] if cli else [])) + '\n'
+    binary_name = 'Maris.app/Contents/MacOS/maris' if system == 'macos' and not cli else ('Maris/bin/maris.exe' if system == 'windows' else 'Maris/bin/maris')
     helper = '''#!/bin/bash
 set -eu
 source=''; prefix=''
@@ -45,12 +45,12 @@ mkdir -p "$prefix"
 printf 'verified fixture installer reached; no audio or real installation\\n' > "$prefix/fixture-receipt"
 '''.encode()
     entries = {f'{stem}/.maris-release': marker.encode(), f'{stem}/{binary_name}': binary}
-    if system == 'macos':
+    if system == 'macos' and not cli:
         entries[f'{stem}/Maris.app/Contents/Info.plist'] = plistlib.dumps({'CFBundleShortVersionString': version})
     else:
-        entries[f'{stem}/Maris/.maris-package'] = f'maris-package-v1\n{system}\n{arch}\n{version}\n'.encode()
+        entries[f'{stem}/Maris/.maris-package'] = (f'maris-package-v2\n{system}\n{arch}\n{version}\ncli\n' if cli else f'maris-package-v1\n{system}\n{arch}\n{version}\n').encode()
     if system != 'windows':
-        entries[f'{stem}/scripts/install_{system}.sh'] = helper
+        entries[f'{stem}/scripts/install_{"cli" if cli else system}.sh'] = helper
     else:
         entries[f'{stem}/install.ps1'] = b'# Isolated fixture installer, not a product payload\n'
     buffer = io.BytesIO()
@@ -74,7 +74,9 @@ printf 'verified fixture installer reached; no audio or real installation\\n' > 
                     info.size = 1; archive.addfile(info, io.BytesIO(b'x'))
     data = buffer.getvalue()
     (folder / 'archive').write_bytes(data)
-    lines = ['maris-release-v1', f'version\t{version}', f'source_sha256\t{source}', f'channel\t{channel}']
+    lines = ['maris-release-v2' if cli else 'maris-release-v1', f'version\t{version}', f'source_sha256\t{source}', f'channel\t{channel}']
+    if cli:
+        lines.append('interface\tcli')
     for target, machine in sorted(TARGETS):
         suffix = '.zip' if target == 'windows' else '.tar.gz'
         selected = (target, machine) == (system, arch)

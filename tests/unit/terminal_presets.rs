@@ -42,6 +42,26 @@ fn select_preset(process: &mut ConsoleProcess, id: &str) {
         "\x1b[A".repeat(catalog.len()),
         "\x1b[B".repeat(selected)
     ));
+    // Wait for the selected row actually drawn by the child before pointer actions.
+    // Sending navigation bytes is not acknowledgement that the picker consumed them.
+    let expected = format!("▶ {}", catalog[selected].name);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut output = String::new();
+    while !process.terminal.screen().contents().lines().any(|line| {
+        line.split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .contains(&expected)
+    }) {
+        process.drain(&mut output);
+        assert!(process.child.try_wait().unwrap().is_none());
+        assert!(
+            Instant::now() < deadline,
+            "selected preset was not rendered: {expected}; screen: {}",
+            process.terminal.screen().contents()
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
 }
 
 #[test]

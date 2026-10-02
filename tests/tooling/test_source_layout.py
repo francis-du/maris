@@ -23,10 +23,10 @@ def root_items(text):
 class SourceLayout(unittest.TestCase):
     def test_root_contains_only_the_two_crate_entry_points(self):
         self.assertEqual({p.name for p in SOURCE.glob('*.rs')}, {'lib.rs', 'main.rs'})
-        entry = (SOURCE / 'main.rs').read_text()
+        entry = (SOURCE / 'main.rs').read_text(encoding='utf-8')
         self.assertIn('maris::cli::main()', entry)
         self.assertLessEqual(len(entry.splitlines()), 12)
-        declarations = set(re.findall(r'^pub mod (\w+);$', (SOURCE / 'lib.rs').read_text(), re.M))
+        declarations = set(re.findall(r'^pub mod (\w+);$', (SOURCE / 'lib.rs').read_text(encoding='utf-8'), re.M))
         self.assertEqual(declarations, DOMAINS)
         for domain in DOMAINS:
             self.assertTrue((SOURCE / domain / 'mod.rs').is_file(), domain)
@@ -37,7 +37,7 @@ class SourceLayout(unittest.TestCase):
             file = file.resolve()
             self.assertNotIn(file, visited, f'Duplicate module ownership: {file}')
             visited.add(file)
-            text = file.read_text()
+            text = file.read_text(encoding='utf-8')
             base = file.parent if file.name in ('lib.rs', 'main.rs', 'mod.rs') else file.parent / file.stem
             for match in MODULE.finditer(text):
                 attrs, name = match[1], match[3]
@@ -62,14 +62,14 @@ class SourceLayout(unittest.TestCase):
         self.assertEqual(visited, {p.resolve() for p in SOURCE.rglob('*.rs')})
 
     def test_internal_imports_do_not_depend_on_legacy_root_exports(self):
-        library = (SOURCE / 'lib.rs').read_text()
+        library = (SOURCE / 'lib.rs').read_text(encoding='utf-8')
         aliases = set()
         for path, alias in re.findall(r'^pub use ([\w:]+)(?: as (\w+))?;', library, re.M):
             aliases.add(alias or path.split('::')[-1])
         for file in SOURCE.rglob('*.rs'):
             if file.name in ('lib.rs', 'main.rs') and file.parent == SOURCE:
                 continue
-            text = file.read_text()
+            text = file.read_text(encoding='utf-8')
             for alias in aliases:
                 self.assertIsNone(re.search(r'\bcrate::' + re.escape(alias) + r'\b', text), f'Legacy import in {file}: {alias}')
             for body in re.findall(r'\buse\s+crate::\{(.*?)\};', text, re.S):
@@ -82,17 +82,17 @@ class SourceLayout(unittest.TestCase):
         files = list((SOURCE / 'dsp').glob('*.rs')) + [SOURCE / 'mixer/engine.rs']
         forbidden = r'\b(?:crate::(?:ui|cli)|std::(?:fs|net|process)|ureq|cpal|ratatui|crossterm)::'
         for file in files:
-            self.assertIsNone(re.search(forbidden, file.read_text()), str(file))
+            self.assertIsNone(re.search(forbidden, file.read_text(encoding='utf-8')), str(file))
 
     def test_maintained_source_files_stay_below_the_project_line_limit(self):
         for file in SOURCE.rglob('*.rs'):
-            self.assertLessEqual(len(file.read_text().splitlines()), 1000, str(file))
+            self.assertLessEqual(len(file.read_text(encoding='utf-8').splitlines()), 1000, str(file))
             self.assertLessEqual(len(file.stem), 24, str(file))
 
     def test_contributor_rules_and_architecture_describe_the_actual_modules(self):
-        guide = (ROOT / 'AGENTS.md').read_text()
-        architecture = (ROOT / 'docs/reference/architecture.md').read_text()
-        design = (ROOT / '.wcode/design/product.yaml').read_text()
+        guide = (ROOT / 'AGENTS.md').read_text(encoding='utf-8')
+        architecture = (ROOT / 'docs/reference/architecture.md').read_text(encoding='utf-8')
+        design = (ROOT / '.wcode/design/product.yaml').read_text(encoding='utf-8')
         self.assertIn('src/main.rs', guide)
         self.assertIn('src/lib.rs', guide)
         for path in ('ui/tui/settings', 'ui/tui/studio', 'ui/desktop', 'dsp', 'devices', 'tuning'):

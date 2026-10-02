@@ -64,6 +64,7 @@ sha2 = "0.11"
 
 [dev-dependencies]
 hex = "0.4"
+vt100 = "=0.15.2"
 
 [[example]]
 name = "ui_probe"
@@ -81,6 +82,7 @@ path = "tests/support/menu_probe.rs"
 required-features = ["desktop"]
 
 [patch.crates-io]
+gemm-common = { path = "third_party/gemm-common" }
 flexaudio-core = { path = "third_party/flexaudio-core" }
 
 [profile.release]
