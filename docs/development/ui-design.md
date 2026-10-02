@@ -115,6 +115,12 @@ Use cell-aware fitting for CJK text and longer German/Spanish labels. Verify sta
 
 ## Menu Bar quick controls
 
+The menu-bar mark is a compact rounded M with a measured wave valley. Current finite peak measurements drive its shape at most eight times per second; an unchanged level does not replace the native image. The filled point indicates live audio, the hollow point idle, the dash bypass, and the exclamation mark expired telemetry. Reduce Motion keeps the mark still while status text remains current. macOS draws the 18-point, 64-pixel template with the system menu-bar tint, including dark appearance and Retina displays. The native menu starts with a padded brand, truthful processing state and output header using semantic AppKit text colors; native actions and their keyboard/accessibility behavior remain available below it.
+
+![Production AppKit menu, staged selection, and status headers](../assets/menu-bar-en.svg)
+
+The [Chinese figure](../assets/menu-bar-zh-CN.svg) uses the same native capture path. `scripts/capture_menu_docs.py --refresh` explicitly renders isolated production views; validation binds unchanged embedded PNG bytes to source hashes. The offline probe dispatches actual native menu IDs, checks staged selection without writes, rejects queued mutations during stopping, and exercises restore failure with malformed fixture JSON before any operating-system route access. These views do not certify a hardware session.
+
 The native menu is a small listening remote, not another dashboard. Its top rows distinguish actual output, current-device listening settings and the separate global EQ curve. A pending callback revision must remain Pending, not Applied. A preset label is derived from matching actual device-constrained parameters, not the global EQ name; custom settings remain Custom.
 
 Output and listening presets are reachable directly from the root. Presets have quiet section headings in one submenu rather than nested category menus. Choosing an output or preset stages one pending change without touching sound. The root has a named Apply action, Cancel and a read-only detail submenu with the target device, final changes and compression/correction warnings. A fresh explicit Apply rechecks session identity, device UID/binding/rebind counter, sample rate and preference/capability revisions; expired or changed context requires a new preview. Output entries retain selector identity rather than transient row indices.

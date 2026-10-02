@@ -58,6 +58,12 @@ Useful controls:
 
 Sound controls include EQ, dynamic reduction of strong frequency bands, optional virtual bass, stereo width and compression. Maris reserves digital headroom before boosting frequencies and limits output sample peaks. This is not hearing protection and does not limit peaks reconstructed between samples.
 
+## Menu bar
+
+![Native Maris menu in light and dark appearance, with selection and recovery states](docs/assets/menu-bar-en.svg)
+
+The compact M responds to measured audio level and stays still with Reduce Motion. Select an output or preset, review it, then Apply; Compare and Undo remain directly available. Expired audio disables changes, and failed restoration keeps its diagnostic visible. These are actual macOS menu views rendered with isolated offline state; they do not establish audio-device acceptance.
+
 ## Device correction and local models
 
 The AutoEq recommended-model index is pinned and shipped with the source. Release builds assemble the matching parametric profiles at build time and embed the verified profile pack, so normal playback does not fetch AutoEq data.

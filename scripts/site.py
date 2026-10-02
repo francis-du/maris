@@ -69,6 +69,7 @@ def main() -> None:
     print(json.dumps({'validated_files': len(names), 'html_pages': sum(n.endswith('.html') for n in names),
                       'customer_languages': 6, 'customer_pages': 24,
                       'engineering_reference_language': 'en', 'actual_offline_ui_illustrations': 18,
+                      'actual_offline_native_menu_illustrations': 2,
                       'written': not args.check, 'remote_deployed': False}, indent=2))
 
 

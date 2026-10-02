@@ -232,6 +232,18 @@
   - kind: file
     path: src/ui/desktop/native.rs
   - kind: file
+    path: src/ui/desktop/status_icon.rs
+  - kind: file
+    path: src/ui/desktop/native_mark.rs
+  - kind: file
+    path: src/ui/desktop/menu_header.rs
+  - kind: file
+    path: src/ui/desktop/menu_capture.rs
+  - kind: file
+    path: src/ui/desktop/native/menu_review.rs
+  - kind: file
+    path: src/ui/desktop/native/native_loop.rs
+  - kind: file
     path: src/ui/tui/mod.rs
   - kind: file
     path: src/ui/tui/actions.rs

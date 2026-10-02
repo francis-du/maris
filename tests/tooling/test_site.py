@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from docs_assets import LANGUAGES, validate as validate_images
+from capture_menu_docs import validate as validate_native_images
 from docs_build import BRAND, GUIDES, REFERENCES, build, resolver, translations
 from docs_check import check as check_output
 from docs_markdown import render
@@ -36,7 +37,7 @@ class Documentation(unittest.TestCase):
         cls.output = build(ROOT)
 
     def test_one_source_tree_produces_all_languages_and_legacy_urls(self):
-        self.assertEqual(len(check_output(self.output)), 101)
+        self.assertEqual(len(check_output(self.output)), 109)
         for locale in LANGUAGES:
             for page in GUIDES:
                 data = self.output[f'{locale}/{page}.html'].decode()
@@ -83,6 +84,16 @@ class Documentation(unittest.TestCase):
         self.assertFalse(manifest['hardware_validation'])
         self.assertEqual({value['locale'] for value in manifest['images'].values()}, set(LANGUAGES))
         self.assertTrue(all('buffer_sha256' in value for value in manifest['images'].values()))
+
+    def test_native_menu_views_are_source_bound_and_published_in_both_review_languages(self):
+        manifest = validate_native_images(ROOT / 'docs/assets')
+        self.assertEqual(set(manifest['images']), {'menu-bar-en.svg', 'menu-bar-zh-CN.svg'})
+        self.assertFalse(manifest['hardware_validation'])
+        self.assertFalse(manifest['audio_started'])
+        self.assertFalse(manifest['whole_desktop_captured'])
+        for name, info in manifest['images'].items():
+            self.assertIn('assets/' + name, self.output)
+            self.assertEqual(len(info['captures']), 16)
 
     def test_logo_is_consistent_vector_geometry_without_remote_fonts_or_scripts(self):
         paths = []

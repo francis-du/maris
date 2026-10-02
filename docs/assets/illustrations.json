@@ -16,7 +16,7 @@
     "src/i18n/console.rs": "221f3e6d4e647e5681a11302f62c0e3342ceeb19b8bfff75126b93af653173eb",
     "src/i18n/surface.rs": "b9f938366c3a1c5ebe563dcf56c5a038a6e01b32e14c43bbeab6f8982af4d7da",
     "src/i18n/messages.rs": "f523252bfe6c4bfe21d828959ec33019fb2b1f1fc1383f336e2bb4e2b9ae144d",
-    "tests/support/ui_probe.rs": "2e12a5883188c836c6c10e3626836e7b5bc201037c9d3e25da08cd28fde7d00b"
+    "tests/support/ui_probe.rs": "dd0bf9d9d1b1278615035b67f5c055c571fe0b3aeb36ec49579d6457598d098f"
   },
   "images": {
     "studio-en.svg": {

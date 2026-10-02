@@ -1,0 +1,1138 @@
+{
+  "scope": "actual_offline_appkit",
+  "hardware_validation": false,
+  "audio_started": false,
+  "whole_desktop_captured": false,
+  "source_sha256": {
+    "Cargo.toml": "7cec1cd6243955eab7614d38b827005a741913da93f3446000f0def9d2b21918",
+    "Cargo.lock": "52632a7f1e057f0e325d3d0e83e557461767f7523bd9ca66f7b7528af16976c9",
+    "src/ui/desktop/native.rs": "1d98a2c0f002949b7679afbc8c20b4fe69ed66f1ffd60b2a0ee2ed2b3e7c5eaf",
+    "src/ui/desktop/native/menu_review.rs": "9f3b1e237244f1ad8b706cfdac3ab7ca6baf9a72e3341c1b56b2a1f69fdb7c33",
+    "src/ui/desktop/native/native_loop.rs": "f853ab83941c53fb543d0c27e67402355a192415cd1db00ad2ef8d637af0d49f",
+    "src/ui/desktop/menu_header.rs": "e76197797c5b66ae0acb5ffe451769a2074172dc27baedc4abcae612f3bca57d",
+    "src/ui/desktop/native_mark.rs": "11691c4e724219bbf9368e0c7d5cd7e1ba83325a65223abe716c7dda48d21c90",
+    "src/ui/desktop/status_icon.rs": "7b09396d0968e31a03a5a16e573176e27af4718399c1666c2e58c3445d55e6c5",
+    "src/ui/desktop/menu_capture.rs": "07632dfe0e2f495c1c5f1c0e70fa10173dd5fb723b7eb1cb961fb0a81ae231b6",
+    "src/ui/desktop/monitor_state.rs": "d14a26186e7d5a42bea00ffbfde302f64c73c4a9d2faab07eeca091c0cd1edbb",
+    "src/ui/desktop/controls.rs": "adc63e92c217d34033502510bc8e3b55d5e48542944f706192fb86d4cc82d297",
+    "src/ui/desktop/events.rs": "8503f2740e5c10f64254b03027ebff2944f9840604cd55f456c6c2b2777fa4d3",
+    "src/ui/desktop/mod.rs": "a411e3dcbdba900482c44298b428be3e3b47dd5081c4b2acd706a965ffebba98",
+    "src/i18n/mod.rs": "52dad2f6e7ffeeab6dc852c442e2de5d02be021c628b802bc571fccbf0e6f01f",
+    "src/i18n/console.rs": "221f3e6d4e647e5681a11302f62c0e3342ceeb19b8bfff75126b93af653173eb",
+    "src/i18n/surface.rs": "b9f938366c3a1c5ebe563dcf56c5a038a6e01b32e14c43bbeab6f8982af4d7da",
+    "src/i18n/messages.rs": "f523252bfe6c4bfe21d828959ec33019fb2b1f1fc1383f336e2bb4e2b9ae144d",
+    "tests/support/menu_probe.rs": "c091339a019699fd424b22f5980032fc1315ddbc93589b223abb8ba68056fe24",
+    "scripts/capture_menu_docs.py": "27173d8c1870a08158080ea6453c90f9adb165a23ac82bc706e45573bb82e1d0"
+  },
+  "probe_sha256": "ee2d8812eb7a5ca6ffb5e895b4bb44135a54979c44daea836356d9f30fee51cf",
+  "images": {
+    "menu-bar-en.svg": {
+      "sha256": "ed2527517c524cd76d5899304866002ced6d1b64d1e912e20fbd3ac29c4b54de",
+      "locale": "en",
+      "width": 1100,
+      "height": 1300,
+      "captures": [
+        {
+          "sha256": "7e5ea9cae1653d472d83635f89208ff9e63334aff0afb410a64cbe86bccaf18b",
+          "pixel_width": 52,
+          "pixel_height": 44,
+          "capture": {
+            "appearance": "light",
+            "logical_height": 22.0,
+            "logical_width": 26.0,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 3960,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/en-live-light-bar.png",
+          "language": "en",
+          "state": "live",
+          "appearance": "light",
+          "kind": "bar",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "Processing. Output: OFFLINE fixture output",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "d63732705770f82da7c883a27713f3795705567fdf7acc332e8f00571b5374db",
+          "pixel_width": 766,
+          "pixel_height": 1000,
+          "capture": {
+            "appearance": "light",
+            "capture_attempts": 1,
+            "logical_height": 500.0,
+            "logical_width": 383.0,
+            "pixel_height": 1000,
+            "pixel_width": 766,
+            "png_bytes": 103621,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/en-live-light.png",
+          "language": "en",
+          "state": "live",
+          "appearance": "light",
+          "kind": "menu",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "Processing. Output: OFFLINE fixture output",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "0f7d2766b91243020dffa504e14e5a1b3edb80debcd4fe14450cabc88ae4af06",
+          "pixel_width": 52,
+          "pixel_height": 44,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 22.0,
+            "logical_width": 26.0,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 3987,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/en-selection-dark-bar.png",
+          "language": "en",
+          "state": "selection",
+          "appearance": "dark",
+          "kind": "bar",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "Selection ready; review then apply. Output: OFFLINE fixture output",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "8cc2bc78f9f38dedf7a6bf50c6288d013917d919990fd31bb5ebd34d36810472",
+          "pixel_width": 766,
+          "pixel_height": 1144,
+          "capture": {
+            "appearance": "dark",
+            "capture_attempts": 1,
+            "logical_height": 572.0,
+            "logical_width": 383.0,
+            "pixel_height": 1144,
+            "pixel_width": 766,
+            "png_bytes": 123809,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/en-selection-dark.png",
+          "language": "en",
+          "state": "selection",
+          "appearance": "dark",
+          "kind": "menu",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "Selection ready; review then apply. Output: OFFLINE fixture output",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "0f7d2766b91243020dffa504e14e5a1b3edb80debcd4fe14450cabc88ae4af06",
+          "pixel_width": 52,
+          "pixel_height": 44,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 22.0,
+            "logical_width": 26.0,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 3987,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/en-live-dark-bar.png",
+          "language": "en",
+          "state": "live",
+          "appearance": "dark",
+          "kind": "bar",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "Processing. Output: OFFLINE fixture output",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "3bf8480521acf3bd5fd87ac869ebf1e8c2bb4460c8c7916507bd2c3c5333a032",
+          "pixel_width": 640,
+          "pixel_height": 172,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 86.0,
+            "logical_width": 320.0,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 11873,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/en-live-dark-header.png",
+          "language": "en",
+          "state": "live",
+          "appearance": "dark",
+          "kind": "header",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "Processing. Output: OFFLINE fixture output",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "860f99271213aefa6a60ec5aac55ed7f4c40adf657c5883534c363159290b93b",
+          "pixel_width": 52,
+          "pixel_height": 44,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 22.0,
+            "logical_width": 26.0,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 4011,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/en-idle-dark-bar.png",
+          "language": "en",
+          "state": "idle",
+          "appearance": "dark",
+          "kind": "bar",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "Standby. Output: Unavailable",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "e8b57da3b99c761dfec910724777fe915b47add7379b56aab65cece27112083c",
+          "pixel_width": 640,
+          "pixel_height": 172,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 86.0,
+            "logical_width": 320.0,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 10506,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/en-idle-dark-header.png",
+          "language": "en",
+          "state": "idle",
+          "appearance": "dark",
+          "kind": "header",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "Standby. Output: Unavailable",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "b78dc98db67900148e03887a6a71eaae68289c249ee2f4021f353dbb244419ed",
+          "pixel_width": 52,
+          "pixel_height": 44,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 22.0,
+            "logical_width": 26.0,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 4057,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/en-stale-dark-bar.png",
+          "language": "en",
+          "state": "stale",
+          "appearance": "dark",
+          "kind": "bar",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "Waiting for audio status. Output: Unavailable",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "e107f74ec7a94772d88c0aa1ab94c42f490119a9d38cc0ae3d579ec916290ce3",
+          "pixel_width": 640,
+          "pixel_height": 172,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 86.0,
+            "logical_width": 320.0,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 12269,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/en-stale-dark-header.png",
+          "language": "en",
+          "state": "stale",
+          "appearance": "dark",
+          "kind": "header",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "Waiting for audio status. Output: Unavailable",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "860f99271213aefa6a60ec5aac55ed7f4c40adf657c5883534c363159290b93b",
+          "pixel_width": 52,
+          "pixel_height": 44,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 22.0,
+            "logical_width": 26.0,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 4011,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/en-failed-dark-bar.png",
+          "language": "en",
+          "state": "failed",
+          "appearance": "dark",
+          "kind": "bar",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "Audio unavailable. Output: Unavailable",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "ddf0c6f8a70e81a6dbd8c8c3999dd3fa6b0ac5b2ba711ccc3d8bf1d665878737",
+          "pixel_width": 640,
+          "pixel_height": 172,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 86.0,
+            "logical_width": 320.0,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 11619,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/en-failed-dark-header.png",
+          "language": "en",
+          "state": "failed",
+          "appearance": "dark",
+          "kind": "header",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "Audio unavailable. Output: Unavailable",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "9042db3dd198541cb8fb441b977c32288db596dd7ffa609cfdaaefdf58a29f74",
+          "pixel_width": 52,
+          "pixel_height": 44,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 22.0,
+            "logical_width": 26.0,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 4043,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/en-stopping-dark-bar.png",
+          "language": "en",
+          "state": "stopping",
+          "appearance": "dark",
+          "kind": "bar",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "Stopping audio. Output: OFFLINE fixture output",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "a476056e8d1ca4bbd75f83eceb1731d56862a42f317bfc8a769e5b619bbe739a",
+          "pixel_width": 640,
+          "pixel_height": 172,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 86.0,
+            "logical_width": 320.0,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 12465,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/en-stopping-dark-header.png",
+          "language": "en",
+          "state": "stopping",
+          "appearance": "dark",
+          "kind": "header",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "Stopping audio. Output: OFFLINE fixture output",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "9042db3dd198541cb8fb441b977c32288db596dd7ffa609cfdaaefdf58a29f74",
+          "pixel_width": 52,
+          "pixel_height": 44,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 22.0,
+            "logical_width": 26.0,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 4043,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/en-restore-failed-dark-bar.png",
+          "language": "en",
+          "state": "restore-failed",
+          "appearance": "dark",
+          "kind": "bar",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "Restore failed: EOF while parsing an object at line 1 column 1. Output: Unavailable",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "eaeff95aa18d122fc9b0c3d1c15139e41dfcf3f93391e038bfddc37524f6aeb5",
+          "pixel_width": 640,
+          "pixel_height": 172,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 86.0,
+            "logical_width": 320.0,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 15875,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/en-restore-failed-dark-header.png",
+          "language": "en",
+          "state": "restore-failed",
+          "appearance": "dark",
+          "kind": "header",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "Restore failed: EOF while parsing an object at line 1 column 1. Output: Unavailable",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        }
+      ]
+    },
+    "menu-bar-zh-CN.svg": {
+      "sha256": "c085904cc29ea4aa7da63c0b2d63d311dcd6bd8b37ab784014615ae112635e68",
+      "locale": "zh-CN",
+      "width": 1100,
+      "height": 1300,
+      "captures": [
+        {
+          "sha256": "7e5ea9cae1653d472d83635f89208ff9e63334aff0afb410a64cbe86bccaf18b",
+          "pixel_width": 52,
+          "pixel_height": 44,
+          "capture": {
+            "appearance": "light",
+            "logical_height": 22.0,
+            "logical_width": 26.0,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 3960,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/zh-CN-live-light-bar.png",
+          "language": "zh-CN",
+          "state": "live",
+          "appearance": "light",
+          "kind": "bar",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "处理中. 输出: OFFLINE fixture output",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "8cd4cbaf76d9ac5bf1f8fa49d77f41d8029fa70f02a3a26ffc27db6373ff4bf1",
+          "pixel_width": 640,
+          "pixel_height": 1000,
+          "capture": {
+            "appearance": "light",
+            "capture_attempts": 1,
+            "logical_height": 500.0,
+            "logical_width": 320.0,
+            "pixel_height": 1000,
+            "pixel_width": 640,
+            "png_bytes": 92996,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/zh-CN-live-light.png",
+          "language": "zh-CN",
+          "state": "live",
+          "appearance": "light",
+          "kind": "menu",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "处理中. 输出: OFFLINE fixture output",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "0f7d2766b91243020dffa504e14e5a1b3edb80debcd4fe14450cabc88ae4af06",
+          "pixel_width": 52,
+          "pixel_height": 44,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 22.0,
+            "logical_width": 26.0,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 3987,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/zh-CN-selection-dark-bar.png",
+          "language": "zh-CN",
+          "state": "selection",
+          "appearance": "dark",
+          "kind": "bar",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "已生成预览，请检查后应用. 输出: OFFLINE fixture output",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "1821d4b1c5d09605ccd1e02bfc99978efa41b9adf7277d3a4b7c1158e696b57f",
+          "pixel_width": 640,
+          "pixel_height": 1144,
+          "capture": {
+            "appearance": "dark",
+            "capture_attempts": 1,
+            "logical_height": 572.0,
+            "logical_width": 320.0,
+            "pixel_height": 1144,
+            "pixel_width": 640,
+            "png_bytes": 113757,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/zh-CN-selection-dark.png",
+          "language": "zh-CN",
+          "state": "selection",
+          "appearance": "dark",
+          "kind": "menu",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "已生成预览，请检查后应用. 输出: OFFLINE fixture output",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "0f7d2766b91243020dffa504e14e5a1b3edb80debcd4fe14450cabc88ae4af06",
+          "pixel_width": 52,
+          "pixel_height": 44,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 22.0,
+            "logical_width": 26.0,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 3987,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/zh-CN-live-dark-bar.png",
+          "language": "zh-CN",
+          "state": "live",
+          "appearance": "dark",
+          "kind": "bar",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "处理中. 输出: OFFLINE fixture output",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "e190febc73673d976ceb6ec3f04655e2d125ce1465b6ea9441c973b74fdb3850",
+          "pixel_width": 640,
+          "pixel_height": 172,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 86.0,
+            "logical_width": 320.0,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 11323,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/zh-CN-live-dark-header.png",
+          "language": "zh-CN",
+          "state": "live",
+          "appearance": "dark",
+          "kind": "header",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "处理中. 输出: OFFLINE fixture output",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "860f99271213aefa6a60ec5aac55ed7f4c40adf657c5883534c363159290b93b",
+          "pixel_width": 52,
+          "pixel_height": 44,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 22.0,
+            "logical_width": 26.0,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 4011,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/zh-CN-idle-dark-bar.png",
+          "language": "zh-CN",
+          "state": "idle",
+          "appearance": "dark",
+          "kind": "bar",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "待机. 输出: 不可用",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "392470d371e92f269c161853e2f0ee771f44a050c60148e62ff5ead748c67b0b",
+          "pixel_width": 640,
+          "pixel_height": 172,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 86.0,
+            "logical_width": 320.0,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 8657,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/zh-CN-idle-dark-header.png",
+          "language": "zh-CN",
+          "state": "idle",
+          "appearance": "dark",
+          "kind": "header",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "待机. 输出: 不可用",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "b78dc98db67900148e03887a6a71eaae68289c249ee2f4021f353dbb244419ed",
+          "pixel_width": 52,
+          "pixel_height": 44,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 22.0,
+            "logical_width": 26.0,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 4057,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/zh-CN-stale-dark-bar.png",
+          "language": "zh-CN",
+          "state": "stale",
+          "appearance": "dark",
+          "kind": "bar",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "等待实时状态. 输出: 不可用",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "a1ef956a6a25b7d6b3eda82e5576c96b846d1ca2b0b306d47a2de0529f506c80",
+          "pixel_width": 640,
+          "pixel_height": 172,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 86.0,
+            "logical_width": 320.0,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 10898,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/zh-CN-stale-dark-header.png",
+          "language": "zh-CN",
+          "state": "stale",
+          "appearance": "dark",
+          "kind": "header",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "等待实时状态. 输出: 不可用",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "860f99271213aefa6a60ec5aac55ed7f4c40adf657c5883534c363159290b93b",
+          "pixel_width": 52,
+          "pixel_height": 44,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 22.0,
+            "logical_width": 26.0,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 4011,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/zh-CN-failed-dark-bar.png",
+          "language": "zh-CN",
+          "state": "failed",
+          "appearance": "dark",
+          "kind": "bar",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "音频不可用. 输出: 不可用",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "f7c599028d0809b6d0eb3d3b7820b45baa54a3afde663e8c83dc4adf8627269d",
+          "pixel_width": 640,
+          "pixel_height": 172,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 86.0,
+            "logical_width": 320.0,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 9725,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/zh-CN-failed-dark-header.png",
+          "language": "zh-CN",
+          "state": "failed",
+          "appearance": "dark",
+          "kind": "header",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "音频不可用. 输出: 不可用",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "9042db3dd198541cb8fb441b977c32288db596dd7ffa609cfdaaefdf58a29f74",
+          "pixel_width": 52,
+          "pixel_height": 44,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 22.0,
+            "logical_width": 26.0,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 4043,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/zh-CN-stopping-dark-bar.png",
+          "language": "zh-CN",
+          "state": "stopping",
+          "appearance": "dark",
+          "kind": "bar",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "正在停止音频. 输出: OFFLINE fixture output",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "eb8648723999af78af403c73eec6f9b72e57ef3d1dfc9806e96278e928068da2",
+          "pixel_width": 640,
+          "pixel_height": 172,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 86.0,
+            "logical_width": 320.0,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 12337,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/zh-CN-stopping-dark-header.png",
+          "language": "zh-CN",
+          "state": "stopping",
+          "appearance": "dark",
+          "kind": "header",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "正在停止音频. 输出: OFFLINE fixture output",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "9042db3dd198541cb8fb441b977c32288db596dd7ffa609cfdaaefdf58a29f74",
+          "pixel_width": 52,
+          "pixel_height": 44,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 22.0,
+            "logical_width": 26.0,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 4043,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/zh-CN-restore-failed-dark-bar.png",
+          "language": "zh-CN",
+          "state": "restore-failed",
+          "appearance": "dark",
+          "kind": "bar",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "恢复失败: 技术详情: EOF while parsing an object at line 1 column 1. 输出: 不可用",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        },
+        {
+          "sha256": "9a16c9d21907865d387aeb6d08a2a04050cc7a2d49d541824437f7da81d16ba6",
+          "pixel_width": 640,
+          "pixel_height": 172,
+          "capture": {
+            "appearance": "dark",
+            "logical_height": 86.0,
+            "logical_width": 320.0,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 16972,
+            "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
+            "transparent_view_regions": true,
+            "whole_desktop_captured": false
+          },
+          "path": ".maris-review/native-menu/zh-CN-restore-failed-dark-header.png",
+          "language": "zh-CN",
+          "state": "restore-failed",
+          "appearance": "dark",
+          "kind": "header",
+          "image": {
+            "accessibility_label": "Maris",
+            "accessibility_value": "恢复失败: 技术详情: EOF while parsing an object at line 1 column 1. 输出: 不可用",
+            "logical_height": 18.0,
+            "logical_width": 18.0,
+            "representations": [
+              {
+                "height": 64,
+                "width": 64
+              }
+            ],
+            "template": true
+          }
+        }
+      ]
+    }
+  }
+}

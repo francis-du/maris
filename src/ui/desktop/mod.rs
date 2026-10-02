@@ -1,8 +1,15 @@
 //! Independent desktop status process. Closing a TUI does not silently stop background audio.
 pub mod controls;
+#[cfg(all(feature = "desktop", target_os = "macos"))]
+mod menu_capture;
+#[cfg(all(feature = "desktop", target_os = "macos"))]
+mod menu_header;
 #[cfg(all(target_os = "macos", feature = "desktop"))]
 pub(crate) mod monitor;
 pub mod monitor_state;
+#[cfg(feature = "desktop")]
+mod native_mark;
+pub mod status_icon;
 
 #[cfg(feature = "desktop")]
 use crate::i18n::text as t;
@@ -216,7 +223,19 @@ pub fn package_macos() -> Result<Value> {
 /// The confirmation response is injected; no live capture or user menu event is consumed.
 #[cfg(all(feature = "desktop", any(target_os = "macos", target_os = "windows")))]
 pub fn menu_review() -> Result<Value> {
-    native::menu_review()
+    native::menu_review(false)
+}
+
+/// Explicit offline AppKit captures; ordinary native construction checks never pop up menus.
+#[cfg(all(feature = "desktop", target_os = "macos"))]
+pub fn menu_capture_review() -> Result<Value> {
+    native::menu_review(true)
+}
+
+/// Exercise native event delivery and shutdown using an isolated fixture, without audio.
+#[cfg(all(feature = "desktop", any(target_os = "macos", target_os = "windows")))]
+pub fn event_loop_review() -> Result<Value> {
+    native::event_loop_review()
 }
 
 #[cfg(feature = "desktop")]

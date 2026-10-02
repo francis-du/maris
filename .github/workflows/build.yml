@@ -11,7 +11,19 @@ env:
   CARGO_INCREMENTAL: '0'
   RUSTUP_TOOLCHAIN: 1.94.0
 jobs:
+  dependency-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned RustSec audit tool
+        run: rustup run stable cargo install cargo-audit --version 0.22.2 --locked
+      - name: Audit the complete lockfile including unsound dependencies
+        run: rustup run stable cargo audit --deny unsound
   native:
+    needs: dependency-audit
     strategy:
       fail-fast: false
       matrix:
@@ -64,6 +76,9 @@ jobs:
       - name: Exercise native menu construction and actual item-ID dispatch
         if: runner.os == 'macOS' || runner.os == 'Windows'
         run: cargo run --locked --example menu_probe
+      - name: Exercise native menu event delivery and bounded shutdown
+        if: runner.os == 'macOS' || runner.os == 'Windows'
+        run: cargo run --locked --example menu_probe -- --event-loop
       - name: 200 recorded offline regression rounds
         run: python scripts/verify_rounds.py --rounds 200
       - name: Build once and package explicitly local development artifacts
