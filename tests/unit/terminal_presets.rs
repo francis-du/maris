@@ -29,38 +29,90 @@ fn idle(process: &mut ConsoleProcess, duration: Duration) {
     }
 }
 
+// Independent 140x40 UI contract: the popup's first column spans x=29..69,
+// with visible data rows y=6..25. Read the actual highlighted label, not app state.
+fn highlighted_preset(process: &ConsoleProcess) -> Option<String> {
+    process
+        .terminal
+        .screen()
+        .rows(29, 40)
+        .skip(6)
+        .take(19)
+        .find_map(|row| row.strip_prefix('▶').map(|name| name.trim().to_owned()))
+}
+
+fn wait_for_preset(
+    process: &mut ConsoleProcess,
+    expected: Option<&str>,
+    deadline: Instant,
+) -> String {
+    let mut output = String::new();
+    loop {
+        process.drain(&mut output);
+        assert!(process.child.try_wait().unwrap().is_none());
+        assert!(
+            Instant::now() < deadline,
+            "selected preset was not rendered: {expected:?}; screen: {}",
+            process.terminal.screen().contents()
+        );
+        if let Some(name) = highlighted_preset(process) {
+            if maris::presets::console_catalog()
+                .iter()
+                .any(|preset| preset.name.eq_ignore_ascii_case(&name))
+                && expected.is_none_or(|expected| name.eq_ignore_ascii_case(expected))
+            {
+                return name;
+            }
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
 fn select_preset(process: &mut ConsoleProcess, id: &str) {
     let catalog = maris::presets::console_catalog();
     let selected = catalog
         .iter()
         .position(|p| p.id == id)
         .expect("known preset");
-    // Start at the first visible item regardless of the current profile's selection.
-    // Do not call the preset implementation or synthesize internal KeyEvents.
-    process.send(&format!(
-        "p{}{}",
-        "\x1b[A".repeat(catalog.len()),
-        "\x1b[B".repeat(selected)
-    ));
-    // Wait for the selected row actually drawn by the child before pointer actions.
-    // Sending navigation bytes is not acknowledgement that the picker consumed them.
-    let expected = format!("▶ {}", catalog[selected].name);
     let deadline = Instant::now() + Duration::from_secs(5);
+    // A persisted confirmation can precede its closing redraw. Consume that
+    // frame before reopening so an old highlighted row cannot acknowledge P.
     let mut output = String::new();
-    while !process.terminal.screen().contents().lines().any(|line| {
-        line.split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ")
-            .contains(&expected)
-    }) {
+    loop {
         process.drain(&mut output);
         assert!(process.child.try_wait().unwrap().is_none());
         assert!(
             Instant::now() < deadline,
-            "selected preset was not rendered: {expected}; screen: {}",
-            process.terminal.screen().contents()
+            "previous preset picker did not close"
         );
+        if highlighted_preset(process).is_none() {
+            break;
+        }
         std::thread::sleep(Duration::from_millis(10));
+    }
+    process.send("p");
+    let current = wait_for_preset(process, None, deadline);
+    let mut current = catalog
+        .iter()
+        .position(|preset| preset.name.eq_ignore_ascii_case(&current))
+        .expect("rendered preset belongs to the catalog");
+    // A highlighted first row does not acknowledge a queued burst of no-op Up
+    // keys. Navigate from the rendered row and acknowledge each real move, so
+    // later pointer/Enter actions cannot sit behind an unconsumed reset burst.
+    // Do not call the preset implementation or synthesize internal KeyEvents.
+    // Retain both keyboard directions: reach the first row with real Up keys,
+    // then move down to the requested scene. No saturated no-op keys are queued.
+    for destination in [0, selected] {
+        while current != destination {
+            if current < destination {
+                process.send("\x1b[B");
+                current += 1;
+            } else {
+                process.send("\x1b[A");
+                current -= 1;
+            }
+            wait_for_preset(process, Some(&catalog[current].name), deadline);
+        }
     }
 }
 
