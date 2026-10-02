@@ -6,9 +6,8 @@ umask 077
 fail() { printf 'Maris install: %s\n' "$*" >&2; exit 1; }
 usage() {
     cat <<'HELP'
-Usage: bash install.sh [--from PATH | --build] [options]
+Usage: bash scripts/install_cli.sh --from PATH [options]
   --from PATH        Local Maris payload directory containing bin/maris
-  --build            Build this checkout with Cargo.lock before installing
   --prefix PATH      User installation prefix (default: $HOME/.local)
   --sha256 HASH      Expected binary SHA-256 obtained from a trusted source
   --allow-unsigned   Explicitly trust an unverified local development payload

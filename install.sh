@@ -77,7 +77,11 @@ PREFIX_PROVIDED=$PREFIX
 BASE=https://github.com/francis-du/maris/releases
 if [ -n "$VERSION" ]; then MANIFEST_URL="$BASE/download/v$VERSION/maris-release.tsv";
 else MANIFEST_URL="$BASE/latest/download/maris-release.tsv"; fi
-printf 'Mode: online precompiled release\nTarget: %s / %s\nDestination: %s\nManifest: %s\n' "$SYSTEM" "$ARCH" "$PREFIX" "$MANIFEST_URL"
+PLAN_DESTINATION=$PREFIX
+if [ "$SYSTEM" = macos ] && [ -z "$PREFIX_PROVIDED" ]; then
+    PLAN_DESTINATION="${HOME}/.local (CLI) or ${HOME}/Applications (GUI), resolved from the release manifest"
+fi
+printf 'Mode: online precompiled release\nTarget: %s / %s\nDestination: %s\nManifest: %s\n' "$SYSTEM" "$ARCH" "$PLAN_DESTINATION" "$MANIFEST_URL"
 [ "$DRY" -eq 0 ] || { printf '%s\n' 'Dry run: download, verify and install after approval. No network or files changed.'; exit 0; }
 if [ "$YES" -eq 0 ]; then
     [ -r /dev/tty ] || fail 'Noninteractive installation requires --yes'
@@ -134,7 +138,7 @@ END { if (invalid || NR!=10+v2 || selected=="" || (requested!="" && version!=req
 IFS=$'\t' read -r VERSION SOURCE_HASH NAME ARCHIVE_HASH ARCHIVE_BYTES BINARY_HASH INTERFACE <<< "$SELECTED"
 [ "$INTERFACE" != cli ] || [ -n "$PREFIX_PROVIDED" ] || PREFIX="${HOME}/.local"
 # Pin all remaining requests to the resolved tag, so latest cannot race a second release.
-printf 'Version: %s\nAsset: %s\n' "$VERSION" "$NAME"
+printf 'Version: %s\nAsset: %s\nDestination: %s\n' "$VERSION" "$NAME" "$PREFIX"
 fetch "$BASE/download/v$VERSION/$NAME" "$WORK/package.tar.gz" "$ARCHIVE_BYTES" || fail 'Package download failed; existing installation is unchanged'
 [ "$(wc -c < "$WORK/package.tar.gz")" -eq "$ARCHIVE_BYTES" ] || fail 'Package length mismatch'
 ACTUAL=$("${SHA[@]}" "$WORK/package.tar.gz"); ACTUAL=${ACTUAL%% *}

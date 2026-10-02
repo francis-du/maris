@@ -6,8 +6,29 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def gate_bash(*, windows=os.name == 'nt', environment=None):
+    if not windows:
+        return shutil.which('bash')
+    environment = os.environ if environment is None else environment
+    candidates = [Path(environment[key]) / 'Git/bin/bash.exe'
+                  for key in ('ProgramW6432', 'ProgramFiles', 'ProgramFiles(x86)') if environment.get(key)]
+    git = shutil.which('git')
+    if git:
+        candidates.append(Path(git).parent.parent / 'bin/bash.exe')
+    # Windows' PATH may resolve bash.exe to the WSL launcher, which is not the
+    # Git Bash interpreter used by Actions' shell: bash workflow steps.
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
+BASH = gate_bash()
 
 
 def minimum_rust():
@@ -20,7 +41,18 @@ def minimum_rust():
 
 
 class ToolchainRequirements(unittest.TestCase):
-    @unittest.skipUnless(shutil.which('bash'), 'Bash dependency gate execution required')
+    def test_windows_dependency_gate_uses_git_bash_instead_of_a_wsl_launcher(self):
+        with tempfile.TemporaryDirectory() as directory:
+            programs = Path(directory)
+            actual = programs / 'Git/bin/bash.exe'
+            actual.parent.mkdir(parents=True)
+            actual.write_bytes(b'Git Bash fixture')
+            with mock.patch('shutil.which', side_effect=lambda name: 'WSL-launcher.exe' if name == 'bash' else None):
+                self.assertEqual(gate_bash(windows=True, environment={'ProgramFiles': directory}), str(actual))
+                actual.unlink()
+                self.assertIsNone(gate_bash(windows=True, environment={'ProgramFiles': directory}))
+
+    @unittest.skipUnless(BASH, 'Git Bash dependency gate execution required')
     def test_dependency_gates_reject_vulnerabilities_in_large_trees(self):
         with tempfile.TemporaryDirectory() as directory:
             temporary = Path(directory)
@@ -42,7 +74,7 @@ class ToolchainRequirements(unittest.TestCase):
                     with self.subTest(workflow=name, dependency=dependency):
                         # Exceed pipe capacity so grep -q's early exit cannot hide SIGPIPE.
                         tree.write_text(dependency + '\n' + 'dependency v1.0.0\n' * 20_000, encoding='utf-8', newline='\n')
-                        result = subprocess.run(['bash', '-c', script], cwd=temporary, env=environment,
+                        result = subprocess.run([BASH, '-c', script], cwd=temporary, env=environment,
                                                 capture_output=True, text=True, encoding='utf-8', timeout=10)
                         self.assertEqual(result.returncode, 1 if rejected else 0, result.stdout + result.stderr)
                         if rejected:
