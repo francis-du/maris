@@ -81,7 +81,9 @@ fn windows_checksum_helper_handles_empty_binary_and_multiblock_files_without_cmd
 #[test]
 fn windows_build_dry_run_needs_no_payload_and_preserves_mode_checks() {
     let temp = tempfile::tempdir().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    // Keep the -File script argument in ordinary absolute path form.
+    let root = temp.path().to_path_buf();
+    assert!(root.is_absolute());
     let checkout = root.join("checkout with spaces");
     fs::create_dir(&checkout).unwrap();
     let script = checkout.join("install.ps1");
