@@ -48,6 +48,9 @@ jobs:
         run: |
           cargo test --locked --lib models::musicnn::tests::bundled_checkpoint_executes_end_to_end
           cargo test --locked --test autoeq bundled_profile_pack_contains_known_profile
+      - name: Exercise native menu construction and actual item-ID dispatch
+        if: runner.os == 'macOS' || runner.os == 'Windows'
+        run: cargo run --locked --example menu_probe
       - name: 200 recorded offline regression rounds
         run: python scripts/verify_rounds.py --rounds 200
       - name: Build once and package explicitly local development artifacts
