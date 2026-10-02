@@ -151,9 +151,9 @@ pub fn semantic_label(runtime: &Value, now_ms: u64) -> Option<&str> {
         || !context["confidence"]
             .as_f64()
             .is_some_and(|value| (0.5..=1.0).contains(&value))
-        || !context["updated_at_ms"]
+        || context["updated_at_ms"]
             .as_u64()
-            .is_some_and(|time| now_ms.checked_sub(time).is_some_and(|age| age <= 10_000))
+            .is_none_or(|time| now_ms.checked_sub(time).is_none_or(|age| age > 10_000))
     {
         return None;
     }
