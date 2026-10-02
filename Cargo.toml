@@ -55,7 +55,7 @@ objc2-foundation = "0.3.2"
 libc = "0.2"
 
 [build-dependencies]
-ureq = "2.12"
+ureq = "3.4"
 sha2 = "0.10"
 
 [dev-dependencies]
