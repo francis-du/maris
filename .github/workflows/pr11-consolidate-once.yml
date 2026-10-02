@@ -10,7 +10,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   consolidate:
-    if: github.repository == 'francis-du/maris' && github.ref == 'refs/heads/fix/windows-ci-and-dependency-updates' && github.event.head_commit.message == 'Prepare one-time dependency consolidation for PR #11'
+    if: >-
+      github.repository == 'francis-du/maris' && github.ref == 'refs/heads/fix/windows-ci-and-dependency-updates' && github.event.head_commit.message == 'Prepare one-time dependency consolidation for PR #11'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
