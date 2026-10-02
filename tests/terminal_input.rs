@@ -19,6 +19,7 @@ struct ConsoleProcess {
     child: Child,
     master: File,
     first_output: String,
+    terminal: vt100::Parser,
 }
 
 /// Fixture status must continue independently while the terminal blocks on a burst.
@@ -94,6 +95,7 @@ impl ConsoleProcess {
             match self.master.read(&mut bytes) {
                 Ok(0) => break,
                 Ok(count) => {
+                    self.terminal.process(&bytes[..count]);
                     let text = String::from_utf8_lossy(&bytes[..count]);
                     output.push_str(&text);
                     // Retain early notices even when send() drains output to avoid PTY deadlock.
@@ -209,6 +211,7 @@ fn spawn_console(dir: &std::path::Path) -> ConsoleProcess {
         child,
         master,
         first_output: String::new(),
+        terminal: vt100::Parser::new(size.ws_row, size.ws_col, 0),
     };
     let start = Instant::now();
     let mut output = String::new();

@@ -4,8 +4,8 @@
   "audio_started": false,
   "whole_desktop_captured": false,
   "source_sha256": {
-    "Cargo.toml": "adfe730e169983ebdf34e8621f0d3218790f7f78dea1cbbebc364a0b46212b78",
-    "Cargo.lock": "3d41d9176c5d9655a1dee4cf829225bdecabbc59112081aeee0dbb61ebdd37e6",
+    "Cargo.toml": "a6f6c2a25af90bb50621bf0e37c03de7a6bd16b4db98193577a5684875a8e3ff",
+    "Cargo.lock": "f024ac4ebb8dea9e41084c0e5a7b8ba122f48e65231dfe9f067f54e7d1f7f4fb",
     "src/ui/desktop/native.rs": "1d98a2c0f002949b7679afbc8c20b4fe69ed66f1ffd60b2a0ee2ed2b3e7c5eaf",
     "src/ui/desktop/native/menu_review.rs": "9f3b1e237244f1ad8b706cfdac3ab7ca6baf9a72e3341c1b56b2a1f69fdb7c33",
     "src/ui/desktop/native/native_loop.rs": "f853ab83941c53fb543d0c27e67402355a192415cd1db00ad2ef8d637af0d49f",

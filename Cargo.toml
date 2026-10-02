@@ -64,6 +64,7 @@ sha2 = "0.11"
 
 [dev-dependencies]
 hex = "0.4"
+vt100 = "=0.15.2"
 
 [[example]]
 name = "ui_probe"
