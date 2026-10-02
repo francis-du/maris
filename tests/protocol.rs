@@ -1,3 +1,6 @@
+#[path = "support/live_telemetry.rs"]
+mod live_telemetry;
+
 use maris::{mcp, profile::Profile, store::Store};
 use serde_json::{json, Value};
 use std::io::Cursor;
@@ -201,6 +204,7 @@ fn live_routing_tools_require_write_permission_confirmation_and_active_native_se
         true
     )
     .is_err());
+    live_telemetry::refresh(&store);
     let queued = mcp::invoke(
         &store,
         "maris_output_select",
@@ -211,6 +215,7 @@ fn live_routing_tools_require_write_permission_confirmation_and_active_native_se
     assert_eq!(queued["queued"], true);
     assert_eq!(queued["changes_system_default_output"], false);
 
+    live_telemetry::refresh(&store);
     assert!(mcp::invoke(
         &store,
         "maris_application_scope",
@@ -218,6 +223,7 @@ fn live_routing_tools_require_write_permission_confirmation_and_active_native_se
         true
     )
     .is_err());
+    live_telemetry::refresh(&store);
     assert!(mcp::invoke(
         &store,
         "maris_application_scope",
@@ -227,6 +233,7 @@ fn live_routing_tools_require_write_permission_confirmation_and_active_native_se
     .is_err());
     // Only the engine's consumption opens the single pending-command slot.
     std::fs::remove_file(directory.path().join("control.json")).unwrap();
+    live_telemetry::refresh(&store);
     let queued = mcp::invoke(
         &store,
         "maris_application_scope",

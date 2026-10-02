@@ -1,5 +1,8 @@
 //! Seeded offline release checks. Each external runner invocation selects a recorded seed.
 //! These cases do not capture audio, touch OS routing, or establish subjective quality.
+#[path = "support/live_telemetry.rs"]
+mod live_telemetry;
+
 use crossterm::event::KeyCode;
 use maris::{
     configuration::{Context, Editor, Outcome},
@@ -81,6 +84,7 @@ fn seeded_release_safety_case() {
     let mut row = 16 + seed as usize % 10;
     let baseline_row = row;
     for _ in 0..(seed % 4 + 1) {
+        let runtime = live_telemetry::refresh(&store);
         editor
             .handle(
                 &store,
@@ -95,6 +99,7 @@ fn seeded_release_safety_case() {
             .unwrap();
     }
     assert!(!store.directory.join("profile.json").exists());
+    let runtime = live_telemetry::refresh(&store);
     let outcome = editor
         .handle(
             &store,

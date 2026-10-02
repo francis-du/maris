@@ -39,6 +39,11 @@ fn malformed_command_reports_failure_and_does_not_block_later_controls() {
             std::fs::read(store.directory.join("runtime.json")).unwrap(),
             runtime
         );
+        // The malformed-command checks may outlast one telemetry period on CI.
+        // Renew only the clock before the following deliberately valid request.
+        let mut current: Value = store::read_json(&store.directory.join("runtime.json")).unwrap();
+        current["updated_at_ms"] = json!(crate::analysis::now_ms());
+        store.write_json("runtime.json", &current).unwrap();
         request_output(&store, Some("Headphones")).unwrap();
         let command = take_command(&store, "queue-test").unwrap().unwrap();
         assert_eq!(command["output"], "Headphones");

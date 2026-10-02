@@ -19,6 +19,13 @@ fn runtime(store: &Store, change: impl FnOnce(&mut Value)) {
     change(&mut value);
     store.write_json("runtime.json", &value).unwrap();
 }
+fn heartbeat(store: &Store) {
+    // Model the continuing audio writer between deliberate fresh menu actions.
+    // Preserve every session, device and revision field; stale-state tests stay explicit.
+    let mut value: Value = crate::store::read_json(&store.directory.join("runtime.json")).unwrap();
+    value["updated_at_ms"] = json!(crate::analysis::now_ms());
+    store.write_json("runtime.json", &value).unwrap();
+}
 fn inventory() -> Vec<DeviceInfo> {
     ["headphones-a", "headphones-b"]
         .into_iter()
@@ -53,10 +60,12 @@ fn native_output_selectors_work_without_assuming_a_macos_uid() {
             is_default: false,
         }];
         let mut controller = Controller::default();
+        heartbeat(&store);
         controller
             .select_output(&store, Some(selector), &inventory)
             .unwrap();
         assert!(!store.directory.join("control.json").exists());
+        heartbeat(&store);
         controller.apply(&store, &inventory).unwrap();
         let command: Value =
             crate::store::read_json(&store.directory.join("control.json")).unwrap();
@@ -76,6 +85,7 @@ fn native_output_items_enable_the_current_backend_and_check_only_the_pinned_devi
             r["system_backend"] = json!(backend);
             r["output_mode"] = json!("pinned");
         });
+        heartbeat(&store);
         let state = audio::runtime_status(&store);
         let summary = Summary::read(&store, &state, crate::analysis::now_ms()).unwrap();
         let mut device = inventory()[0].clone();
@@ -112,6 +122,7 @@ fn native_output_items_enable_the_current_backend_and_check_only_the_pinned_devi
 #[test]
 fn selecting_from_an_outdated_menu_cannot_target_a_new_output() {
     let (_dir, store) = fixture();
+    heartbeat(&store);
     let state = audio::runtime_status(&store);
     let mut controller = Controller::default();
     controller.observe(&Summary::read(&store, &state, crate::analysis::now_ms()).unwrap());
@@ -119,7 +130,9 @@ fn selecting_from_an_outdated_menu_cannot_target_a_new_output() {
         r["profile_key"] = json!("Other speakers");
         r["rebind_count"] = json!(1);
     });
+    heartbeat(&store);
     assert!(controller.select_preset(&store, "focus").is_err());
+    heartbeat(&store);
     assert!(controller
         .select_output(&store, Some("uid:headphones-a"), &inventory())
         .is_err());
@@ -145,6 +158,7 @@ fn native_menu_rejects_index_selectors_and_mismatched_backend_ids() {
             direction: "output".into(),
             is_default: false,
         }];
+        heartbeat(&store);
         assert!(
             Controller::default()
                 .select_output(&store, Some(selector), &inventory)
@@ -159,6 +173,7 @@ fn native_menu_rejects_index_selectors_and_mismatched_backend_ids() {
 fn selecting_and_cancelling_a_scene_never_changes_audio_or_preferences() {
     let (_dir, store) = fixture();
     let mut controller = Controller::default();
+    heartbeat(&store);
     controller.select_preset(&store, "night-dialogue").unwrap();
     assert!(controller.has_pending());
     assert_eq!(listening::load(&store).unwrap().revision, 0);
@@ -170,6 +185,7 @@ fn selecting_and_cancelling_a_scene_never_changes_audio_or_preferences() {
         .any(|line| line == "Compression enabled without makeup gain"));
     controller.cancel();
     assert!(!controller.has_pending());
+    heartbeat(&store);
     assert!(controller.apply(&store, &[]).is_err());
     assert_eq!(listening::load(&store).unwrap().revision, 0);
 }
@@ -190,7 +206,9 @@ fn applied_scene_is_device_scoped_and_undo_survives_ab_comparison() {
     })
     .unwrap();
     let mut controller = Controller::default();
+    heartbeat(&store);
     controller.select_preset(&store, "night-dialogue").unwrap();
+    heartbeat(&store);
     controller.apply(&store, &[]).unwrap();
     let changed = listening::load(&store).unwrap();
     assert_eq!(changed.revision, 2);
@@ -203,12 +221,15 @@ fn applied_scene_is_device_scoped_and_undo_survives_ab_comparison() {
     assert_eq!(changed.effective("Unrelated"), &MusicProfile::default());
     assert_eq!(store.load().unwrap().revision, 0);
     let history = std::fs::read(store.directory.join("listening-previous.json")).unwrap();
+    heartbeat(&store);
     controller.compare(&store).unwrap();
+    heartbeat(&store);
     controller.compare(&store).unwrap();
     assert_eq!(
         std::fs::read(store.directory.join("listening-previous.json")).unwrap(),
         history
     );
+    heartbeat(&store);
     controller.undo(&store).unwrap();
     let restored = listening::load(&store).unwrap();
     assert_eq!(restored.revision, 5);
@@ -228,6 +249,7 @@ fn preview_is_rejected_after_any_route_identity_or_revision_change() {
     ] {
         let (_dir, store) = fixture();
         let mut controller = Controller::default();
+        heartbeat(&store);
         controller.select_preset(&store, "focus").unwrap();
         runtime(&store, |value| {
             value[field] = match field {
@@ -238,6 +260,7 @@ fn preview_is_rejected_after_any_route_identity_or_revision_change() {
                 _ => json!("other"),
             }
         });
+        heartbeat(&store);
         assert!(
             controller.apply(&store, &[]).is_err(),
             "unexpected apply after {field}"
@@ -246,12 +269,14 @@ fn preview_is_rejected_after_any_route_identity_or_revision_change() {
     }
     let (_dir, store) = fixture();
     let mut controller = Controller::default();
+    heartbeat(&store);
     controller.select_preset(&store, "focus").unwrap();
     listening::edit(&store, Some(0), Some("Headphones"), |p| {
         p.air_db = 0.2;
         Ok(())
     })
     .unwrap();
+    heartbeat(&store);
     assert!(controller.apply(&store, &[]).is_err());
     assert_eq!(
         listening::load(&store)
@@ -267,12 +292,14 @@ fn previews_expire_and_do_not_accept_future_timestamps() {
     for age in [PREVIEW_TTL_MS + 1, u64::MAX] {
         let (_dir, store) = fixture();
         let mut controller = Controller::default();
+        heartbeat(&store);
         controller.select_preset(&store, "focus").unwrap();
         controller.pending.as_mut().unwrap().guard.created_at_ms = if age == u64::MAX {
             age
         } else {
             crate::analysis::now_ms() - age
         };
+        heartbeat(&store);
         assert!(controller.apply(&store, &[]).is_err());
         assert_eq!(listening::load(&store).unwrap().revision, 0);
     }
@@ -282,6 +309,7 @@ fn previews_expire_and_do_not_accept_future_timestamps() {
 fn capability_and_eq_changes_invalidate_scene_selection() {
     let (_dir, store) = fixture();
     let mut controller = Controller::default();
+    heartbeat(&store);
     controller.select_preset(&store, "focus").unwrap();
     store
         .edit(Some(0), |p| {
@@ -289,7 +317,9 @@ fn capability_and_eq_changes_invalidate_scene_selection() {
             Ok(())
         })
         .unwrap();
+    heartbeat(&store);
     assert!(controller.apply(&store, &[]).is_err());
+    heartbeat(&store);
     controller.select_preset(&store, "focus").unwrap();
     let cap = Capability {
         max_preference_boost_db: 0.0,
@@ -301,6 +331,7 @@ fn capability_and_eq_changes_invalidate_scene_selection() {
             &json!({"revision":1,"devices":{"Headphones":cap}}),
         )
         .unwrap();
+    heartbeat(&store);
     assert!(controller.apply(&store, &[]).is_err());
     assert_eq!(listening::load(&store).unwrap().revision, 0);
 }
@@ -310,17 +341,20 @@ fn output_selection_is_uid_bound_and_only_apply_queues_a_command() {
     let (_dir, store) = fixture();
     let devices = inventory();
     let mut controller = Controller::default();
+    heartbeat(&store);
     controller
         .select_output(&store, Some(&devices[1].id), &devices)
         .unwrap();
     assert!(!store.directory.join("control.json").exists());
     let mut reordered = devices.clone();
     reordered.reverse();
+    heartbeat(&store);
     controller.apply(&store, &reordered).unwrap();
     let command: Value = crate::store::read_json(&store.directory.join("control.json")).unwrap();
     assert_eq!(command["output"], "uid:headphones-b");
     assert_eq!(command["session_id"], "menu-session");
     assert!(!controller.has_pending());
+    heartbeat(&store);
     assert!(controller.apply(&store, &reordered).is_err());
     assert_eq!(listening::load(&store).unwrap().revision, 0);
 }
@@ -330,16 +364,20 @@ fn vanished_or_ambiguous_output_does_not_fall_back_or_leave_old_selection_armed(
     let (_dir, store) = fixture();
     let devices = inventory();
     let mut controller = Controller::default();
+    heartbeat(&store);
     controller
         .select_output(&store, Some(&devices[0].id), &devices)
         .unwrap();
+    heartbeat(&store);
     assert!(controller.apply(&store, &devices[1..]).is_err());
     assert!(!store.directory.join("control.json").exists());
     let duplicates = vec![devices[0].clone(), devices[0].clone()];
+    heartbeat(&store);
     assert!(controller
         .select_output(&store, Some(&devices[0].id), &duplicates)
         .is_err());
     assert!(!controller.has_pending());
+    heartbeat(&store);
     assert!(controller
         .select_output(&store, Some("Headphones"), &devices)
         .is_err());
@@ -381,6 +419,7 @@ fn pending_device_limits_are_not_reported_applied_just_because_profile_revisions
         runtime["settings_pending"] = json!(true);
         runtime["requested_music_revision"] = json!(0);
     });
+    heartbeat(&store);
     let mut state = audio::runtime_status(&store);
     let now = crate::analysis::now_ms();
     assert_eq!(
@@ -460,6 +499,7 @@ fn current_device_undo_cannot_revert_another_devices_last_edit() {
     listening::preset(&store, Some(0), Some("Other speakers"), "focus").unwrap();
     let library = listening::load(&store).unwrap();
     assert!(!listening::can_undo_device(&store, &library, "Headphones").unwrap());
+    heartbeat(&store);
     assert!(Controller::default().undo(&store).is_err());
     assert_eq!(listening::load(&store).unwrap().devices, library.devices);
 }
@@ -469,19 +509,24 @@ fn immediate_menu_actions_reject_a_new_output_or_a_new_revision_since_rendering(
     let (_dir, store) = fixture();
     listening::preset(&store, Some(0), Some("Headphones"), "focus").unwrap();
     let mut controller = Controller::default();
+    heartbeat(&store);
     let displayed = Summary::read(
         &store,
         &audio::runtime_status(&store),
         crate::analysis::now_ms(),
     )
     .unwrap();
+    assert!(displayed.current && displayed.controls_enabled);
     controller.observe(&displayed);
     runtime(&store, |value| {
         value["profile_key"] = json!("Speakers");
         value["rebind_count"] = json!(1);
     });
+    heartbeat(&store);
     assert!(controller.compare(&store).is_err());
+    heartbeat(&store);
     assert!(controller.undo(&store).is_err());
+    heartbeat(&store);
     assert!(controller.toggle_processing(&store).is_err());
     assert_eq!(store.load().unwrap().revision, 0);
     runtime(&store, |_| {});
@@ -490,8 +535,73 @@ fn immediate_menu_actions_reject_a_new_output_or_a_new_revision_since_rendering(
         Ok(())
     })
     .unwrap();
+    heartbeat(&store);
     assert!(controller.compare(&store).is_err());
     assert_eq!(listening::load(&store).unwrap().revision, 2);
+}
+
+#[test]
+fn an_unavailable_rendered_target_blocks_actions_until_a_fresh_summary_is_observed() {
+    for condition in ["stale", "stopped", "unsupported"] {
+        let (_dir, store) = fixture();
+        listening::preset(&store, Some(0), Some("Headphones"), "focus").unwrap();
+        runtime(&store, |value| match condition {
+            "stale" => {
+                value["updated_at_ms"] = json!(crate::analysis::now_ms().saturating_sub(2000));
+            }
+            "stopped" => value["active"] = json!(false),
+            _ => value["music_processing"] = json!(false),
+        });
+        let unavailable = Summary::read(
+            &store,
+            &audio::runtime_status(&store),
+            crate::analysis::now_ms(),
+        )
+        .unwrap();
+        assert!(!unavailable.controls_enabled);
+        let mut controller = Controller::default();
+        controller.observe(&unavailable);
+        runtime(&store, |value| {
+            value["profile_key"] = json!("Speakers");
+            value["rebind_count"] = json!(1);
+        });
+        let previous = listening::load(&store).unwrap();
+        heartbeat(&store);
+        assert!(controller.compare(&store).is_err(), "{condition}");
+        heartbeat(&store);
+        assert!(controller.undo(&store).is_err(), "{condition}");
+        heartbeat(&store);
+        assert!(controller.toggle_processing(&store).is_err(), "{condition}");
+        heartbeat(&store);
+        assert!(controller.select_preset(&store, "focus").is_err());
+        heartbeat(&store);
+        assert!(controller
+            .select_output(&store, Some("uid:headphones-b"), &inventory())
+            .is_err());
+        assert!(!controller.has_pending());
+        assert_eq!(
+            serde_json::to_value(listening::load(&store).unwrap()).unwrap(),
+            serde_json::to_value(&previous).unwrap()
+        );
+        assert_eq!(store.load().unwrap().revision, 0);
+        assert!(!store.directory.join("control.json").exists());
+
+        runtime(&store, |_| {});
+        let fresh = Summary::read(
+            &store,
+            &audio::runtime_status(&store),
+            crate::analysis::now_ms(),
+        )
+        .unwrap();
+        assert!(fresh.current && fresh.controls_enabled);
+        controller.observe(&fresh);
+        heartbeat(&store);
+        controller.compare(&store).unwrap();
+        assert_eq!(
+            listening::load(&store).unwrap().revision,
+            previous.revision + 1
+        );
+    }
 }
 
 #[test]
@@ -508,6 +618,7 @@ fn menu_and_terminal_do_not_report_unapplied_mixer_changes_as_applied() {
         r["mixer"] = json!({"revision":0,"processing_revision":0,"restart_required":false});
         r["mixer_control"] = json!({"revision":saved.revision});
     });
+    heartbeat(&store);
     let mut state = audio::runtime_status(&store);
     let now = crate::analysis::now_ms();
     for (applied, restart, expected) in [

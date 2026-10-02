@@ -1,3 +1,6 @@
+#[path = "support/live_telemetry.rs"]
+mod live_telemetry;
+
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use maris::{
     analysis, control,
@@ -210,9 +213,12 @@ fn an_unconsumed_route_command_cannot_be_overwritten_but_stop_has_priority() {
     let dir = tempfile::tempdir().unwrap();
     let store = Store::at(dir.path());
     store.write_json("runtime.json", &runtime()).unwrap();
+    live_telemetry::refresh(&store);
     control::request_output(&store, Some("uid:A")).unwrap();
     let queued = std::fs::read(dir.path().join("control.json")).unwrap();
+    live_telemetry::refresh(&store);
     control::request_output(&store, Some("uid:A")).unwrap();
+    live_telemetry::refresh(&store);
     assert!(control::request_applications(&store, &[123]).is_err());
     assert_eq!(
         std::fs::read(dir.path().join("control.json")).unwrap(),

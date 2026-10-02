@@ -1,4 +1,7 @@
 //! Real configuration event reducer against isolated state, never live audio.
+#[path = "support/live_telemetry.rs"]
+mod live_telemetry;
+
 use crossterm::event::KeyCode;
 use maris::{
     analysis, audio,
@@ -54,6 +57,17 @@ fn press(
         key,
     )
 }
+// Valid action sequences model the continuing engine heartbeat. Keep press()
+// unchanged so stale, changed-route and revision negative controls stay raw.
+fn press_live(
+    editor: &mut Editor,
+    store: &Store,
+    row: &mut usize,
+    key: KeyCode,
+) -> anyhow::Result<Outcome> {
+    live_telemetry::refresh(store);
+    press(editor, store, row, key)
+}
 fn renew_telemetry(store: &Store) {
     let mut runtime: Value =
         maris::store::read_json(&store.directory.join("runtime.json")).unwrap();
@@ -77,8 +91,8 @@ fn editing_width_does_not_rewrite_unrelated_stored_tone_or_effect_preferences() 
         .clone();
     let mut editor = Editor::default();
     let mut row = 7;
-    press(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap();
-    press(&mut editor, &store, &mut row, KeyCode::Enter).unwrap();
+    press_live(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap();
+    press_live(&mut editor, &store, &mut row, KeyCode::Enter).unwrap();
     let mut expected = before;
     expected.width = 1.05;
     assert_eq!(
@@ -97,7 +111,7 @@ fn delayed_apply_uses_current_telemetry_without_rebinding_the_draft() {
             let (directory, store) = fixture();
             let mut editor = Editor::default();
             let mut selected = row;
-            press(&mut editor, &store, &mut selected, KeyCode::Char('+')).unwrap();
+            press_live(&mut editor, &store, &mut selected, KeyCode::Char('+')).unwrap();
             (directory, store, editor, selected)
         })
         .collect();
@@ -110,7 +124,7 @@ fn delayed_apply_uses_current_telemetry_without_rebinding_the_draft() {
             UndoTarget::Profile
         };
         assert_eq!(
-            press(editor, store, row, KeyCode::Enter).unwrap(),
+            press_live(editor, store, row, KeyCode::Enter).unwrap(),
             Outcome::Applied(Some(target))
         );
         assert!(!editor.pending());
@@ -126,15 +140,15 @@ fn delayed_adjustment_keeps_the_original_draft_with_fresh_live_telemetry() {
     let (_dir, store) = fixture();
     let mut editor = Editor::default();
     let mut row = 16;
-    press(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap();
+    press_live(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap();
     std::thread::sleep(std::time::Duration::from_millis(1200));
     renew_telemetry(&store);
     assert_eq!(
-        press(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap(),
+        press_live(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap(),
         Outcome::Staged
     );
     no_settings(&store);
-    press(&mut editor, &store, &mut row, KeyCode::Enter).unwrap();
+    press_live(&mut editor, &store, &mut row, KeyCode::Enter).unwrap();
     assert_eq!(store.load().unwrap().profile.bands[0].gain_db, 1.0);
 }
 
@@ -185,17 +199,17 @@ fn several_eq_edits_stage_without_writes_and_apply_as_one_undoable_transaction()
     let mut editor = Editor::default();
     let mut row = 16;
     assert_eq!(
-        press(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap(),
+        press_live(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap(),
         Outcome::Staged
     );
     assert!(editor.pending());
-    press(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap();
-    press(&mut editor, &store, &mut row, KeyCode::Down).unwrap();
+    press_live(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap();
+    press_live(&mut editor, &store, &mut row, KeyCode::Down).unwrap();
     assert_eq!(row, 17);
-    press(&mut editor, &store, &mut row, KeyCode::Char('-')).unwrap();
+    press_live(&mut editor, &store, &mut row, KeyCode::Char('-')).unwrap();
     no_settings(&store);
     assert_eq!(
-        press(&mut editor, &store, &mut row, KeyCode::Enter).unwrap(),
+        press_live(&mut editor, &store, &mut row, KeyCode::Enter).unwrap(),
         Outcome::Applied(Some(UndoTarget::Profile))
     );
     let applied = store.load().unwrap();
@@ -204,7 +218,7 @@ fn several_eq_edits_stage_without_writes_and_apply_as_one_undoable_transaction()
     assert_eq!(applied.profile.bands[1].gain_db, -0.5);
     assert_eq!(listening::load(&store).unwrap().revision, 0);
     assert_eq!(
-        press(&mut editor, &store, &mut row, KeyCode::Enter).unwrap(),
+        press_live(&mut editor, &store, &mut row, KeyCode::Enter).unwrap(),
         Outcome::Browse
     );
     assert_eq!(store.load().unwrap().revision, 1);
@@ -216,16 +230,16 @@ fn cancel_and_return_to_baseline_do_not_create_history_or_revisions() {
     let (_dir, store) = fixture();
     let mut editor = Editor::default();
     let mut row = 16;
-    press(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap();
+    press_live(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap();
     assert_eq!(
-        press(&mut editor, &store, &mut row, KeyCode::Esc).unwrap(),
+        press_live(&mut editor, &store, &mut row, KeyCode::Esc).unwrap(),
         Outcome::Cancelled
     );
     no_settings(&store);
-    press(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap();
-    press(&mut editor, &store, &mut row, KeyCode::Char('-')).unwrap();
+    press_live(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap();
+    press_live(&mut editor, &store, &mut row, KeyCode::Char('-')).unwrap();
     assert!(!editor.pending());
-    press(&mut editor, &store, &mut row, KeyCode::Enter).unwrap();
+    press_live(&mut editor, &store, &mut row, KeyCode::Enter).unwrap();
     no_settings(&store);
 }
 
@@ -242,15 +256,15 @@ fn device_preference_drafts_preserve_correction_and_other_outputs() {
     let before = std::fs::read(store.directory.join("listening.json")).unwrap();
     let mut editor = Editor::default();
     let mut row = 0;
-    press(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap();
+    press_live(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap();
     row = 3;
-    press(&mut editor, &store, &mut row, KeyCode::Char('-')).unwrap();
+    press_live(&mut editor, &store, &mut row, KeyCode::Char('-')).unwrap();
     assert_eq!(
         std::fs::read(store.directory.join("listening.json")).unwrap(),
         before
     );
     assert_eq!(
-        press(&mut editor, &store, &mut row, KeyCode::Enter).unwrap(),
+        press_live(&mut editor, &store, &mut row, KeyCode::Enter).unwrap(),
         Outcome::Applied(Some(UndoTarget::Listening))
     );
     let after = listening::load(&store).unwrap();
@@ -276,7 +290,7 @@ fn pending_draft_blocks_routing_presets_comparison_and_cross_domain_edits() {
     let (_dir, store) = fixture();
     let mut editor = Editor::default();
     let mut row = 16;
-    press(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap();
+    press_live(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap();
     for key in [
         KeyCode::Char('o'),
         KeyCode::Char('p'),
@@ -291,10 +305,10 @@ fn pending_draft_blocks_routing_presets_comparison_and_cross_domain_edits() {
     assert!(editor.permits(KeyCode::Char('s')));
     assert!(editor.permits(KeyCode::Esc));
     row = 0;
-    assert!(press(&mut editor, &store, &mut row, KeyCode::Char('+')).is_err());
+    assert!(press_live(&mut editor, &store, &mut row, KeyCode::Char('+')).is_err());
     no_settings(&store);
     row = 16;
-    press(&mut editor, &store, &mut row, KeyCode::Enter).unwrap();
+    press_live(&mut editor, &store, &mut row, KeyCode::Enter).unwrap();
     assert_eq!(listening::load(&store).unwrap().revision, 0);
     assert_eq!(store.load().unwrap().profile.bands[0].gain_db, 0.5);
 }
@@ -314,7 +328,7 @@ fn changed_route_or_stale_telemetry_invalidates_draft_without_silent_rebase() {
         let (_dir, store) = fixture();
         let mut editor = Editor::default();
         let mut row = 16;
-        press(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap();
+        press_live(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap();
         let original: Value =
             maris::store::read_json(&store.directory.join("runtime.json")).unwrap();
         let mut changed = original.clone();
@@ -340,7 +354,7 @@ fn concurrent_configuration_changes_are_kept_and_old_draft_cannot_overwrite_them
     let (_dir, store) = fixture();
     let mut editor = Editor::default();
     let mut row = 16;
-    press(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap();
+    press_live(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap();
     store
         .edit(Some(0), |p| {
             p.preamp_db = -4.0;
