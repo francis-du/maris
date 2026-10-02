@@ -6,6 +6,7 @@ pub mod input;
 pub mod inspector;
 pub mod monitor;
 pub mod music;
+pub mod preset_picker;
 pub mod presets;
 pub mod settings;
 pub mod studio;
@@ -346,6 +347,13 @@ pub fn run(
                 // mode cannot forward pointer events to controls hidden behind them.
                 if size.width != drawn_area.width || size.height != drawn_area.height {
                     config_pointer.reset();
+                    continue;
+                }
+                if overlay == Overlay::Preset {
+                    config_pointer.reset();
+                    if let Some(choice) = preset_picker::pointer_choice(drawn_area, &view, mouse) {
+                        preset_choice = choice;
+                    }
                     continue;
                 }
                 match config_pointer

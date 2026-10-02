@@ -55,17 +55,42 @@ impl Drop for Heartbeat {
 }
 impl Drop for ConsoleProcess {
     fn drop(&mut self) {
-        // This child is exclusively owned by this offline test, not the user's Maris process.
-        if self.child.try_wait().ok().flatten().is_none() {
-            let _ = self.child.kill();
+        if let Err(error) = self.kill_and_reap() {
+            if std::thread::panicking() {
+                eprintln!("Offline console cleanup failed: {error}");
+            } else {
+                panic!("Offline console cleanup failed: {error}");
+            }
         }
-        let _ = self.child.wait();
     }
 }
 impl ConsoleProcess {
+    fn kill_and_reap(&mut self) -> std::io::Result<()> {
+        // This child is exclusively owned by this offline test, not the user's Maris process.
+        if self.child.try_wait()?.is_none() {
+            self.child.kill()?;
+        }
+        // On macOS, terminal teardown can still need its output drained after
+        // SIGKILL. A blocking wait here deadlocked all parallel preset tests.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut discarded = String::new();
+        while self.child.try_wait()?.is_none() {
+            self.drain(&mut discarded);
+            discarded.clear();
+            if Instant::now() >= deadline {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "Owned pseudo-terminal child was not reaped",
+                ));
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        Ok(())
+    }
     fn drain(&mut self, output: &mut String) {
         let mut bytes = [0_u8; 8192];
-        loop {
+        // A continuously readable terminal must not starve the caller's deadline.
+        for _ in 0..16 {
             match self.master.read(&mut bytes) {
                 Ok(0) => break,
                 Ok(count) => {
@@ -87,6 +112,7 @@ impl ConsoleProcess {
         let mut discarded = String::new();
         while !data.is_empty() {
             self.drain(&mut discarded);
+            discarded.clear();
             match self.master.write(data) {
                 Ok(count) => data = &data[count..],
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -114,12 +140,7 @@ fn click(rect: Rect) -> String {
     format!("\x1b[<0;{x};{y}M\x1b[<0;{x};{y}m")
 }
 
-#[test]
-fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = Store::at(dir.path());
-    let _lease = store.session_lock().unwrap();
-    let _heartbeat = Heartbeat::start(store.clone());
+fn spawn_console(dir: &std::path::Path) -> ConsoleProcess {
     let mut master = -1;
     let mut slave = -1;
     let mut size = libc::winsize {
@@ -144,6 +165,16 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
     // SAFETY: openpty returned two newly owned, distinct valid file descriptors.
     let master = unsafe { File::from_raw_fd(master) };
     let slave = unsafe { File::from_raw_fd(slave) };
+    for fd in [master.as_raw_fd(), slave.as_raw_fd()] {
+        // SAFETY: both descriptors are live and owned here. Do not leak terminal
+        // endpoints into the console or another concurrently exec'd test child.
+        let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+        assert!(flags >= 0);
+        assert_eq!(
+            unsafe { libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC) },
+            0
+        );
+    }
     // SAFETY: fcntl changes only the owned master descriptor's status flags.
     let flags = unsafe { libc::fcntl(master.as_raw_fd(), libc::F_GETFL) };
     assert!(flags >= 0);
@@ -154,7 +185,7 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
     let mut command = Command::new(env!("CARGO_BIN_EXE_maris"));
     command
         .args(["--no-tray", "--lang", "en", "tui"])
-        .env("MARIS_STATE_DIR", dir.path())
+        .env("MARIS_STATE_DIR", dir)
         .env("TERM", "xterm-256color")
         .env_remove("COLUMNS")
         .env_remove("LINES")
@@ -173,6 +204,7 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
         });
     }
     let child = command.spawn().unwrap();
+    drop(command);
     let mut process = ConsoleProcess {
         child,
         master,
@@ -192,6 +224,17 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
         );
         std::thread::sleep(Duration::from_millis(20));
     }
+    process
+}
+
+#[test]
+fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path());
+    let _lease = store.session_lock().unwrap();
+    let _heartbeat = Heartbeat::start(store.clone());
+    let mut process = spawn_console(dir.path());
+    let mut output = String::new();
     process.send("e");
     output.clear();
     let start = Instant::now();
@@ -304,3 +347,27 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
     }
     assert_eq!(control_panel::EQ_ROW_START, 16);
 }
+
+#[test]
+fn real_terminal_child_with_unread_output_is_reaped_before_fixture_cleanup() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path());
+    let _lease = store.session_lock().unwrap();
+    let _heartbeat = Heartbeat::start(store.clone());
+    let mut process = spawn_console(dir.path());
+    process.send("p");
+    // Deliberately leave the popup frame unread, as a real early-exit test can.
+    std::thread::sleep(Duration::from_millis(150));
+    let start = Instant::now();
+    process.kill_and_reap().unwrap();
+    assert!(start.elapsed() < Duration::from_secs(5));
+    assert!(process.child.try_wait().unwrap().is_some());
+    // Explicit cleanup and Drop must not attempt to reap or signal a reused PID.
+    process.kill_and_reap().unwrap();
+    assert_eq!(store.load().unwrap().revision, 0);
+    assert_eq!(listening::load(&store).unwrap().revision, 0);
+    assert!(!dir.path().join("control.json").exists());
+}
+
+#[path = "unit/terminal_presets.rs"]
+mod preset_tests;

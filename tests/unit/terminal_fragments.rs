@@ -40,6 +40,46 @@ fn split_mouse_reports_do_not_leak_escape_brackets_or_coordinates_as_shortcuts()
     assert!(input.is_empty());
 }
 #[test]
+fn paused_reports_preserve_each_press_and_release_without_coordinate_shortcuts() {
+    for report in ["[<0;135;22M", "[<0;135;22m", "[<0;9;22M", "[<0;9;22m"] {
+        for split in 2..report.len() {
+            let mut reader = TerminalInput::default();
+            let mut first = fragments(&report[..split]);
+            assert!(reader
+                .next(Duration::ZERO, &mut |_| Ok(first.pop_front()))
+                .unwrap()
+                .is_none());
+            for _ in 0..3 {
+                assert!(reader
+                    .next(Duration::ZERO, &mut |_| Ok(None))
+                    .unwrap()
+                    .is_none());
+            }
+            let mut rest: VecDeque<_> = report[split..]
+                .chars()
+                .map(|ch| key(KeyCode::Char(ch)))
+                .collect();
+            rest.push_back(key(KeyCode::Enter));
+            assert_eq!(
+                reader
+                    .next(Duration::ZERO, &mut |_| Ok(rest.pop_front()))
+                    .unwrap(),
+                Some(Event::Mouse(sgr_mouse(report).unwrap())),
+                "{report} split {split}"
+            );
+            assert_eq!(
+                reader
+                    .next(Duration::ZERO, &mut |_| Ok(rest.pop_front()))
+                    .unwrap(),
+                Some(key(KeyCode::Enter))
+            );
+            assert!(reader.queued.is_empty());
+            assert!(reader.pending_mouse.is_none());
+        }
+    }
+}
+
+#[test]
 fn actual_escape_and_non_mouse_keys_keep_their_original_order() {
     for tail in ["", "q", "[x", "[", "+"] {
         let mut input = fragments(tail);
@@ -111,10 +151,12 @@ fn incomplete_and_oversized_mouse_tails_never_become_number_shortcuts() {
         key(KeyCode::Char('m')),
         key(KeyCode::Char('q')),
     ]);
-    assert!(reader
-        .next(Duration::ZERO, &mut |_| Ok(rest.pop_front()))
-        .unwrap()
-        .is_none());
+    assert_eq!(
+        reader
+            .next(Duration::ZERO, &mut |_| Ok(rest.pop_front()))
+            .unwrap(),
+        Some(Event::Mouse(sgr_mouse("[<0;12;2m").unwrap()))
+    );
     assert_eq!(
         reader
             .next(Duration::ZERO, &mut |_| Ok(rest.pop_front()))

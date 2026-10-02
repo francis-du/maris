@@ -58,7 +58,7 @@ fn windows_checksum_helper_handles_empty_binary_and_multiblock_files_without_cmd
     ] {
         fs::write(directory.path().join(name), &data).unwrap();
         cases.push(
-            serde_json::json!({"name":name,"expected":format!("{:X}", Sha256::digest(&data))}),
+            serde_json::json!({"name":name,"expected":hex::encode_upper(Sha256::digest(&data))}),
         );
     }
     fs::write(
@@ -165,10 +165,23 @@ fn windows_rejects_wrong_platform_or_non_pe_images_before_installation() {
 #[test]
 fn windows_rejects_traversal_and_machine_wide_destinations() {
     let (_temp, source, prefix) = setup();
-    let traversal = prefix.join("../other");
-    assert!(!run(&source, &traversal, &["-AllowUnsigned", "-Yes"])
-        .status
-        .success());
+    // PathBuf::join normalizes .. after a Windows verbatim prefix. Construct
+    // the raw argument without joining so the installer receives the attack.
+    for suffix in ["/../other", "\\..\\other", "/./other"] {
+        let mut raw = prefix.as_os_str().to_os_string();
+        raw.push(suffix);
+        let traversal = PathBuf::from(raw);
+        assert!(traversal.as_os_str().to_string_lossy().ends_with(suffix));
+        let result = run(&source, &traversal, &["-AllowUnsigned", "-Yes"]);
+        assert!(!result.status.success());
+        assert!(
+            String::from_utf8_lossy(&result.stderr).contains("traversal"),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert!(!prefix.exists());
+        assert!(!prefix.parent().unwrap().join("other").exists());
+    }
     let outside = Path::new("C:\\Maris-Unused-System-Destination");
     assert!(!run(&source, outside, &["-AllowUnsigned", "-DryRun"])
         .status

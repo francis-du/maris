@@ -198,7 +198,11 @@ pub fn run(
                 json!({"preview":preview,"device":device,"expected_listening_revision":library.revision,"applied":false}),
             )
         }
-        Action::Schema => Ok(serde_json::to_value(schemars::schema_for!(MusicProfile))?),
+        Action::Schema => Ok(serde_json::to_value(
+            schemars::generate::SchemaSettings::draft07()
+                .into_generator()
+                .into_root_schema_for::<MusicProfile>(),
+        )?),
         Action::Preset { name } => Ok(serde_json::to_value(listening::preset(
             store,
             expected,

@@ -126,7 +126,7 @@ fn verify_musicnn(bytes: &[u8]) {
         MUSICNN_BYTES,
         "pinned MusicNN weight size changed"
     );
-    let digest = format!("{:x}", Sha256::digest(bytes));
+    let digest = hex::encode(Sha256::digest(bytes));
     assert_eq!(
         digest, MUSICNN_SHA256,
         "pinned MusicNN weight digest changed"
@@ -154,20 +154,24 @@ fn generate_bundled_models(manifest: &Path) {
     let bytes = if local.is_file() {
         fs::read(&local).expect("read locally staged MusicNN weights")
     } else {
-        let response = ureq::AgentBuilder::new()
-            .timeout(std::time::Duration::from_secs(90))
+        let config = ureq::Agent::config_builder()
+            .timeout_global(Some(std::time::Duration::from_secs(90)))
             .https_only(true)
-            .redirects(5)
-            .build()
+            .max_redirects(5)
+            .build();
+        let agent = ureq::Agent::new_with_config(config);
+        let mut response = agent
             .get(MUSICNN_URL)
-            .set(
+            .header(
                 "User-Agent",
                 concat!("maris-build/", env!("CARGO_PKG_VERSION")),
             )
             .call()
             .expect("download pinned MusicNN build resource");
         if let Some(length) = response
-            .header("content-length")
+            .headers()
+            .get("content-length")
+            .and_then(|value| value.to_str().ok())
             .and_then(|value| value.parse::<usize>().ok())
         {
             assert_eq!(
@@ -175,7 +179,10 @@ fn generate_bundled_models(manifest: &Path) {
                 "MusicNN server size differs from pin"
             );
         }
-        let mut reader = response.into_reader().take((MUSICNN_BYTES + 1) as u64);
+        let mut reader = response
+            .body_mut()
+            .as_reader()
+            .take((MUSICNN_BYTES + 1) as u64);
         let mut bytes = Vec::with_capacity(MUSICNN_BYTES);
         reader
             .read_to_end(&mut bytes)
@@ -401,7 +408,7 @@ fn generate_autoeq_profiles(manifest: &Path) {
     };
 
     validate_autoeq_pack(&pack, keys.len());
-    let digest = format!("{:x}", Sha256::digest(&pack));
+    let digest = hex::encode(Sha256::digest(&pack));
     let target = out.join("autoeq-profiles.pack");
     fs::write(&target, pack).expect("write verified AutoEq profile pack");
     fs::write(

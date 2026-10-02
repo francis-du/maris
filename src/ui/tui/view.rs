@@ -12,7 +12,7 @@ use crate::{
     ui::tui::input::{Overlay, Workspace},
 };
 use ratatui::{
-    layout::{Alignment, Constraint, Layout, Rect},
+    layout::{Alignment, Constraint, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Clear, Paragraph, Row, Table, TableState, Wrap},
@@ -470,15 +470,12 @@ fn draw_output_picker(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
 }
 
 fn draw_preset_picker(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
-    let rect = centered(area, 84, area.height.saturating_sub(4).min(32));
+    let areas = super::preset_picker::layout(area, view.presets.len(), view.preset_choice);
+    let rect = areas.modal;
+    let zones = [areas.table, areas.preview];
     frame.render_widget(Clear, rect);
     let block = modal_block("PRESETS · Enter applies · Esc cancels", view.palette);
-    let inner = block.inner(rect);
     frame.render_widget(block, rect);
-    let preview_height = if inner.height >= 18 { 9 } else { 4 };
-    let zones = Layout::vertical([Constraint::Min(2), Constraint::Length(preview_height)])
-        .spacing(1)
-        .split(inner);
     let rows = view.presets.iter().enumerate().map(|(index, preset)| {
         Row::new([
             if index == view.preset_choice {
@@ -507,7 +504,9 @@ fn draw_preset_picker(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
             view.palette.text
         }))
     });
-    let mut state = TableState::default().with_selected(Some(view.preset_choice));
+    let mut state = TableState::default()
+        .with_selected(Some(view.preset_choice))
+        .with_offset(areas.offset);
     frame.render_stateful_widget(
         Table::new(
             rows,

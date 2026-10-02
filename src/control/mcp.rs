@@ -19,8 +19,12 @@ fn object(properties: Value, required: &[&str]) -> Value {
     json!({"type":"object","properties":properties,"required":required,"additionalProperties":false})
 }
 fn profile_arguments(mutation: bool) -> Value {
-    let mut profile =
-        serde_json::to_value(schemars::schema_for!(Profile)).expect("Schema is serializable");
+    let mut profile = serde_json::to_value(
+        schemars::generate::SchemaSettings::draft07()
+            .into_generator()
+            .into_root_schema_for::<Profile>(),
+    )
+    .expect("Schema is serializable");
     let definitions = profile
         .as_object_mut()
         .and_then(|v| v.remove("definitions"))
@@ -40,8 +44,12 @@ fn profile_arguments(mutation: bool) -> Value {
     schema
 }
 fn suggestion_arguments() -> Value {
-    let mut proposal = serde_json::to_value(schemars::schema_for!(smart::Proposal))
-        .expect("Schema is serializable");
+    let mut proposal = serde_json::to_value(
+        schemars::generate::SchemaSettings::draft07()
+            .into_generator()
+            .into_root_schema_for::<smart::Proposal>(),
+    )
+    .expect("Schema is serializable");
     let definitions = proposal
         .as_object_mut()
         .and_then(|v| v.remove("definitions"))
@@ -54,8 +62,12 @@ fn suggestion_arguments() -> Value {
     schema
 }
 fn music_tuning_arguments() -> Value {
-    let mut proposal = serde_json::to_value(schemars::schema_for!(music_tuning::Proposal))
-        .expect("Context tuning schema is serializable");
+    let mut proposal = serde_json::to_value(
+        schemars::generate::SchemaSettings::draft07()
+            .into_generator()
+            .into_root_schema_for::<music_tuning::Proposal>(),
+    )
+    .expect("Context tuning schema is serializable");
     let definitions = proposal
         .as_object_mut()
         .and_then(|value| value.remove("definitions"))
@@ -68,8 +80,12 @@ fn music_tuning_arguments() -> Value {
     schema
 }
 fn music_arguments() -> Value {
-    let mut profile = serde_json::to_value(schemars::schema_for!(crate::dsp::music::MusicProfile))
-        .expect("Music schema is serializable");
+    let mut profile = serde_json::to_value(
+        schemars::generate::SchemaSettings::draft07()
+            .into_generator()
+            .into_root_schema_for::<crate::dsp::music::MusicProfile>(),
+    )
+    .expect("Music schema is serializable");
     let definitions = profile
         .as_object_mut()
         .and_then(|p| p.remove("definitions"))
@@ -85,8 +101,12 @@ fn music_arguments() -> Value {
     schema
 }
 fn mixer_arguments() -> Value {
-    let mut config = serde_json::to_value(schemars::schema_for!(crate::mixer::MixerConfig))
-        .expect("Mixer schema is serializable");
+    let mut config = serde_json::to_value(
+        schemars::generate::SchemaSettings::draft07()
+            .into_generator()
+            .into_root_schema_for::<crate::mixer::MixerConfig>(),
+    )
+    .expect("Mixer schema is serializable");
     let definitions = config
         .as_object_mut()
         .and_then(|value| value.remove("definitions"))
@@ -226,9 +246,11 @@ pub fn invoke(store: &Store, name: &str, arguments: Value, allow_write: bool) ->
                 "This tool accepts no arguments"
             );
             if name == "maris_music_schema" {
-                return Ok(serde_json::to_value(schemars::schema_for!(
-                    crate::dsp::music::MusicProfile
-                ))?);
+                return Ok(serde_json::to_value(
+                    schemars::generate::SchemaSettings::draft07()
+                        .into_generator()
+                        .into_root_schema_for::<crate::dsp::music::MusicProfile>(),
+                )?);
             }
             let runtime = audio::runtime_status(store);
             Ok(
@@ -556,7 +578,11 @@ pub fn invoke(store: &Store, name: &str, arguments: Value, allow_write: bool) ->
                     let catalog = presets::list();
                     Ok(json!({"count":catalog.len(),"presets":catalog}))
                 }
-                _ => Ok(serde_json::to_value(schemars::schema_for!(Profile))?),
+                _ => Ok(serde_json::to_value(
+                    schemars::generate::SchemaSettings::draft07()
+                        .into_generator()
+                        .into_root_schema_for::<Profile>(),
+                )?),
             }
         }
         "maris_validate" => {

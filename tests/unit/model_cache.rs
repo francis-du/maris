@@ -22,10 +22,7 @@ fn bundled_weights_are_exactly_the_build_verified_payload() {
     use sha2::{Digest, Sha256};
     let bytes = musicnn_weights().expect("bundled build must contain weights");
     assert_eq!(bytes.len(), 3_175_212);
-    assert_eq!(
-        format!("{:x}", Sha256::digest(bytes)),
-        MUSICNN_SOURCE_SHA256
-    );
+    assert_eq!(hex::encode(Sha256::digest(bytes)), MUSICNN_SOURCE_SHA256);
     assert_eq!(
         MUSICNN_SOURCE_REVISION,
         "7cff1a4f9899825ddba77130899dfac4c8cfe9d5"

@@ -246,22 +246,10 @@ impl Server {
     }
     pub fn verify_module(&self, module: u32, sink: &str) -> Result<bool> {
         name(sink)?;
-        let modules: Vec<Value> =
-            serde_json::from_str(&self.command(&["--format=json", "list", "modules"])?)?;
-        let Some(item) = modules
-            .iter()
-            .find(|item| item["index"].as_u64() == Some(u64::from(module)))
-        else {
-            return Ok(false);
-        };
-        ensure!(
-            item["name"] == "module-null-sink"
-                && item["argument"].as_str().is_some_and(|s| s
-                    .split_whitespace()
-                    .any(|a| a == format!("sink_name={sink}"))),
-            "Audio module ownership changed; refusing to unload it"
-        );
-        Ok(true)
+        // pactl 16.1 omits module indices from JSON, even for list-short.
+        // The tab-separated native format includes the real ID. Never use array order.
+        let modules = self.command(&["--format=text", "list", "short", "modules"])?;
+        module_owned(&modules, module, sink)
     }
     pub fn unload_owned(&self, module: u32, sink: &str) -> Result<()> {
         if self.verify_module(module, sink)? {
@@ -269,6 +257,35 @@ impl Server {
         }
         Ok(())
     }
+}
+
+fn module_owned(output: &str, module: u32, sink: &str) -> Result<bool> {
+    name(sink)?;
+    let mut found = false;
+    for line in output.lines().filter(|line| !line.is_empty()) {
+        let mut columns = line.splitn(3, '\t');
+        let index = columns.next().context("Missing audio module ID")?;
+        ensure!(
+            !index.is_empty() && index.bytes().all(|b| b.is_ascii_digit()),
+            "Invalid audio module ID"
+        );
+        let index: u32 = index.parse().context("Audio module ID overflow")?;
+        let kind = columns.next().context("Missing audio module type")?;
+        let arguments = columns.next().context("Missing audio module arguments")?;
+        if index != module {
+            continue;
+        }
+        ensure!(!found, "Duplicate audio module identity");
+        let mut owners = arguments
+            .split_whitespace()
+            .filter_map(|arg| arg.strip_prefix("sink_name="));
+        ensure!(
+            kind == "module-null-sink" && owners.next() == Some(sink) && owners.next().is_none(),
+            "Audio module ownership changed; refusing to unload it"
+        );
+        found = true;
+    }
+    Ok(found)
 }
 
 pub(super) struct Events {
@@ -340,7 +357,7 @@ pub(super) struct Sink {
     pub name: String,
     #[serde(default)]
     pub description: String,
-    #[serde(rename = "monitor_source_name")]
+    #[serde(rename = "monitor_source", alias = "monitor_source_name")]
     pub monitor_source: String,
     pub owner_module: Option<u32>,
     #[serde(default)]
@@ -373,10 +390,40 @@ impl Sink {
         }
     }
 }
+// Native pactl emits client IDs as decimal strings; other versions use numbers.
+// Null means unowned. Never turn malformed or overflowing IDs into a valid identity.
+fn client_id<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<u32>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Id {
+        Number(u32),
+        Text(String),
+    }
+    let Some(value) = Option::<Id>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+    let id = match value {
+        Id::Number(id) => id,
+        Id::Text(value)
+            if !value.is_empty()
+                && value.len() <= 10
+                && value.bytes().all(|byte| byte.is_ascii_digit()) =>
+        {
+            value.parse::<u32>().map_err(serde::de::Error::custom)?
+        }
+        Id::Text(_) => return Err(serde::de::Error::custom("Invalid audio client ID")),
+    };
+    if id == u32::MAX {
+        return Err(serde::de::Error::custom("Invalid audio client sentinel"));
+    }
+    Ok(Some(id))
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub(super) struct Input {
     pub index: u32,
     pub sink: u32,
+    #[serde(default, deserialize_with = "client_id")]
     pub client: Option<u32>,
     #[serde(default)]
     pub properties: BTreeMap<String, Value>,
@@ -446,3 +493,7 @@ impl Snapshot {
         Ok(matches[0].clone())
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/pulse_server.rs"]
+mod tests;

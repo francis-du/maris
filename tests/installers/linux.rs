@@ -65,10 +65,7 @@ fn linux_requires_explicit_trust_and_checks_provided_hashes() {
             .success()
     );
     assert!(!prefix.exists());
-    let digest = format!(
-        "{:x}",
-        Sha256::digest(fs::read(source.join("bin/maris")).unwrap())
-    );
+    let digest = hex::encode(Sha256::digest(fs::read(source.join("bin/maris")).unwrap()));
     ok(run(&source, &prefix, &["--sha256", &digest, "--yes"]));
     assert!(prefix.join("lib/maris/bin/maris").is_file());
 }

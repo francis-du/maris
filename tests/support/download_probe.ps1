@@ -35,10 +35,20 @@ function Receive-ReleaseFile([string]$Url, [string]$Output, [long]$Limit) {
 $text = [IO.File]::ReadAllText((Join-Path $Fixture 'manifest'))
 $asset = Read-MarisManifest $text $Architecture ''
 if ($asset.Version -cne '1.2.3') { throw 'Wrong selected version.' }
-foreach ($invalid in @($text.Replace("channel`tstable", "channel`tcandidate"), $text.Replace('source_sha256', 'unexpected'), $text + "extra`n")) {
+# Keep each mutation separate: comma binds before + in PowerShell, so an
+# ungrouped array expression can accidentally include the original valid text.
+$invalidManifests = [ordered]@{
+    Candidate = $text.Replace("channel`tstable", "channel`tcandidate")
+    UnknownSource = $text.Replace('source_sha256', 'unexpected')
+    ExtraRow = ($text + "extra`n")
+    CrLf = $text.Replace("`n", "`r`n")
+}
+foreach ($case in $invalidManifests.GetEnumerator()) {
+    $invalid = $case.Value
+    if ($invalid -isnot [string] -or $invalid -ceq $text) { throw "Invalid fixture was not mutated: $($case.Key)" }
     $rejected = $false
     try { $null = Read-MarisManifest $invalid $Architecture '' } catch { $rejected = $true }
-    if (-not $rejected) { throw 'Malformed manifest was accepted.' }
+    if (-not $rejected) { throw "Malformed manifest was accepted: $($case.Key)" }
 }
 $download = Receive-MarisPackage '' $Architecture
 try {
