@@ -2,7 +2,7 @@
 name = "maris"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.90"
+rust-version = "1.94"
 description = "Local system audio processing with device correction, mixing, TUI, CLI and MCP controls"
 publish = false
 

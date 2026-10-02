@@ -68,7 +68,7 @@ Das Manifest heißt `maris-release.tsv`; Unix-Kits verwenden `.tar.gz`, Windows 
 
 ## Offline und Entwicklung {#development}
 
-Vollständige lokale Kits verwenden `--from` / `-From`. Nur explizites `--build` / `-Build` benötigt Rust 1.90 und die jeweilige Build-Umgebung. `--allow-unsigned` / `-AllowUnsigned` gilt ausschließlich für bewusst vertraute lokale Entwicklung, nicht zum Umgehen der Onlineprüfung. Offline-Helfer arbeiten ohne Netzwerk.
+Vollständige lokale Kits verwenden `--from` / `-From`. Nur explizites `--build` / `-Build` benötigt Rust 1.94 und die jeweilige Build-Umgebung. `--allow-unsigned` / `-AllowUnsigned` gilt ausschließlich für bewusst vertraute lokale Entwicklung, nicht zum Umgehen der Onlineprüfung. Offline-Helfer arbeiten ohne Netzwerk.
 
 ## Fehler behandeln {#troubleshooting}
 

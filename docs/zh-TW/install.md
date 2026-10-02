@@ -68,7 +68,7 @@ Push 檢查不發布應用。獨立手動 CI 產生六個原生目標、暫時�
 
 ## 離線與開發選項 {#development}
 
-完整本機套件使用 `--from` / `-From`；開發者明確選 `--build` / `-Build` 才需要 Rust 1.90 及編譯工具。`--allow-unsigned` / `-AllowUnsigned` 只供可信本機開發來源，不能繞過線上正式版驗證。離線輔助腳本不連網。
+完整本機套件使用 `--from` / `-From`；開發者明確選 `--build` / `-Build` 才需要 Rust 1.94 及編譯工具。`--allow-unsigned` / `-AllowUnsigned` 只供可信本機開發來源，不能繞過線上正式版驗證。離線輔助腳本不連網。
 
 ## 錯誤處理 {#troubleshooting}
 

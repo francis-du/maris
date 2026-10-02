@@ -65,4 +65,4 @@ A missing release or HTTP error leaves the current installation unchanged. A che
 
 Temporary Actions artifacts are for testing; the normal installer uses approved GitHub Release attachments. Builds, source push, Pages deployment and application release are separate operations.
 
-An extracted local kit can be installed with `--from` / `-From`. Only an explicit developer `--build` / `-Build` needs Rust 1.90+ and the platform compiler. `--allow-unsigned` / `-AllowUnsigned` applies only to trusted local development packages, never normal online downloads. See [build and release](../development/releasing.md) for those commands and the remaining release checks.
+An extracted local kit can be installed with `--from` / `-From`. Only an explicit developer `--build` / `-Build` needs Rust 1.94+ and the platform compiler. `--allow-unsigned` / `-AllowUnsigned` applies only to trusted local development packages, never normal online downloads. See [build and release](../development/releasing.md) for those commands and the remaining release checks.

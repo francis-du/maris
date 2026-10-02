@@ -97,6 +97,18 @@ class Documentation(unittest.TestCase):
         self.assertIn('assets/mark.svg', self.output['index.html'].decode())
         self.assertIn('rel="icon"', self.output['index.html'].decode())
 
+    def test_published_wordmark_explains_actions_and_readme_does_not_claim_a_release(self):
+        namespace = {'svg': 'http://www.w3.org/2000/svg'}
+        wordmark = ET.fromstring(self.output['assets/wordmark.svg'])
+        labels = [node.text for node in wordmark.findall('svg:text', namespace)]
+        self.assertEqual(labels, ['MARIS', 'ADJUST YOUR SOUND · COMPARE AND UNDO'])
+        description = wordmark.find('svg:desc', namespace)
+        self.assertIsNotNone(description)
+        self.assertIn('Adjust your sound, compare and undo.', description.text)
+        readme = (ROOT / 'README.md').read_text(encoding='utf-8')
+        self.assertIn('A public application release is not available yet.', readme)
+        self.assertIn('does not include its weights', readme)
+
     def test_renderer_escapes_raw_html_and_validates_links_and_structure(self):
         resolve = resolver(ROOT, ROOT / 'docs/en/guide.md', 'en', 'en/guide.html')
         value = render('# Title\n\n<script>alert(1)</script>\n\n## Safe\n\n**Bold** and `code`.\n', resolve, 'Fixture', 'Zoom')

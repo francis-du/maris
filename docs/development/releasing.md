@@ -12,7 +12,7 @@ A workflow file or expected URL is not evidence that a remote workflow has run o
 | `.github/workflows/build.yml` | Manual only | Full checks, 200 offline rounds, native x86_64/ARM64 artifacts for macOS/Linux/Windows, isolated installation and checksums | Read-only repository access; workflow artifacts only |
 | `.github/workflows/pages.yml` | Documentation changes on main, manual | Static documentation validation, build and deployment | Pages/OIDC write only on the separate deploy job |
 
-All action references are full commit SHAs. Dependabot proposes updates. No workflow uses pull_request_target, commits generated build directories, or treats a branch push as authorization to publish an application release. Rust 1.90.0 is the declared toolchain for CI. There is no claim that an unobserved CI matrix has passed.
+All action references are full commit SHAs. Dependabot proposes updates. No workflow uses pull_request_target, commits generated build directories, or treats a branch push as authorization to publish an application release. Rust 1.94.0 is the declared toolchain for CI, matching the minimum supported version in Cargo.toml. Candle 0.11 uses ARM64 float16 vector types that are unavailable on Rust 1.90. The first macOS CI run failed there before Maris tests could execute. The type was stabilized in [Rust 1.94](https://doc.rust-lang.org/stable/core/arch/aarch64/struct.float16x8_t.html); do not use unstable compiler overrides to hide this requirement. There is no claim that an unobserved CI matrix has passed.
 
 ## Source hygiene before committing
 

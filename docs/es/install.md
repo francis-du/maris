@@ -68,7 +68,7 @@ El manifiesto es `maris-release.tsv`; Unix utiliza `.tar.gz` y Windows `.zip`. P
 
 ## Opciones sin conexión y de desarrollo {#development}
 
-Los kits locales completos usan `--from` / `-From`. Solo `--build` / `-Build` explícito requiere Rust 1.90 y el entorno de compilación. `--allow-unsigned` / `-AllowUnsigned` es para desarrollo local confiable, no para saltarse la verificación en línea. Los auxiliares de instalación local no usan red.
+Los kits locales completos usan `--from` / `-From`. Solo `--build` / `-Build` explícito requiere Rust 1.94 y el entorno de compilación. `--allow-unsigned` / `-AllowUnsigned` es para desarrollo local confiable, no para saltarse la verificación en línea. Los auxiliares de instalación local no usan red.
 
 ## Resolver errores {#troubleshooting}
 

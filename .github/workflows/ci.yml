@@ -12,7 +12,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: '0'
-  RUSTUP_TOOLCHAIN: 1.90.0
+  RUSTUP_TOOLCHAIN: 1.94.0
 jobs:
   source-and-docs:
     runs-on: ubuntu-24.04
@@ -45,7 +45,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install declared Rust toolchain
-        run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt --component clippy
+        run: rustup toolchain install 1.94.0 --profile minimal --component rustfmt --component clippy
       - name: Install Linux audio build headers
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config psmisc pulseaudio pulseaudio-utils

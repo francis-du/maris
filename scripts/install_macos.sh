@@ -85,7 +85,7 @@ if [ "$BUILD" -eq 1 ]; then
         printf 'Dry run: cargo build --release --locked; package; validate; install to %s\n' "$DEST"
         exit 0
     fi
-    command -v cargo >/dev/null 2>&1 || fail 'Install Rust 1.90+ and Xcode command-line tools before building'
+    command -v cargo >/dev/null 2>&1 || fail 'Install Rust 1.94+ and Xcode command-line tools before building'
     if [ -e "$SOURCE" ]; then
         [ -d "$SOURCE" ] || fail 'Existing build output is not an application directory'
         [ -z "$(find "$SOURCE" ! -type d ! -type f -print -quit)" ] || fail 'Existing build output contains linked or special files'

@@ -226,7 +226,7 @@ Preview readiness rejects stale/future/incomplete evidence and sample-rate misma
 
 ## Build and verification
 
-Use Rust 1.90 or newer. macOS needs Xcode command-line tools; Windows needs MSVC build tools; Linux needs ALSA development headers and `pkg-config`. Default features are `desktop` and `neural`.
+Use Rust 1.94 or newer. macOS needs Xcode command-line tools; Windows needs MSVC build tools; Linux needs ALSA development headers and `pkg-config`. Default features are `desktop` and `neural`.
 
 ```sh
 cargo fmt --all --check

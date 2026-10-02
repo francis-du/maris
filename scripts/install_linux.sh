@@ -99,7 +99,7 @@ if [ "$BUILD" -eq 1 ]; then
         printf 'Dry run: locked native Linux build; install %s; link %s\n' "$DEST" "$LINK"
         exit 0
     fi
-    command -v cargo >/dev/null 2>&1 || fail 'Rust 1.90+, a C toolchain, pkg-config and ALSA development headers are required'
+    command -v cargo >/dev/null 2>&1 || fail 'Rust 1.94+, a C toolchain, pkg-config and ALSA development headers are required'
     safe_path "$ROOT/dist"
     mkdir -p -- "$ROOT/dist"
     BUILD_DIR=$(mktemp -d "$ROOT/dist/.install-source.XXXXXX")

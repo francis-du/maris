@@ -320,7 +320,7 @@ try {
     if ($Build) {
         if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'Cargo.lock'))) { throw '-Build requires a source checkout.' }
         if ($DryRun) { Write-Output "Dry run: locked native Windows build; install $destination"; return }
-        if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) { throw 'Install Rust 1.90+ and the Visual Studio C++ build tools first.' }
+        if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) { throw 'Install Rust 1.94+ and the Visual Studio C++ build tools first.' }
         Push-Location $PSScriptRoot
         try {
             & cargo build --release --locked --target-dir (Join-Path $PSScriptRoot 'target')

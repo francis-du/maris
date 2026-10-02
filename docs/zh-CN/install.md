@@ -72,7 +72,7 @@ GitHub Actions 里的测试包需要仓库访问权限，且会过期。普通�
 
 完整且可信的离线套件使用 `bash install.sh --from /absolute/Maris.app --allow-unsigned --dry-run`；Linux 将来源改成 `Maris` 目录。Windows 使用 `./install.ps1 -From /path/to/Maris -AllowUnsigned -DryRun`。开发信任选项只允许显式本地来源，不能绕过正常在线验证。
 
-只有源码开发者明确使用 `--build` / `-Build` 时，才需要 Rust 1.90 与对应平台编译工具。原生离线安装辅助脚本不联网。
+只有源码开发者明确使用 `--build` / `-Build` 时，才需要 Rust 1.94 与对应平台编译工具。原生离线安装辅助脚本不联网。
 
 ## 失败时怎么办 {#troubleshooting}
 
