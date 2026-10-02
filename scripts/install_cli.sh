@@ -46,7 +46,7 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 case "$(uname -s)" in Darwin) SYSTEM=macos ;; Linux) SYSTEM=linux ;; *) fail 'This CLI helper requires macOS or Linux' ;; esac
-[ "$BUILD" -eq 0 ] || fail 'CLI installation requires a precompiled --from payload; use the source build workflow to prepare one' 
+[ "$BUILD" -eq 0 ] || fail 'CLI installation requires a precompiled --from payload; use the source build workflow to prepare one'
 [ "$(id -u)" -ne 0 ] || fail 'Use a normal user account, not root'
 [ "$FROM:$BUILD" != 1:1 ] || fail '--from and --build are mutually exclusive'
 if [ -n "$EXPECTED" ]; then
@@ -158,7 +158,7 @@ check_destination() {
             command -v fuser >/dev/null 2>&1 || fail 'Install psmisc before upgrading; open-file checks are required'
             evidence=$(fuser "$DEST/bin/maris" 2>&1) || code=$?
         fi
-        [ "$code" -eq 1 ] && [ -z "$evidence" ] || fail 'Installed Maris is in use or its open-file state is unknown; close it first' 
+        [ "$code" -eq 1 ] && [ -z "$evidence" ] || fail 'Installed Maris is in use or its open-file state is unknown; close it first'
     fi
 }
 check_destination
