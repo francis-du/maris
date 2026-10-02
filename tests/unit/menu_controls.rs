@@ -481,12 +481,14 @@ fn immediate_menu_actions_reject_a_new_output_or_a_new_revision_since_rendering(
     let (_dir, store) = fixture();
     listening::preset(&store, Some(0), Some("Headphones"), "focus").unwrap();
     let mut controller = Controller::default();
+    heartbeat(&store);
     let displayed = Summary::read(
         &store,
         &audio::runtime_status(&store),
         crate::analysis::now_ms(),
     )
     .unwrap();
+    assert!(displayed.current && displayed.controls_enabled);
     controller.observe(&displayed);
     runtime(&store, |value| {
         value["profile_key"] = json!("Speakers");
@@ -504,6 +506,64 @@ fn immediate_menu_actions_reject_a_new_output_or_a_new_revision_since_rendering(
     .unwrap();
     assert!(controller.compare(&store).is_err());
     assert_eq!(listening::load(&store).unwrap().revision, 2);
+}
+
+#[test]
+fn an_unavailable_rendered_target_blocks_actions_until_a_fresh_summary_is_observed() {
+    for condition in ["stale", "stopped", "unsupported"] {
+        let (_dir, store) = fixture();
+        listening::preset(&store, Some(0), Some("Headphones"), "focus").unwrap();
+        runtime(&store, |value| match condition {
+            "stale" => {
+                value["updated_at_ms"] = json!(crate::analysis::now_ms().saturating_sub(2000));
+            }
+            "stopped" => value["active"] = json!(false),
+            _ => value["music_processing"] = json!(false),
+        });
+        let unavailable = Summary::read(
+            &store,
+            &audio::runtime_status(&store),
+            crate::analysis::now_ms(),
+        )
+        .unwrap();
+        assert!(!unavailable.controls_enabled);
+        let mut controller = Controller::default();
+        controller.observe(&unavailable);
+        runtime(&store, |value| {
+            value["profile_key"] = json!("Speakers");
+            value["rebind_count"] = json!(1);
+        });
+        let previous = listening::load(&store).unwrap();
+        assert!(controller.compare(&store).is_err(), "{condition}");
+        assert!(controller.undo(&store).is_err(), "{condition}");
+        assert!(controller.toggle_processing(&store).is_err(), "{condition}");
+        assert!(controller.select_preset(&store, "focus").is_err());
+        assert!(controller
+            .select_output(&store, Some("uid:headphones-b"), &inventory())
+            .is_err());
+        assert!(!controller.has_pending());
+        assert_eq!(
+            serde_json::to_value(listening::load(&store).unwrap()).unwrap(),
+            serde_json::to_value(&previous).unwrap()
+        );
+        assert_eq!(store.load().unwrap().revision, 0);
+        assert!(!store.directory.join("control.json").exists());
+
+        runtime(&store, |_| {});
+        let fresh = Summary::read(
+            &store,
+            &audio::runtime_status(&store),
+            crate::analysis::now_ms(),
+        )
+        .unwrap();
+        assert!(fresh.current && fresh.controls_enabled);
+        controller.observe(&fresh);
+        controller.compare(&store).unwrap();
+        assert_eq!(
+            listening::load(&store).unwrap().revision,
+            previous.revision + 1
+        );
+    }
 }
 
 #[test]
