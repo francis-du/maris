@@ -19,6 +19,13 @@ fn runtime(store: &Store, change: impl FnOnce(&mut Value)) {
     change(&mut value);
     store.write_json("runtime.json", &value).unwrap();
 }
+fn heartbeat(store: &Store) {
+    // Model the continuing audio writer between deliberate fresh menu actions.
+    // Preserve every session, device and revision field; stale-state tests stay explicit.
+    let mut value: Value = crate::store::read_json(&store.directory.join("runtime.json")).unwrap();
+    value["updated_at_ms"] = json!(crate::analysis::now_ms());
+    store.write_json("runtime.json", &value).unwrap();
+}
 fn inventory() -> Vec<DeviceInfo> {
     ["headphones-a", "headphones-b"]
         .into_iter()
@@ -190,7 +197,9 @@ fn applied_scene_is_device_scoped_and_undo_survives_ab_comparison() {
     })
     .unwrap();
     let mut controller = Controller::default();
+    heartbeat(&store);
     controller.select_preset(&store, "night-dialogue").unwrap();
+    heartbeat(&store);
     controller.apply(&store, &[]).unwrap();
     let changed = listening::load(&store).unwrap();
     assert_eq!(changed.revision, 2);
@@ -203,12 +212,15 @@ fn applied_scene_is_device_scoped_and_undo_survives_ab_comparison() {
     assert_eq!(changed.effective("Unrelated"), &MusicProfile::default());
     assert_eq!(store.load().unwrap().revision, 0);
     let history = std::fs::read(store.directory.join("listening-previous.json")).unwrap();
+    heartbeat(&store);
     controller.compare(&store).unwrap();
+    heartbeat(&store);
     controller.compare(&store).unwrap();
     assert_eq!(
         std::fs::read(store.directory.join("listening-previous.json")).unwrap(),
         history
     );
+    heartbeat(&store);
     controller.undo(&store).unwrap();
     let restored = listening::load(&store).unwrap();
     assert_eq!(restored.revision, 5);
