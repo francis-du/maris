@@ -1,0 +1,126 @@
+name: One-time dependency security vendor
+on:
+  push:
+    branches: [fix/dependency-security]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Install toolchain and Linux build headers
+        run: |
+          rustup toolchain install 1.94.0 --profile minimal
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev pkg-config
+      - name: Vendor only security-patched compatibility crates
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/maris-vendor third_party/security-flexaudio-core third_party/security-tao
+          cargo vendor /tmp/maris-vendor >/tmp/vendor-config.toml
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, shutil
+
+          vendor = Path("/tmp/maris-vendor")
+          root = Path(".")
+          wanted = {
+              ("flexaudio-core", "0.2.0"): root / "third_party/security-flexaudio-core",
+              ("tao", "0.37.1"): root / "third_party/security-tao",
+          }
+
+          found = {}
+          for manifest in vendor.glob("*/Cargo.toml"):
+              text = manifest.read_text(encoding="utf-8")
+              name = re.search(r'(?m)^name\s*=\s*"([^"]+)"', text)
+              version = re.search(r'(?m)^version\s*=\s*"([^"]+)"', text)
+              if not name or not version:
+                  continue
+              key = (name.group(1), version.group(1))
+              if key in wanted:
+                  dest = wanted[key]
+                  shutil.copytree(manifest.parent, dest)
+                  found[key] = dest
+
+          missing = set(wanted) - set(found)
+          if missing:
+              raise SystemExit(f"missing vendored crates: {sorted(missing)}")
+
+          flex = found[("flexaudio-core", "0.2.0")] / "Cargo.toml"
+          text = flex.read_text(encoding="utf-8")
+          text2 = re.sub(
+              r'(\[dependencies\.ringbuf\]\s*\nversion\s*=\s*)"0\.4"',
+              r'\g<1>"0.5.2"',
+              text,
+          )
+          if text2 == text:
+              text2 = text.replace('ringbuf = "0.4"', 'ringbuf = "0.5.2"')
+          if text2 == text:
+              raise SystemExit("did not update flexaudio-core ringbuf dependency")
+          flex.write_text(text2, encoding="utf-8")
+
+          tao = found[("tao", "0.37.1")] / "Cargo.toml"
+          text = tao.read_text(encoding="utf-8")
+          pattern = re.compile(
+              r"\n\[target\.[^\]]*(?:linux|dragonfly|freebsd|openbsd|netbsd)[^\]]*\][\s\S]*?(?=\n\[|\Z)"
+          )
+          text2, count = pattern.subn("\n", text)
+          if count == 0:
+              raise SystemExit("did not find Tao Unix desktop target dependency section")
+          tao.write_text(text2, encoding="utf-8")
+          PY
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("Cargo.toml")
+          text = p.read_text(encoding="utf-8")
+          block = """
+          [patch.crates-io]
+          flexaudio-core = { path = "third_party/security-flexaudio-core" }
+          tao = { path = "third_party/security-tao" }
+          """.strip() + "\n"
+          if "[patch.crates-io]" in text:
+              raise SystemExit("Cargo.toml already has a crates-io patch table; merge explicitly")
+          p.write_text(text.rstrip() + "\n\n" + block, encoding="utf-8")
+          PY
+
+          cargo update -p flexaudio-core -p tao
+          cargo check --locked --all-targets
+          cargo check --locked --all-targets --no-default-features
+
+          python3 - <<'PY'
+          from pathlib import Path
+          lock = Path("Cargo.lock").read_text(encoding="utf-8")
+          for bad in [
+              'name = "ringbuf"\nversion = "0.4.8"',
+              'name = "glib"\nversion = "0.18.5"',
+          ]:
+              if bad in lock:
+                  raise SystemExit(f"vulnerable package still present: {bad!r}")
+          if 'name = "ringbuf"\nversion = "0.5.2"' not in lock:
+              raise SystemExit("ringbuf 0.5.2 not resolved")
+          PY
+      - name: Record security provenance
+        run: |
+          cat > third_party/SECURITY-PATCHES.md <<'EOF'
+          # Security compatibility patches
+
+          Maris vendors two dependency sources only to remove known unsafe transitive versions without suppressing advisories.
+
+          - security-flexaudio-core: flexaudio-core 0.2.0 source, unchanged except its ringbuf dependency is raised from 0.4 to 0.5.2. RustSec RUSTSEC-2026-0293 is fixed in ringbuf 0.5.2.
+          - security-tao: Tao 0.37.1 source for Maris' macOS/Windows-only dependency. The vendored manifest removes Tao's unused Linux/BSD GTK3 target dependency section, so glib 0.18.5 (RUSTSEC-2024-0429) is not part of Maris' resolved release graph.
+
+          These patches do not disable cargo-audit checks and do not claim changes to upstream ownership or licensing. Original crate license files are retained in each vendored directory.
+          EOF
+      - name: Commit patched dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock third_party/security-flexaudio-core third_party/security-tao third_party/SECURITY-PATCHES.md
+          git commit -m "Remove vulnerable ringbuf and glib transitive versions"
+          git push
