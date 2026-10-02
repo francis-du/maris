@@ -303,7 +303,10 @@ fn live_apply_rejects_session_device_rebind_and_new_evidence() {
         let mut changed = original.clone();
         changed[field] = value;
         store.write_json("runtime.json", &changed).unwrap();
-        assert!(music_tuning::apply(&store, &proposal).is_err(), "accepted changed {field}");
+        assert!(
+            music_tuning::apply(&store, &proposal).is_err(),
+            "accepted changed {field}"
+        );
     }
     let mut changed = original.clone();
     changed["device_identity"]["stable_id"] = serde_json::json!("tuning-device-B");
