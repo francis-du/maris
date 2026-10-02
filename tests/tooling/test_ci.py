@@ -32,8 +32,23 @@ class ToolchainRequirements(unittest.TestCase):
 
     def test_push_checks_execute_the_bundled_model_not_only_the_absent_model_case(self):
         text = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
-        self.assertRegex(text, r"MARIS_BUNDLE_SMALL_MODELS:\s*'1'\s*\n\s*run: cargo test --locked --lib models:: -- --nocapture")
+        self.assertRegex(text, r"MARIS_BUNDLE_SMALL_MODELS:\s*'1'\s*\n\s*run: \|\s*\n\s*cargo test --locked --lib models:: -- --nocapture")
         self.assertNotIn('--skip', text)
+
+    def test_inline_workflow_commands_do_not_form_yaml_mappings(self):
+        # A plain YAML scalar cannot contain a colon followed by whitespace.
+        # Rust test filters ending in :: therefore need a quoted or block scalar.
+        for path in sorted((ROOT / '.github/workflows').glob('*.yml')):
+            for number, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+                match = re.match(r'^\s+(?:-\s+)?run:\s+(.+)$', line)
+                if match and not match[1].startswith(('"', "'", '|', '>')):
+                    with self.subTest(workflow=path.name, line=number):
+                        self.assertNotRegex(match[1], r':(?:\s|$)',
+                                            'Quote the command or use run: |')
+
+    def test_push_checks_run_native_windows_download_tests(self):
+        text = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+        self.assertRegex(text, r"name: Native Windows download regression\s*\n\s*if: runner.os == 'Windows'\s*\n\s*run: python -m unittest discover -s tests/tooling -p test_online.py -v")
 
     def test_developer_install_instructions_match_cargo(self):
         required = 'Rust ' + minimum_rust()
