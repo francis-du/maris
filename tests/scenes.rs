@@ -35,7 +35,7 @@ fn scene_catalog_is_unique_localized_and_separate_from_legacy_eq() {
     assert_eq!(names.len(), 13);
     assert_eq!(presets::list().len(), 27);
     let picker = presets::console_catalog();
-    assert_eq!(picker.len(), 40);
+    assert_eq!(picker.len(), 46);
     for preset in &picker {
         let key = maris::i18n::preset_key(&preset.id, &preset.name);
         assert!(
@@ -44,9 +44,17 @@ fn scene_catalog_is_unique_localized_and_separate_from_legacy_eq() {
             preset.id
         );
     }
-    assert!(picker[..13]
+    assert!(picker[..6]
+        .iter()
+        .all(|p| p.category == "listening" && p.id.starts_with("listening:")));
+    assert!(picker[6..19]
         .iter()
         .all(|p| p.category == "scene" && p.id.starts_with("scene:")));
+    assert_eq!(
+        picker.iter().filter(|p| p.name == "warm").count(),
+        2,
+        "Warm must expose separate Listening and Global EQ rows"
+    );
     for scene in scenes::SCENES {
         assert!(maris::music::PRESETS.contains(&scene.id));
         assert!(maris::i18n::has_translation(scene.name), "{}", scene.name);
