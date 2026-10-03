@@ -229,13 +229,7 @@ pub fn run(
             }
         }
 
-        if !pending_apps_dirty {
-            pending_apps = if runtime["active"] == true {
-                captured_application_pids(&runtime)
-            } else {
-                Vec::new()
-            };
-        }
+        sync_application_scope(&runtime, &mut pending_apps, pending_apps_dirty);
 
         let frame_dt = last_frame.elapsed().as_secs_f64();
         motion.update(&runtime, frame_dt, crate::analysis::now_ms());
@@ -889,6 +883,20 @@ pub fn run(
     }
 
     Ok(())
+}
+
+fn sync_application_scope(
+    runtime: &serde_json::Value,
+    pending: &mut Vec<i32>,
+    dirty: bool,
+) {
+    if !dirty {
+        *pending = if runtime["active"] == true {
+            captured_application_pids(runtime)
+        } else {
+            Vec::new()
+        };
+    }
 }
 
 fn discard_application_draft(
