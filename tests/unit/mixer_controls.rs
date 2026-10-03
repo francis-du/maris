@@ -53,8 +53,10 @@ fn key(
         &mut selected,
         &mut vec![],
         None,
-        key,
-        crate::analysis::now_ms(),
+        ApplicationInput {
+            key,
+            now: crate::analysis::now_ms(),
+        },
     )
 }
 
