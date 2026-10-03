@@ -121,7 +121,6 @@ fn state_review(view: &mut Indicator, locale: &str, capture: bool) -> Result<Val
         view.follow.id().clone(),
         view.compare.id().clone(),
         view.undo.id().clone(),
-        view.apply_selection.id().clone(),
         view.presets[0].0.id().clone(),
     ] {
         heartbeat(&store)?;
