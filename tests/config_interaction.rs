@@ -64,7 +64,7 @@ fn section_selection_is_one_action_and_arrows_cannot_enter_playback_switches() {
         }
         assert_eq!(selected, *group.rows().last().unwrap());
     }
-    assert_eq!(all_rows.len(), 26);
+    assert_eq!(all_rows.len(), 28);
     assert!(!editor.pending());
     assert_eq!(
         editor
