@@ -32,10 +32,10 @@ fn corrected() -> MusicProfile {
 #[test]
 fn scene_catalog_is_unique_localized_and_separate_from_legacy_eq() {
     let names: BTreeSet<_> = scenes::SCENES.iter().map(|scene| scene.id).collect();
-    assert_eq!(names.len(), 10);
+    assert_eq!(names.len(), 13);
     assert_eq!(presets::list().len(), 27);
     let picker = presets::console_catalog();
-    assert_eq!(picker.len(), 37);
+    assert_eq!(picker.len(), 40);
     for preset in &picker {
         let key = maris::i18n::preset_key(&preset.id, &preset.name);
         assert!(
@@ -44,7 +44,7 @@ fn scene_catalog_is_unique_localized_and_separate_from_legacy_eq() {
             preset.id
         );
     }
-    assert!(picker[..10]
+    assert!(picker[..13]
         .iter()
         .all(|p| p.category == "scene" && p.id.starts_with("scene:")));
     for scene in scenes::SCENES {
@@ -89,6 +89,36 @@ fn every_scene_preserves_correction_balance_highpass_and_comparison_policy() {
             maris::music_tuning::describe_changes(&before, &preview.profile)
         );
     }
+}
+
+#[test]
+fn spatial_effect_scenes_change_only_spatial_fields_and_regular_scenes_preserve_them() {
+    let mut before = corrected();
+    before.bass_db = 1.25;
+    before.presence_db = -0.75;
+    before.air_db = 0.5;
+    before.softness = 0.35;
+    before.compressor.enabled = true;
+    before.virtual_surround = 0.2;
+    before.stereo_focus = 0.15;
+    let capability = Capability::default();
+
+    for id in ["surround-360", "cinema-360", "stereo-focus"] {
+        let preview = scenes::prepare(&before, &capability, id).unwrap();
+        assert_eq!(preview.profile.bass_db, before.bass_db);
+        assert_eq!(preview.profile.presence_db, before.presence_db);
+        assert_eq!(preview.profile.air_db, before.air_db);
+        assert_eq!(preview.profile.softness, before.softness);
+        assert_eq!(preview.profile.compressor, before.compressor);
+        assert!(
+            preview.profile.virtual_surround != before.virtual_surround
+                || preview.profile.stereo_focus != before.stereo_focus
+        );
+    }
+
+    let dialogue = scenes::prepare(&before, &capability, "dialogue").unwrap();
+    assert_eq!(dialogue.profile.virtual_surround, before.virtual_surround);
+    assert_eq!(dialogue.profile.stereo_focus, before.stereo_focus);
 }
 
 #[test]
