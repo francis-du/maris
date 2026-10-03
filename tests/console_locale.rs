@@ -40,6 +40,10 @@ fn six_locales_cover_home_inspectors_overlays_notices_and_live_preference_change
     let music = maris::music::MusicProfile::default();
     let original_profile = serde_json::to_string(&music).unwrap();
     let presets = maris::presets::console_catalog();
+    let night_dialogue = presets
+        .iter()
+        .position(|preset| preset.id == "scene:night-dialogue")
+        .unwrap();
     let models = maris::neural::models();
     let devices = vec![DeviceInfo {
         id: "uid:fixture".into(),
@@ -107,7 +111,7 @@ fn six_locales_cover_home_inspectors_overlays_notices_and_live_preference_change
                 selected_output: devices.first(),
                 output_choice: 0,
                 presets: &presets,
-                preset_choice: 4,
+                preset_choice: night_dialogue,
                 models: &models,
                 music: &music,
                 palette: maris::theme::VIOLET,
