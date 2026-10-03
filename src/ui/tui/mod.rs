@@ -547,7 +547,7 @@ pub fn run(
                                     .filter(|rate| (44_100..=192_000).contains(rate))
                                     .unwrap_or(48_000)
                                     as u32;
-                                if preset.category == "scene" {
+                                if matches!(preset.category, "scene" | "listening") {
                                     ensure!(
                                         !snapshot.profile.bypass,
                                         "Global bypass is active; enable processing first"
@@ -557,7 +557,10 @@ pub fn run(
                                         &store,
                                         Some(listening.revision),
                                         profile_key.as_deref(),
-                                        &preset.id,
+                                        preset
+                                            .id
+                                            .strip_prefix("listening:")
+                                            .unwrap_or(&preset.id),
                                     )?;
                                     if applied.revision != listening.revision {
                                         undo_target = UndoTarget::Listening;
