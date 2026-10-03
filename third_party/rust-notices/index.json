@@ -1,4 +1,21 @@
 {
+  "audio-core@0.2.1": {
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/udoprog/audio",
+    "revision": "10489fc46bea493755dcd0195b7d7d605e5b72a8",
+    "files": [
+      {
+        "path": "udoprog-audio/10489fc46bea493755dcd0195b7d7d605e5b72a8/LICENSE-MIT",
+        "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+        "source_url": "https://github.com/udoprog/audio/blob/10489fc46bea493755dcd0195b7d7d605e5b72a8/LICENSE-MIT"
+      },
+      {
+        "path": "udoprog-audio/10489fc46bea493755dcd0195b7d7d605e5b72a8/LICENSE-APACHE",
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+        "source_url": "https://github.com/udoprog/audio/blob/10489fc46bea493755dcd0195b7d7d605e5b72a8/LICENSE-APACHE"
+      }
+    ]
+  },
   "block2@0.5.1": {
     "license": "MIT",
     "repository": "https://github.com/madsmtm/objc2",
