@@ -24,10 +24,17 @@ struct Capture {
     next_sample: AtomicU64,
 }
 
+fn device_list_changed(object: u32, addresses: &[ca::Address]) -> bool {
+    object == ca::SYSTEM_OBJECT
+        && addresses
+            .iter()
+            .any(|address| address.selector == u32::from_be_bytes(*b"dev#"))
+}
+
 unsafe extern "C" fn configuration_event(
-    _object: u32,
-    _count: u32,
-    _addresses: *const ca::Address,
+    object: u32,
+    count: u32,
+    addresses: *const ca::Address,
     context: *mut c_void,
 ) -> i32 {
     if !context.is_null() {
@@ -38,6 +45,15 @@ unsafe extern "C" fn configuration_event(
             .metrics
             .configuration_events
             .fetch_add(1, Ordering::Release);
+        if object == ca::SYSTEM_OBJECT && !addresses.is_null() {
+            let addresses = unsafe { std::slice::from_raw_parts(addresses, count as usize) };
+            if device_list_changed(object, addresses) {
+                capture
+                    .metrics
+                    .device_list_events
+                    .fetch_add(1, Ordering::Release);
+            }
+        }
     }
     0
 }
@@ -60,6 +76,10 @@ impl OutputConfiguration {
             alive: unsafe { ca::property(device, b"livn") }.ok(),
         })
     }
+}
+
+fn default_output_changed(expected: Option<u32>, current: Option<u32>) -> bool {
+    expected.is_some() && expected != current
 }
 
 fn validate_process_set(processes: &[u32], available: &[u32], own: u32) -> Result<()> {
@@ -101,6 +121,7 @@ pub(super) struct TapCapture {
     aggregate_rate: u32,
     aggregate_buffer: Option<u32>,
     output_configuration: Option<(u32, OutputConfiguration)>,
+    expected_default_output: Option<u32>,
     listeners: Vec<(u32, ca::Address)>,
     pub rate: u32,
 }
@@ -170,7 +191,8 @@ impl TapCapture {
             aggregate_rate: 0,
             aggregate_buffer: None,
             output_configuration: None,
-            listeners: Vec::with_capacity(8),
+            expected_default_output: None,
+            listeners: Vec::with_capacity(12),
             rate: 0,
         };
         ca::check(
@@ -260,7 +282,7 @@ impl TapCapture {
     }
     fn watch(&mut self, object: u32, address: ca::Address) -> Result<()> {
         ensure!(
-            self.listeners.len() < 8,
+            self.listeners.len() < 12,
             "Too many native configuration listeners"
         );
         // Existing listeners may already access this state through shared references.
@@ -282,8 +304,16 @@ impl TapCapture {
         self.listeners.push((object, address));
         Ok(())
     }
-    pub fn watch_output(&mut self, device: u32) -> Result<()> {
+    pub fn watch_output(&mut self, device: u32, follow_default: bool) -> Result<()> {
         let configuration = OutputConfiguration::read(device)?;
+        // Device insertion/removal can disturb the CoreAudio graph even when the
+        // active output's own format does not change. Quarantine PCM immediately;
+        // the control thread later decides whether a rebuild is actually required.
+        self.watch(ca::SYSTEM_OBJECT, ca::address(b"dev#"))?;
+        if follow_default {
+            self.expected_default_output = Some(device);
+            self.watch(ca::SYSTEM_OBJECT, ca::address(b"dOut"))?;
+        }
         self.watch(device, ca::address(b"nsrt"))?;
         // A driver need not expose every optional latency property. Observe only
         // supported properties rather than making their absence prevent playback.
@@ -316,12 +346,20 @@ impl TapCapture {
             .metrics;
         let generation = metrics.configuration_events.load(Ordering::Acquire);
         let current: ca::Format = unsafe { ca::property(self.tap, b"tfmt")? };
-        let mut changed = current != self.format
+        // A system device-list event means CoreAudio may have rebuilt the HAL
+        // graph even when this output keeps the same ID/rate. Do not resume PCM
+        // through that old graph; rebuild the quarantined pipeline instead.
+        let topology_changed = metrics.device_list_events.load(Ordering::Acquire) > 0;
+        let mut changed = topology_changed
+            || current != self.format
             || ca::sample_rate(self.aggregate)? != self.aggregate_rate
             || ca::output_buffer_frames(self.aggregate).ok() != self.aggregate_buffer;
         if let Some((device, expected)) = &self.output_configuration {
             changed |= OutputConfiguration::read(*device)? != *expected;
         }
+        changed |= self.expected_default_output.is_some_and(|expected| {
+            default_output_changed(Some(expected), ca::default_output().ok())
+        });
         if !changed {
             metrics
                 .checked_configuration_events
@@ -329,6 +367,16 @@ impl TapCapture {
         }
         Ok(changed)
     }
+    pub fn configuration_pending(&self) -> bool {
+        self.context.as_ref().is_some_and(|capture| {
+            capture.metrics.configuration_events.load(Ordering::Acquire)
+                != capture
+                    .metrics
+                    .checked_configuration_events
+                    .load(Ordering::Acquire)
+        })
+    }
+
     pub fn start(&mut self) -> Result<()> {
         ensure!(!self.started, "Capture already started");
         // Close the read-before-listener-registration window before decoding any
@@ -492,3 +540,18 @@ unsafe extern "C" fn capture(
 #[cfg(test)]
 #[path = "../../tests/unit/native_tap.rs"]
 mod tests;
+
+#[cfg(test)]
+mod topology_tests {
+    use super::*;
+
+    #[test]
+    fn only_system_device_list_notifications_force_topology_rebuild() {
+        let devices = [ca::address(b"dev#")];
+        let output = [ca::address(b"nsrt")];
+        assert!(device_list_changed(ca::SYSTEM_OBJECT, &devices));
+        assert!(!device_list_changed(ca::SYSTEM_OBJECT, &output));
+        assert!(!device_list_changed(42, &devices));
+        assert!(!device_list_changed(ca::SYSTEM_OBJECT, &[]));
+    }
+}

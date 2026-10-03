@@ -76,9 +76,12 @@ pub const TRANSLATIONS: &[(&str, [&str; 5])] = &[
     ("Dialogue and film", ["对白与影音", "對白與影音", "会話・映画", "Dialog und Film", "Diálogo y cine"]),
     ("Music and games", ["音乐与游戏", "音樂與遊戲", "音楽・ゲーム", "Musik und Spiele", "Música y juegos"]),
     ("Device listening", ["设备适配", "裝置適配", "機器に合わせる", "Geräteanpassung", "Según dispositivo"]),
+    ("Spatial effects", ["空间音效", "空間音效", "空間エフェクト", "Raumklang-Effekte", "Efectos espaciales"]),
     ("Listening presets", ["聆听预设", "聆聽預設", "リスニング設定", "Hörpresets", "Preajustes de escucha"]),
     ("Listening preset", ["聆听预设", "聆聽預設", "リスニング設定", "Hörpreset", "Preajuste de escucha"]),
+    ("Device listening preset; measured correction stays unchanged.", ["当前设备的聆听预设；测量校正保持不变。", "目前裝置的聆聽預設；測量校正維持不變。", "この出力のリスニング設定。測定補正は変更しません。", "Hörpreset für dieses Gerät; Messkorrektur bleibt unverändert.", "Preajuste de escucha del dispositivo; la corrección medida no cambia."]),
     ("Select an output or preset to preview", ["选择输出或预设可预览，确认后才应用", "選擇輸出或預設可預覽，確認後才套用", "出力・設定を選んで確認後に適用", "Ausgang oder Preset erst wählen, dann anwenden", "Elige salida o preajuste y confirma para aplicar"]),
+    ("Output and preset selections apply immediately", ["选择输出或预设后立即生效", "選擇輸出或預設後立即生效", "出力・プリセットは選択するとすぐ適用されます", "Ausgangs- und Preset-Auswahl wird sofort angewendet", "La salida y los preajustes se aplican al seleccionarlos"]),
     ("Apply selection", ["应用所选项", "套用所選項", "選択を適用", "Auswahl anwenden", "Aplicar selección"]),
     ("Cancel selection", ["取消待应用项", "取消待套用項", "選択を取り消す", "Auswahl verwerfen", "Cancelar selección"]),
     ("Selection details", ["待应用详情", "待套用詳情", "変更内容", "Änderungsdetails", "Detalles del cambio"]),
@@ -171,6 +174,9 @@ pub const TRANSLATIONS: &[(&str, [&str; 5])] = &[
     ("Device limits applied", ["已按设备限制调整", "已依裝置限制調整", "デバイス制限を適用", "Gerätegrenzen berücksichtigt", "Límites del dispositivo aplicados"]),
     ("Correction stays unchanged", ["设备校正保持不变", "裝置校正維持不變", "デバイス補正は維持", "Gerätekorrektur bleibt erhalten", "La corrección no cambia"]),
     ("Compression enabled", ["将启用动态压缩", "將啟用動態壓縮", "コンプレッサーを有効化", "Kompression wird aktiviert", "Se activa la compresión"]),
+    ("Virtual 360 side decorrelation above the bass region; keeps mono and center content stable.", ["在低频以上做虚拟 360 侧声道去相关；单声道和中心内容保持稳定。", "在低頻以上做虛擬 360 側聲道去相關；單聲道和中央內容保持穩定。", "低域より上のサイド成分をバーチャル 360 化し、モノラルと中央定位を維持します。", "Virtuelle 360-Dekorrelation nur oberhalb des Bassbereichs; Mono und Mitte bleiben stabil.", "Decorrelación lateral 360 por encima de los graves; el centro y el mono se mantienen estables."]),
+    ("A gentler virtual surround stage for films; preserves the current tonal and dynamics settings.", ["更柔和的影院空间感；保留当前音色和动态设置。", "較柔和的影院空間感；保留目前音色與動態設定。", "映画向けの穏やかな空間感。現在の音色とダイナミクス設定を維持します。", "Sanftere virtuelle Räumlichkeit für Filme; Klang- und Dynamikeinstellungen bleiben erhalten.", "Escena envolvente más suave para cine; conserva el tono y la dinámica actuales."]),
+    ("Reduces unstable Side energy while leaving the mono center untouched.", ["收拢不稳定的侧声道能量，同时保持单声道中心不变。", "收攏不穩定的側聲道能量，同時保持單聲道中央不變。", "不安定なサイド成分を抑え、モノラル中央はそのまま維持します。", "Reduziert instabile Side-Energie, ohne die Mono-Mitte zu verändern.", "Reduce energía lateral inestable sin alterar el centro mono."]),
     ("Natural", ["自然", "自然", "ナチュラル", "Natürlich", "Natural"]),
     ("Detail", ["细节", "細節", "ディテール", "Details", "Detalle"]),
     ("Night", ["夜间", "夜間", "夜間", "Nacht", "Noche"]),
@@ -187,6 +193,10 @@ pub const TRANSLATIONS: &[(&str, [&str; 5])] = &[
     ("Tight bass", ["低频收紧", "低頻收緊", "低音を引き締める", "Straffer Bass", "Graves controlados"]),
     ("Game clarity", ["游戏清晰", "遊戲清晰", "ゲームの明瞭さ", "Spielklarheit", "Claridad en juegos"]),
     ("Small speakers", ["小音箱聆听", "小喇叭聆聽", "小型スピーカー用", "Kleine Boxen", "Altavoces pequeños"]),
+    ("Surround 360", ["360 环绕", "360 環繞", "360 サラウンド", "360-Surround", "Envolvente 360"]),
+    ("Cinema 360", ["影院 360", "影院 360", "シネマ 360", "Kino 360", "Cine 360"]),
+    ("Stereo Focus", ["立体声聚焦", "立體聲聚焦", "ステレオフォーカス", "Stereo-Fokus", "Enfoque estéreo"]),
+    ("Virtual 360", ["虚拟 360", "虛擬 360", "バーチャル 360", "Virtuelles 360", "360 virtual"]),
     ("Acoustic", ["原声", "原聲", "アコースティック", "Akustik", "Acústico"]),
     ("Bass Booster", ["低频增强", "低頻增強", "低音強調", "Bassverstärkung", "Realce de graves"]),
     ("Bass Reducer", ["低频削减", "低頻削減", "低音抑制", "Bassabsenkung", "Reducción de graves"]),
@@ -209,6 +219,8 @@ pub const TRANSLATIONS: &[(&str, [&str; 5])] = &[
     ("Vocal Booster", ["人声增强", "人聲增強", "ボーカル強調", "Gesangsverstärkung", "Realce vocal"]),
     ("Dynamic EQ strength", ["动态均衡强度", "動態等化強度", "ダイナミック EQ 強度", "Dynamische EQ-Stärke", "Intensidad de EQ dinámico"]),
     ("Bass Assist amount", ["虚拟低音强度", "虛擬低音強度", "ベースアシスト量", "Bass-Assist-Stärke", "Intensidad de graves virtuales"]),
+    ("Virtual 360 amount", ["虚拟 360 强度", "虛擬 360 強度", "バーチャル 360 強度", "Virtuelle-360-Stärke", "Intensidad 360 virtual"]),
+    ("Stereo Focus amount", ["立体声聚焦强度", "立體聲聚焦強度", "ステレオフォーカス強度", "Stereo-Fokus-Stärke", "Intensidad de enfoque estéreo"]),
 ];
 
 /// English display copy for stable internal message keys. Raw errors, device
@@ -337,6 +349,7 @@ pub fn label(value: &str) -> &str {
 }
 
 pub fn preset_key<'a>(id: &str, original: &'a str) -> &'a str {
+    let id = id.strip_prefix("listening:").unwrap_or(id);
     if let Some(scene) = crate::presets::scenes::find(id) {
         return scene.name;
     }
@@ -355,7 +368,8 @@ pub fn preset_key<'a>(id: &str, original: &'a str) -> &'a str {
     }
 }
 pub fn preset_name<'a>(id: &str, original: &'a str) -> &'a str {
-    if crate::presets::scenes::find(id).is_some()
+    if id.starts_with("listening:")
+        || crate::presets::scenes::find(id).is_some()
         || id.starts_with("eqmac:")
         || crate::dsp::profile::PRESETS.contains(&id)
         || crate::dsp::music::PRESETS.contains(&id)

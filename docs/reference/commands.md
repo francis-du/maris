@@ -34,7 +34,7 @@ TUI listening edits are already persisted through the device-specific listening 
 # Writes without --device require a fresh active output and a known profile key.
 maris sound status --json
 maris sound preset warm --json
-maris sound set --bass 1.5 --presence 0.5 --softness 0.2 --adaptive 0.6 --json
+maris sound set --bass 1.5 --presence 0.5 --softness 0.2 --adaptive 0.6 --virtual-surround 0.7 --json
 maris sound compare true --json
 maris sound compare false --json
 maris sound save-device --json
@@ -46,14 +46,17 @@ maris sound schema
 maris sound apply ./music-profile.json --dry-run --json
 ```
 
-The original music presets `natural`, `warm`, `vocal`, `detail`, `soft`, and `night` remain available. Ten additional listening scenes provide practical starting points without a model download. They change device-specific preferences, not the original ten-band EQ or measured correction. All scenes preserve correction filters/provenance/preamp, correction high-pass, channel balance and the user's comparison level-matching policy, then apply the current device capability limits.
+The original music presets `natural`, `warm`, `vocal`, `detail`, `soft`, and `night` remain available. Ten additional listening scenes provide practical starting points without a model download. They change device-specific preferences, not the original ten-band EQ or measured correction. All scenes preserve correction filters/provenance/preamp, correction high-pass, channel balance, processing enable, Reference A/B state and the user's comparison level-matching policy, then apply the current device capability limits. The TUI preset picker reopens on the last applied layer while it still matches the current state; if another surface changed that layer, it falls back to an exact current scene or EQ match rather than resetting to the first row.
 
 | Scene ID | Intended use and parameter direction |
 | --- | --- |
 | `focus` | Subtle bass/treble reduction for background listening; no compression. |
 | `long-listening` | Softer high end and bounded dynamic control; not hearing protection. |
 | `dialogue` | Reduced bass and a small presence lift for dialogue/podcasts; no denoising. |
-| `cinema` | Modest weight and dialogue presence, without surround or spatial-processing claims. |
+| `cinema` | Modest weight and dialogue presence; preserves any separately selected spatial effect. |
+| `surround-360` | Virtual 360 side decorrelation above the bass region; preserves the current tonal/dynamics settings. |
+| `cinema-360` | Gentler virtual surround for film playback; preserves the current tonal/dynamics settings. |
+| `stereo-focus` | Reduces unstable Side energy while preserving the mono center and current tonal settings. |
 | `night-dialogue` | Reduced bass and peak dynamics; explicitly enables compression without makeup gain. |
 | `acoustic-listening` | Restrained presence/air lift for acoustic recordings; compression stays off. |
 | `orchestral` | Neutral static tone and very light dynamic control, preserving original stereo width. |
@@ -87,7 +90,7 @@ maris --json presets restore
 
 The source frequencies are 32, 64, 125, 250, 500, 1000, 2000, 4000, 8000 and 16000 Hz. eqMac's 0.5-octave parametric bandwidth is converted to Maris's RBJ Q representation at the negotiated sample rate; it is not treated as `Q=0.5`. Source gains are preserved, including `Acoustic` at +18.22 dB. Maris calculates cascade headroom with a 0.5 dB safety margin and retains that headroom during eqMac bypass comparison so a high-gain preset does not jump back to 0 dB. The final limiter remains sample-peak protection, not a true-peak or hearing-safety guarantee.
 
-Press **P** for one picker containing the ten listening scenes first, followed by the original 27 Maris/eqMac EQ curves. Rows distinguish **Scene** from **Tone curve**. Up/Down selects without changing sound; the scene preview shows its purpose, preserved correction, compression warning and final device-limited changes. Enter applies once, Esc cancels, B compares and U restores the previous change. No additional tab or nested setup is required. The original `presets` CLI/MCP catalog remains 27 EQ curves for compatibility; `sound scenes` and the scene tools expose the separate listening catalog.
+Press **P** for one picker containing the thirteen listening scenes first, followed by the original 27 Maris/eqMac EQ curves. Rows distinguish **Scene** from **Tone curve**. The spatial scenes are **Surround 360**, **Cinema 360**, and **Stereo Focus**; they use the listening revision/undo domain and do not replace the global EQ curve. Up/Down selects without changing sound; the scene preview shows its purpose, preserved correction, compression warning and final device-limited changes. Enter applies once, Esc cancels, B compares and U restores the previous change. No additional tab or nested setup is required. The original `presets` CLI/MCP catalog remains 27 EQ curves for compatibility; `sound scenes` and the scene tools expose the separate listening catalog.
 
 ### External device correction
 
@@ -109,9 +112,11 @@ A separate fast pre-EQ spectrum and output peak meters drive the animation. The 
 
 The native Menu Bar now shows the actual output, the current device's listening preset and the separate global EQ curve. Preset names are matched against the actual device-constrained preference values; a manual edit becomes Custom rather than retaining an obsolete scene label. Applied requires both callback revision counters; a saved change remains Pending until the engine reports it.
 
-Choose **Select output** or **Listening presets** directly in the menu. Output items retain stable device identity, not a mutable row number. The sixteen listening presets have five quiet section headings in one submenu, without additional nested category menus. Selecting an item only stages a preview: **Apply: selected name**, **Cancel selection** and **Selection details** appear only while a selection is pending. The details include the target device, actual constrained changes, correction preservation and an explicit no-makeup-gain compression warning. Applying a scene, switching output, comparing and undoing do not require opening the TUI or navigating a tab.
+The TUI preset picker exposes these as separate layers even when they share a display name. For example, **Warm · Listening preset** changes the current output's listening profile and is the same setting used by the Menu Bar, while **Warm · Tone curve** changes the global ten-band EQ. External Menu Bar/CLI/MCP edits move the TUI selection to the layer whose revision actually changed; neither layer silently overwrites the other.
 
-On macOS and Windows, choosing a preset or output opens an immediate native review dialog after the OS menu closes. Cancel is the safe default; Apply commits through the same frozen preview guard. Users do not have to reopen the menu to discover pending controls. Linux retains the named in-menu Apply/Cancel fallback. Native events wake the main event loop through an event proxy rather than depending only on periodic polling. Only the controller's own successfully committed revisions are acknowledged immediately, so rapid A/B or Undo after Apply is not rejected as an outside edit; real concurrent edits still fail closed.
+Choose **Select output** or **Listening presets** directly in the menu. Output items retain stable device identity, not a mutable row number. Listening presets are grouped in one submenu, including the spatial-effect scenes. Selecting an enabled output or preset applies it immediately through the same revision/session/device guards used by the TUI and CLI; there is no second confirmation dialog. Applying a scene, switching output, comparing and undoing do not require opening the TUI or navigating a tab.
+
+On macOS, Windows and Linux, choosing an enabled preset or output commits immediately after the OS menu event while still rechecking the displayed session, output identity, capability and revisions. No native review dialog or hidden Apply/Cancel step remains. Native events wake the main event loop through an event proxy rather than depending only on periodic polling. Only the controller's own successfully committed revisions are acknowledged immediately, so rapid A/B or Undo after a selection is not rejected as an outside edit; real concurrent edits still fail closed.
 
 **Compare reference / enhanced** and **Undo listening change** are direct menu actions. A/B still uses the same revisioned parameter path but no longer overwrites the previous tonal change's undo snapshot. Current-device Undo cannot restore another device's settings. Six native language names are available directly in the menu and update the existing shared preference. Errors remain in a dedicated message rather than being overwritten by the next status refresh.
 
@@ -161,6 +166,9 @@ maris language
 | P | Open the flat preset picker; Enter applies; Esc cancels |
 | Mixer Matrix Up/Down, Space, Enter | Choose apps, mark a pending scope, then apply it once |
 | A in Mixer Matrix | Mark all system playback; Enter confirms the new scope |
+
+When there is no local Apps draft, the TUI follows the active runtime capture scope, including changes made through CLI, MCP or the native menu. Local marks stay stable while editing. Leaving Apps before Enter discards those unapplied marks and restores the active runtime scope.
+
 | Assist goal buttons | Click Balanced/Warm/Clear/Soft to generate a preview; no change is applied yet |
 | G / J / Enter | Choose a listening goal / preview / explicitly apply the preview |
 | B | Compare reference/enhanced through the same level-matching path |
@@ -172,7 +180,7 @@ The Profile EQ curve displays only the original ten-band filter response, not a 
 
 CLI, TUI and MCP share atomic, revision-checked state. The original ten-band profile remains backward compatible. Additional music preferences live in `listening.json` with their own revision; no existing original profile is migrated or silently overwritten.
 
-`maris status --json` reports the original `applied_revision` and the additional `applied_music_revision`. `maris sound status --json` shows the effective device preference and whether the running engine implements the music stage. A newly saved preference is not proof that an old engine has applied it. `engine_revision`, `restart_required`, and `pending` distinguish the new client from a still-running old engine. This fidelity revision is `music-fidelity-6`: a newly built physical-output path starts from the target device's correction with subjective preference controls neutral, then crossfades into the saved target over 120 ms instead of presenting the complete tonal target immediately. Historical untouched Maris built-in profiles that still carry the old fixed -6 dB preamp are compatibility-normalized to a 0 dB requested preamp when their built-in curve is unchanged; custom profiles keep their explicit preamp. Actual positive EQ cascades still reserve calculated digital headroom.
+`maris status --json` reports the original `applied_revision` and the additional `applied_music_revision`. `maris sound status --json` shows the effective device preference and whether the running engine implements the music stage. A newly saved preference is not proof that an old engine has applied it. `engine_revision`, `restart_required`, and `pending` distinguish the new client from a still-running old engine. This fidelity revision is `music-fidelity-7`: it retains the correction-first 120 ms physical-output startup/rebind ramp and adds bounded Virtual 360 / Stereo Focus processing in the device-listening stage. Older running engines are reported as restart-required rather than pretending to apply the new fields. Historical untouched Maris built-in profiles that still carry the old fixed -6 dB preamp are compatibility-normalized to a 0 dB requested preamp when their built-in curve is unchanged; custom profiles keep their explicit preamp. Actual positive EQ cascades still reserve calculated digital headroom.
 
 ```sh
 maris mcp                    # read-only
@@ -216,7 +224,7 @@ The mixer data plane opens multiple explicit hardware or application sources and
 
 The Rust DSP, state, CLI, TUI, localization and model adapters are cross-platform source. Native system/application paths are implemented with CoreAudio process taps on macOS 14.2+, WASAPI process loopback plus reversible session routing on Windows, and a local PulseAudio-compatible route (including PipeWire-Pulse) on Linux. `maris --json applications` is read-only; `maris application --pid <PID> --accept-routing` starts explicit selected-process processing. Implementation does not equal three-platform hardware validation; the native CI and device checks remain separate release evidence.
 
-Each Maris stream is stereo. The multi-strip/two-bus engine supports simultaneous explicit inputs and two outputs, independent application strips on the native platform backends, per-strip processing, independent clock bridges and user-set output alignment delay. Per-device preference memory remains separate from mixer routing, and stereo widening is not discrete surround sound. Maris does not claim unrelated plug-in hosting or room-measurement features.
+Each Maris stream is stereo. The multi-strip/two-bus engine supports simultaneous explicit inputs and two outputs, independent application strips on the native platform backends, per-strip processing, independent clock bridges and user-set output alignment delay. Per-device preference memory remains separate from mixer routing. Virtual 360 is a bounded stereo-side spatial effect, not multichannel object audio, head-tracked binaural rendering or a room model. Maris does not claim unrelated plug-in hosting or room-measurement features.
 
 The clock bridge uses a preallocated 128-tap windowed-sinc interpolator for near-unity independent-clock correction with a 50 ms native capture reserve. This is not an arbitrary sample-rate converter or a measured end-to-end latency figure. The original EQ and music filters now share one estimated headroom reserve instead of independently attenuating the signal twice. Disabled music processing no longer applies its own gain. See [audio quality](audio-quality.md) for reproduced regressions, research, tests and limitations.
 

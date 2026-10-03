@@ -118,6 +118,27 @@ fn eqmac_profile(raw: EqMacRawPreset, rate: u32) -> Result<Profile> {
     Ok(profile)
 }
 
+pub fn tone_curve_matches(current: &Profile, id: &str, rate: u32) -> bool {
+    profile(id, rate).is_ok_and(|target| {
+        current.name == target.name
+            && current.preamp_db == target.preamp_db
+            && current.safety_margin_db == target.safety_margin_db
+            && current.bands == target.bands
+    })
+}
+
+pub fn apply_tone_curve(current: &Profile, id: &str, rate: u32) -> Result<Profile> {
+    let mut next = profile(id, rate)?;
+    // A tone-curve preset owns its curve/headroom metadata, not independent
+    // playback/spatial policy. Preserve controls that the user may have set
+    // through Settings, Menu Bar, CLI or MCP.
+    next.crossfeed = current.crossfeed;
+    next.stereo_width = current.stereo_width;
+    next.bypass = current.bypass;
+    next.validate()?;
+    Ok(next)
+}
+
 pub fn profile(id: &str, rate: u32) -> Result<Profile> {
     if MARIS_PRESETS.contains(&id) {
         return Profile::preset(id);
@@ -173,17 +194,31 @@ pub fn list() -> Vec<PresetSummary> {
 }
 
 /// Customer picker: useful listening scenes first; original EQ IDs remain unchanged.
+pub const LISTENING_PRESETS: [&str; 6] = ["natural", "warm", "vocal", "detail", "soft", "night"];
+
 pub fn console_catalog() -> Vec<PresetSummary> {
-    let mut catalog: Vec<_> = crate::presets::scenes::SCENES
-        .iter()
-        .map(|scene| PresetSummary {
-            id: format!("scene:{}", scene.id),
-            category: "scene",
-            name: scene.name.into(),
+    let mut catalog: Vec<_> = LISTENING_PRESETS
+        .into_iter()
+        .map(|id| PresetSummary {
+            id: format!("listening:{id}"),
+            category: "listening",
+            name: id.to_owned(),
             source: "Maris",
-            description: scene.description.into(),
+            description: "Device listening preset; measured correction stays unchanged.".into(),
         })
         .collect();
+    catalog.extend(
+        crate::presets::scenes::SCENES
+            .iter()
+            .map(|scene| PresetSummary {
+                id: format!("scene:{}", scene.id),
+                category: "scene",
+                name: scene.name.into(),
+                source: "Maris",
+                description: scene.description.into(),
+            })
+            .collect::<Vec<_>>(),
+    );
     catalog.extend(list());
     catalog
 }

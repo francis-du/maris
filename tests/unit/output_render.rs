@@ -264,6 +264,43 @@ fn prepared_replacement_proves_callback_readiness_without_consuming_or_publishin
 }
 
 #[test]
+fn native_output_error_forces_the_next_callback_to_restart_from_silence() {
+    let metrics = Arc::new(Metrics::default());
+    let mut renderer = Renderer::new(
+        settings(),
+        48_000,
+        Arc::new(ArrayQueue::new(8)),
+        metrics.clone(),
+    );
+    let now = Instant::now();
+    let mut data = [0.0_f32; 512];
+    let period = Duration::from_secs_f64(256.0 / 48_000.0);
+    for index in 0..12_u32 {
+        renderer.render_at(
+            &mut data,
+            2,
+            || ([0.5, -0.5], true),
+            now + period.mul_f64(f64::from(index)),
+        );
+    }
+    assert!((data[0] - 0.5).abs() < 1e-5);
+
+    output_stream_error(&metrics);
+    assert_eq!(metrics.errors.load(Ordering::Relaxed), 1);
+    renderer.render_at(
+        &mut data,
+        2,
+        || ([-0.5, 0.5], true),
+        now + period.mul_f64(12.0),
+    );
+    assert!(
+        data[0].abs() < 0.001,
+        "stream error resumed old/new PCM without a silence-bound recovery"
+    );
+    assert_eq!(metrics.callback_discontinuities.load(Ordering::Relaxed), 1);
+}
+
+#[test]
 fn a_short_missed_native_deadline_restarts_before_replaying_old_pcm() {
     let metrics = Arc::new(Metrics::default());
     let mut renderer = Renderer::new(
@@ -549,7 +586,7 @@ fn all_settings_rows_commit_through_the_session_queue_into_the_real_renderer() {
     use crossterm::event::KeyCode;
     use serde_json::json;
     const KEY: &str = "OFFLINE Renderer Speaker";
-    for initial_row in 0..26 {
+    for initial_row in 0..crate::ui::tui::input::SOUND_ROWS {
         let directory = tempfile::tempdir().unwrap();
         let store = Store::at(directory.path());
         let capability = device_profile::effective(&store, KEY).unwrap();

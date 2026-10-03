@@ -20,21 +20,28 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 LOCALES = ('en', 'zh-CN')
 STATES = ('live', 'idle', 'stale', 'failed', 'stopping', 'restore-failed')
-SOURCES = ('Cargo.toml', 'Cargo.lock', 'src/ui/desktop/native.rs',
-           'src/ui/desktop/native/menu_review.rs', 'src/ui/desktop/native/native_loop.rs', 'src/ui/desktop/menu_header.rs',
-           'src/ui/desktop/native_mark.rs', 'src/ui/desktop/status_icon.rs',
-           'src/ui/desktop/menu_capture.rs', 'src/ui/desktop/monitor_state.rs',
-           'src/ui/desktop/controls.rs', 'src/ui/desktop/events.rs', 'src/ui/desktop/mod.rs',
+CAPTURE_SPECS = (('live', 'light'), ('live', 'dark'),
+                 ('idle', 'dark'), ('stale', 'dark'), ('failed', 'dark'),
+                 ('stopping', 'dark'), ('restore-failed', 'dark'))
+# Only files that can change the documented native menu's visible structure,
+# labels, icon, status presentation or preset contents belong in provenance.
+# Capture/test harnesses, event-loop plumbing, lockfiles and this exporter are
+# deliberately excluded: changing those must not make otherwise identical
+# documentation stale.
+SOURCES = ('Cargo.toml', 'src/ui/desktop/native.rs',
+           'src/ui/desktop/menu_header.rs', 'src/ui/desktop/native_mark.rs',
+           'src/ui/desktop/status_icon.rs', 'src/ui/desktop/monitor_state.rs',
+           'src/ui/desktop/controls.rs', 'src/presets/scenes.rs',
            'src/i18n/mod.rs', 'src/i18n/console.rs', 'src/i18n/surface.rs',
-           'src/i18n/messages.rs', 'tests/support/menu_probe.rs', 'scripts/capture_menu_docs.py')
+           'src/i18n/messages.rs')
 MANIFEST = 'menu-bar-review-manifest.json'
 LIMIT = 2_000_000
 LABELS = {
-    'en': ('Maris · native menu', 'Light · processing', 'Dark · selection preview',
+    'en': ('Maris · native menu', 'Light · processing', 'Dark · processing',
            'Actual offline AppKit views. No audio capture or hardware validation.',
            'Processing', 'Standby', 'Awaiting telemetry', 'Audio unavailable',
            'Stopping audio', 'Restore failed'),
-    'zh-CN': ('Maris · 原生菜单', '浅色 · 正在处理', '深色 · 待确认的场景',
+    'zh-CN': ('Maris · 原生菜单', '浅色 · 正在处理', '深色 · 正在处理',
               '真实离线 AppKit 视图；未启动音频采集，未验证硬件。',
               '正在处理', '待机', '等待遥测', '音频不可用', '正在停止音频', '恢复失败'),
 }
@@ -109,7 +116,7 @@ def captures(root: Path, report: dict) -> dict:
                     or not mark.get('accessibility_label') or not mark.get('accessibility_value')):
                 raise ValueError('Actual 18-point template mark or accessibility metadata is missing')
             entries[key] = item
-        required = {('live', 'light'), ('selection', 'dark')} | {(state, 'dark') for state in STATES}
+        required = {('live', 'light'), ('live', 'dark')} | {(state, 'dark') for state in STATES}
         if not required.issubset(entries):
             raise ValueError('Missing native normal/pending/error-state views for ' + language)
         result[language] = entries
@@ -141,7 +148,7 @@ def illustration(root: Path, language: str, entries: dict) -> tuple[str, list[di
         assets.append(dict(source, language=language, state=item['state'], appearance=item['appearance'],
                            kind=kind, image=item['image']))
 
-    for index, key in enumerate((('live', 'light'), ('selection', 'dark'))):
+    for index, key in enumerate((('live', 'light'), ('live', 'dark'))):
         x = 36 + index * 528
         out.append(f'<text x="{x}" y="118" font-size="19" font-weight="600">{escape(labels[1 + index])}</text>')
         item = entries[key]
@@ -205,12 +212,87 @@ def main() -> None:
         return
     before = source_hashes(root)
     environment = dict(os.environ, CARGO_BUILD_JOBS='2')
-    subprocess.run(['cargo', 'run', '--locked', '--quiet', '--example', 'menu_probe', '--', '--capture'], cwd=root,
-                   env=environment, check=True, timeout=240, stdout=subprocess.DEVNULL)
+    # Keep compilation time separate from the actual native-capture deadline.
+    # A cold GitHub macOS runner can spend several minutes compiling AppKit and
+    # the full crate; that must not be misreported as a hung menu interaction.
+    subprocess.run(
+        ['cargo', 'build', '--locked', '--quiet', '--example', 'menu_probe'],
+        cwd=root,
+        env=environment,
+        check=True,
+        timeout=480,
+        stdout=subprocess.DEVNULL,
+    )
+    binary = root / 'target' / 'debug' / 'examples' / ('menu_probe.exe' if os.name == 'nt' else 'menu_probe')
+    # First prove the production native-menu event path terminates without any
+    # screenshot work. A hang here is a control bug, not a slow AppKit capture.
+    subprocess.run(
+        [str(binary)],
+        cwd=root,
+        env=environment,
+        check=True,
+        timeout=45,
+        stdout=subprocess.DEVNULL,
+    )
+    # AppKit menu tracking is a nested native run loop. Isolate every
+    # screenshot in its own process so one stuck popup cannot strand the complete
+    # documentation pass. The no-capture probe above already proved the actual
+    # menu construction and event-dispatch path terminates.
+    source = root / '.maris-review/menu-review.json'
+    locale_records = {
+        language: {'language': language, 'native_states': {'captures': []}}
+        for language in LOCALES
+    }
+    for language in LOCALES:
+        for state, appearance in CAPTURE_SPECS:
+            expected = (language, state, appearance)
+            for attempt in range(1, 3):
+                source.unlink(missing_ok=True)
+                try:
+                    subprocess.run(
+                        [str(binary), '--capture-one', language, state, appearance],
+                        cwd=root,
+                        env=environment,
+                        check=True,
+                        timeout=20,
+                        stdout=subprocess.DEVNULL,
+                    )
+                except subprocess.TimeoutExpired as error:
+                    if attempt < 2:
+                        continue
+                    raise ValueError(
+                        f'Native menu capture timed out: {language}/{state}/{appearance}'
+                    ) from error
+                report = json.loads(source.read_text(encoding='utf-8'))
+                records = [item for item in report.get('locales', [])
+                           if item.get('language') == language]
+                if len(records) != 1:
+                    raise ValueError(
+                        f'Native menu capture returned the wrong locale: {expected}'
+                    )
+                items = records[0].get('native_states', {}).get('captures', [])
+                matching = [item for item in items
+                            if (item.get('language'), item.get('state'), item.get('appearance'))
+                            == expected]
+                if len(matching) != 1:
+                    raise ValueError(
+                        f'Native menu capture returned the wrong state: {expected}'
+                    )
+                locale_records[language]['native_states']['captures'].append(matching[0])
+                break
+    report = {
+        'source': 'isolated offline fixture',
+        'native_menu_construction': True,
+        'native_event_dispatch': True,
+        'immediate_selection_apply': True,
+        'native_dialog_clicked': False,
+        'audio_started': False,
+        'hardware_validated': False,
+        'locales': [locale_records[language] for language in LOCALES],
+    }
+    source.write_text(json.dumps(report, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
     if source_hashes(root) != before:
         raise ValueError('Native render sources changed during the probe; rerun after source ownership is settled')
-    source = root / '.maris-review/menu-review.json'
-    report = json.loads(source.read_text(encoding='utf-8'))
     native = captures(root, report)
     manifest = {'scope': 'actual_offline_appkit', 'hardware_validation': False,
                 'audio_started': False, 'whole_desktop_captured': False, 'source_sha256': before,

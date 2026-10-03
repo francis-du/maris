@@ -7,6 +7,38 @@ fn heartbeat(store: &Store) -> Result<()> {
     store.write_json("runtime.json", &runtime)
 }
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[derive(Clone)]
+enum CaptureMode {
+    None,
+    #[cfg(target_os = "macos")]
+    All,
+    #[cfg(target_os = "macos")]
+    One {
+        state: String,
+        appearance: String,
+    },
+}
+#[cfg(target_os = "macos")]
+impl CaptureMode {
+    fn wants(&self, state: &str, appearance: &str) -> bool {
+        match self {
+            Self::None => false,
+            Self::All => {
+                (state == "live" && matches!(appearance, "light" | "dark"))
+                    || (matches!(
+                        state,
+                        "idle" | "stale" | "failed" | "stopping" | "restore-failed"
+                    ) && appearance == "dark")
+            }
+            Self::One {
+                state: requested_state,
+                appearance: requested_appearance,
+            } => requested_state == state && requested_appearance == appearance,
+        }
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn snapshot(view: &Indicator, locale: &str, state: &str, appearance: &str) -> Result<Value> {
     use crate::ui::desktop::menu_capture;
@@ -15,7 +47,7 @@ fn snapshot(view: &Indicator, locale: &str, state: &str, appearance: &str) -> Re
     let bar_path = directory.join(format!("{locale}-{state}-{appearance}-bar.png"));
     let header_path = directory.join(format!("{locale}-{state}-{appearance}-header.png"));
     let menu = menu_capture::capture_menu(
-        &view.menu,
+        &view._menu,
         &view.header.view,
         &view.header.button,
         &menu_path,
@@ -31,7 +63,7 @@ fn snapshot(view: &Indicator, locale: &str, state: &str, appearance: &str) -> Re
 }
 
 #[cfg(target_os = "macos")]
-fn state_review(view: &mut Indicator, locale: &str, capture: bool) -> Result<Value> {
+fn state_review(view: &mut Indicator, locale: &str, capture: &CaptureMode) -> Result<Value> {
     let store = view.store.clone();
     let original: Value = read_json(&store.directory.join("runtime.json"))?;
     let mut result = Vec::new();
@@ -95,44 +127,12 @@ fn state_review(view: &mut Indicator, locale: &str, capture: bool) -> Result<Val
                 .is_some_and(|value| value.contains(t(expected))),
             "Native header did not expose the actual {name} state"
         );
-        if capture && matches!(locale, "en" | "zh-CN") {
+        if matches!(locale, "en" | "zh-CN") {
             for appearance in ["light", "dark"] {
-                result.push(snapshot(view, locale, name, appearance)?);
-            }
-        }
-        if name == "live" {
-            let library = std::fs::read(store.directory.join("listening.json"))?;
-            let count = view.menu.items().len();
-            heartbeat(&store)?;
-            view.controller.select_preset(&store, "night-dialogue")?;
-            heartbeat(&store)?;
-            view.refresh_quick_controls()?;
-            ensure!(
-                view.menu.items().len() == count + 3
-                    && view.apply_selection.is_enabled()
-                    && view.cancel_selection.is_enabled(),
-                "Native selection omitted its live Apply/Cancel controls"
-            );
-            let metadata = crate::ui::desktop::menu_capture::image_metadata(&view.header.button)?;
-            ensure!(
-                metadata["accessibility_value"]
-                    .as_str()
-                    .is_some_and(|value| value.contains(t("Selection ready; review then apply"))),
-                "Native header reported a staged selection as already applied"
-            );
-            if capture && matches!(locale, "en" | "zh-CN") {
-                for appearance in ["light", "dark"] {
-                    result.push(snapshot(view, locale, "selection", appearance)?);
+                if capture.wants(name, appearance) {
+                    result.push(snapshot(view, locale, name, appearance)?);
                 }
             }
-            view.controller.cancel();
-            heartbeat(&store)?;
-            view.refresh_quick_controls()?;
-            ensure!(
-                std::fs::read(store.directory.join("listening.json"))? == library
-                    && view.menu.items().len() == count,
-                "Native selection capture changed settings or retained hidden controls"
-            );
         }
     }
     // Hold only this fixture's session lease. Quit must render the real stopping
@@ -154,7 +154,6 @@ fn state_review(view: &mut Indicator, locale: &str, capture: bool) -> Result<Val
         view.follow.id().clone(),
         view.compare.id().clone(),
         view.undo.id().clone(),
-        view.apply_selection.id().clone(),
         view.presets[0].0.id().clone(),
     ] {
         heartbeat(&store)?;
@@ -214,7 +213,7 @@ fn state_review(view: &mut Indicator, locale: &str, capture: bool) -> Result<Val
                 .is_some_and(|value| value.contains(text)),
             "Native header lost {name} status"
         );
-        if capture && matches!(locale, "en" | "zh-CN") {
+        if matches!(locale, "en" | "zh-CN") && capture.wants(name, "dark") {
             result.push(snapshot(view, locale, name, "dark")?);
         }
     }
@@ -229,18 +228,21 @@ fn state_review(view: &mut Indicator, locale: &str, capture: bool) -> Result<Val
         "Successful journal recovery did not release the failed-restore status"
     );
     Ok(
-        json!({"states_checked":["live","selection","pending","bypass","idle","stale","failed","stopping","restore-failed"],
+        json!({"states_checked":["live","pending","bypass","idle","stale","failed","stopping","restore-failed"],
             "closing_dispatch_rejected":true,"restore_failure_before_route_access":true,"captures":result}),
     )
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-pub(super) fn run(capture: bool) -> Result<Value> {
+fn run_impl(locale_filter: Option<&str>, capture: CaptureMode) -> Result<Value> {
     #[cfg(not(target_os = "macos"))]
     let _ = capture;
     let _events = winit::event_loop::EventLoop::new()?;
     let mut locales = Vec::new();
     for code in crate::i18n::LANGUAGES {
+        if locale_filter.is_some_and(|requested| requested != code) {
+            continue;
+        }
         let directory = tempfile::tempdir()?;
         let store = Store::at(directory.path());
         crate::i18n::configure(&store, Some(code))?;
@@ -254,40 +256,14 @@ pub(super) fn run(capture: bool) -> Result<Value> {
         // The review never polls the menu event receiver or starts the application loop.
         heartbeat(&store)?;
         view.refresh_quick_controls()?;
-        let normal_items = view.menu.items().len();
-        heartbeat(&store)?;
-        view.controller.select_preset(&store, "night-dialogue")?;
-        heartbeat(&store)?;
-        view.refresh_quick_controls()?;
-        let pending_items = view.menu.items().len();
-        ensure!(
-            pending_items == normal_items + 3,
-            "Pending menu controls were not inserted correctly"
-        );
-        ensure!(
-            view.apply_selection.is_enabled(),
-            "Native preview confirmation is disabled"
-        );
-        ensure!(
-            !store.directory.join("control.json").exists()
-                && !store.directory.join("listening.json").exists(),
-            "Menu preview mutated audio configuration"
-        );
-        locales.push(json!({"language":code,"normal_items":normal_items,"pending_items":pending_items,
+        let normal_items = view._menu.items().len();
+        locales.push(json!({"language":code,"normal_items":normal_items,
                 "output":view.output_caption.text(),"listening":view.profile.text(),"eq":view.tone_caption.text(),
-                "apply":view.apply_selection.text(),"cancel":view.cancel_selection.text(),
                 "presets":view.presets.iter().map(|(item,_)|item.text()).collect::<Vec<_>>(),
-                "preview":view.preview_rows.iter().map(MenuItem::text).collect::<Vec<_>>(),
-                "languages":view.languages.iter().map(|(item,_)|item.text()).collect::<Vec<_>>() }));
-        view.controller.cancel();
-        heartbeat(&store)?;
-        view.refresh_quick_controls()?;
-        ensure!(
-            view.menu.items().len() == normal_items,
-            "Cancelled preview left hidden menu actions behind"
-        );
-        // Dispatch real native item IDs through the production handler. Only the final
-        // modal response is injected; edits stay in this temporary state namespace.
+                "languages":view.languages.iter().map(|(item,_)|item.text()).collect::<Vec<_>>(),
+                "immediate_selection_apply":true }));
+        // Dispatch a real native item ID through the production handler. Selection
+        // must apply in this one event and must never invoke a second confirmation UI.
         let selected = view
             .presets
             .iter()
@@ -297,27 +273,14 @@ pub(super) fn run(capture: bool) -> Result<Value> {
             .id()
             .clone();
         heartbeat(&store)?;
-        view.menu_action(
-            MenuEvent {
-                id: selected.clone(),
-            },
-            |_, lines| {
-                ensure!(!lines.is_empty(), "No visible selection details");
-                Ok(Some(false))
-            },
-        )?;
-        ensure!(
-            !store.directory.join("listening.json").exists(),
-            "Cancel wrote settings"
-        );
-        heartbeat(&store)?;
         view.menu_action(MenuEvent { id: selected }, |_, _| {
-            heartbeat(&store)?;
-            Ok(Some(true))
+            bail!("Immediate native selection unexpectedly requested confirmation")
         })?;
         ensure!(
-            crate::tuning::preferences::load(&store)?.revision == 1,
-            "Native action did not apply"
+            crate::tuning::preferences::load(&store)?.revision == 1
+                && !view.controller.has_pending()
+                && view._menu.items().len() == normal_items,
+            "Native selection did not apply immediately or left pending controls"
         );
         for _ in 0..2 {
             heartbeat(&store)?;
@@ -344,16 +307,79 @@ pub(super) fn run(capture: bool) -> Result<Value> {
             !store.directory.join("control.json").exists(),
             "Review queued audio control"
         );
+
+        heartbeat(&store)?;
+        view.menu_action(
+            MenuEvent {
+                id: view.follow.id().clone(),
+            },
+            |_, _| bail!("Immediate output selection unexpectedly requested confirmation"),
+        )?;
+        let control: Value = read_json(&store.directory.join("control.json"))?;
+        ensure!(
+            control["action"] == "select_output"
+                && control["output"].is_null()
+                && !view.controller.has_pending(),
+            "Native output selection did not queue an immediate follow-default request"
+        );
+        std::fs::remove_file(store.directory.join("control.json"))?;
+
         #[cfg(target_os = "macos")]
         {
-            let states = state_review(&mut view, code, capture)?;
+            let states = state_review(&mut view, code, &capture)?;
             let record = locales.last_mut().context("Missing locale review")?;
             record["native_states"] = states;
         }
     }
     Ok(
         json!({"source":"isolated offline fixture","native_menu_construction":true,
-            "native_event_dispatch":true,"native_dialog_clicked":false,
+            "native_event_dispatch":true,"immediate_selection_apply":true,"native_dialog_clicked":false,
             "audio_started":false,"hardware_validated":false,"locales":locales}),
+    )
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub(super) fn run(capture: bool) -> Result<Value> {
+    #[cfg(target_os = "macos")]
+    {
+        run_impl(
+            None,
+            if capture {
+                CaptureMode::All
+            } else {
+                CaptureMode::None
+            },
+        )
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = capture;
+        run_impl(None, CaptureMode::None)
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn run_capture_one(locale: &str, state: &str, appearance: &str) -> Result<Value> {
+    ensure!(
+        crate::i18n::LANGUAGES.contains(&locale),
+        "Unsupported menu-capture locale"
+    );
+    ensure!(
+        matches!(
+            state,
+            "live" | "idle" | "stale" | "failed" | "stopping" | "restore-failed"
+        ),
+        "Unsupported menu-capture state"
+    );
+    ensure!(
+        matches!(appearance, "light" | "dark"),
+        "Unsupported menu-capture appearance"
+    );
+    run_impl(
+        Some(locale),
+        CaptureMode::One {
+            state: state.to_owned(),
+            appearance: appearance.to_owned(),
+        },
     )
 }

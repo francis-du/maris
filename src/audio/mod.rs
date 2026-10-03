@@ -148,6 +148,8 @@ pub(super) struct Metrics {
     stream_resets: AtomicU64,
     configuration_events: AtomicU64,
     checked_configuration_events: AtomicU64,
+    #[cfg(target_os = "macos")]
+    device_list_events: AtomicU64,
     errors: AtomicU64,
     revision: AtomicU64,
     music_revision: AtomicU64,
@@ -163,7 +165,7 @@ pub(super) struct Metrics {
 }
 impl Metrics {
     fn continuity(&self) -> Value {
-        json!({
+        let value = json!({
             "revision":"stream-recovery-1",
             "capture_discontinuities":self.capture_discontinuities.load(Ordering::Acquire),
             "callback_discontinuities":self.callback_discontinuities.load(Ordering::Acquire),
@@ -172,7 +174,14 @@ impl Metrics {
             "checked_configuration_events":self.checked_configuration_events.load(Ordering::Acquire),
             "scope":"current_pipeline",
             "power_state_measured":false
-        })
+        });
+        #[cfg(target_os = "macos")]
+        let value = {
+            let mut value = value;
+            value["device_list_events"] = json!(self.device_list_events.load(Ordering::Acquire));
+            value
+        };
+        value
     }
 }
 #[derive(Clone, Copy)]
@@ -603,18 +612,20 @@ impl Session {
             let store = self.store.clone();
             let output = self.output_name.clone();
             let profile_key = self.output_profile_key.clone();
+            let model_id = self.output_identity.model_id.clone();
             let existing_correction = crate::tuning::preferences::load(&store)?
                 .effective(&profile_key)
                 .correction_source
                 .is_some();
-            if !existing_correction
-                && !output.to_ascii_lowercase().contains("speaker")
-                && !output.eq_ignore_ascii_case("Headphones")
-            {
+            if !existing_correction {
                 let _ = std::thread::Builder::new()
                     .name("maris-device-match".into())
                     .spawn(move || {
-                        if let Ok(matched) = crate::devices::autoeq::resolve(&output, &store) {
+                        if let Ok(matched) = crate::devices::autoeq::resolve_with_model_id(
+                            &output,
+                            model_id.as_deref(),
+                            &store,
+                        ) {
                             let _ = crate::devices::capability::remember_match(
                                 &store,
                                 &profile_key,

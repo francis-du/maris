@@ -84,5 +84,13 @@ pub fn sound_rows(view: &Console<'_>) -> Vec<(String, String)> {
             ),
         )
     }));
+    rows.push((
+        t("Virtual 360").into(),
+        format!("{:.0}%", view.music.virtual_surround * 100.0),
+    ));
+    rows.push((
+        t("Stereo Focus").into(),
+        format!("{:.0}%", view.music.stereo_focus * 100.0),
+    ));
     rows
 }

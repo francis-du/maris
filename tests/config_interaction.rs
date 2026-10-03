@@ -64,7 +64,7 @@ fn section_selection_is_one_action_and_arrows_cannot_enter_playback_switches() {
         }
         assert_eq!(selected, *group.rows().last().unwrap());
     }
-    assert_eq!(all_rows.len(), 26);
+    assert_eq!(all_rows.len(), 28);
     assert!(!editor.pending());
     assert_eq!(
         editor
@@ -147,4 +147,58 @@ fn adjusting_a_draft_never_implicitly_enables_processing_or_exits_reference() {
     assert_eq!(updated.effective("Headphones").bass_db, 0.5);
     assert!(!updated.effective("Headphones").enabled);
     assert!(updated.effective("Headphones").reference);
+}
+
+#[test]
+fn spatial_drafts_keep_processing_and_reference_policy_unchanged() {
+    for (row, field) in [(26_usize, "surround"), (27, "focus")] {
+        let _clock = maris::analysis::DebugClock::freeze_at(maris::analysis::now_ms());
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::at(dir.path());
+        let library = listening::edit(&store, Some(0), Some("Headphones"), |p| {
+            p.enabled = false;
+            p.reference = true;
+            Ok(())
+        })
+        .unwrap();
+        let eq = store.load().unwrap();
+        let runtime = json!({
+            "active":true,"session_id":"configuration-spatial-fixture","profile_key":"Headphones",
+            "output":"Headphones","sample_rate":48000,"music_processing":true,
+            "device_identity":{"stable_id":"fixture"},"rebind_count":0,
+            "device_capability":Capability::default(),"updated_at_ms":maris::analysis::now_ms()
+        });
+        store.write_json("runtime.json", &runtime).unwrap();
+        let runtime = live_telemetry::refresh(&store);
+        let context = Context {
+            runtime: &runtime,
+            eq: &eq,
+            listening: &library,
+        };
+        let mut editor = Editor::default();
+        let mut selected = row;
+        editor
+            .handle(&store, context, &mut selected, KeyCode::Char('+'))
+            .unwrap();
+        let runtime = live_telemetry::refresh(&store);
+        let context = Context {
+            runtime: &runtime,
+            eq: &eq,
+            listening: &library,
+        };
+        editor
+            .handle(&store, context, &mut selected, KeyCode::Enter)
+            .unwrap();
+        let updated = listening::load(&store).unwrap();
+        let profile = updated.effective("Headphones");
+        assert!(!profile.enabled, "{field} edit enabled processing");
+        assert!(profile.reference, "{field} edit exited Reference A");
+        if row == 26 {
+            assert_eq!(profile.virtual_surround, 0.1);
+            assert_eq!(profile.stereo_focus, 0.0);
+        } else {
+            assert_eq!(profile.virtual_surround, 0.0);
+            assert_eq!(profile.stereo_focus, 0.1);
+        }
+    }
 }

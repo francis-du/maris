@@ -19,8 +19,9 @@ pub use input::PointerLatch;
 pub use view::{browser_rows, draw, group_rects, layout, pointer_action, Areas};
 
 /// Existing row IDs are stable. Sections separate tone, shared EQ and playback policy.
-pub const ROW_ORDER: [usize; 26] = [
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 10, 12, 13, 14, 15, 11,
+pub const ROW_ORDER: [usize; 28] = [
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 26, 27, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 10, 12, 13, 14,
+    15, 11,
 ];
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Group {
@@ -32,16 +33,16 @@ impl Group {
     pub const ALL: [Self; 3] = [Self::Output, Self::Equalizer, Self::Playback];
     pub fn of(row: usize) -> Self {
         match row {
-            0..=9 => Self::Output,
+            0..=9 | 26 | 27 => Self::Output,
             10 | 12 | 13 | 16..=25 => Self::Equalizer,
             _ => Self::Playback,
         }
     }
     pub fn rows(self) -> &'static [usize] {
         match self {
-            Self::Output => &ROW_ORDER[..10],
-            Self::Equalizer => &ROW_ORDER[10..23],
-            Self::Playback => &ROW_ORDER[23..],
+            Self::Output => &ROW_ORDER[..12],
+            Self::Equalizer => &ROW_ORDER[12..25],
+            Self::Playback => &ROW_ORDER[25..],
         }
     }
     pub fn label(self) -> &'static str {
@@ -95,7 +96,7 @@ struct Draft {
 }
 impl Draft {
     fn new(store: &Store, context: Context<'_>, row: usize) -> Result<Self> {
-        ensure!(row < 26, "Unknown sound control");
+        ensure!(row < 28, "Unknown sound control");
         control_panel::ensure_displayed_output(store, context.runtime)?;
         let key = context.runtime["profile_key"]
             .as_str()
@@ -187,7 +188,7 @@ impl Draft {
         Ok(())
     }
     fn adjust(&mut self, row: usize, direction: f64, q: bool) -> Result<()> {
-        ensure!(row < 26, "Unknown sound control");
+        ensure!(row < 28, "Unknown sound control");
         ensure!(
             !self.invalidated,
             "Configuration changed; cancel this draft"
@@ -223,6 +224,17 @@ impl Draft {
             candidate.music.enabled = direction > 0.0;
         } else if row == 15 {
             candidate.music.level_match = direction > 0.0;
+        } else if row == 26 || row == 27 {
+            let enabled = candidate.music.enabled;
+            let reference = candidate.music.reference;
+            candidate.music = crate::ui::tui::music::adjusted_profile(
+                &candidate.music,
+                &self.capability,
+                if row == 26 { 10 } else { 11 },
+                direction,
+            )?;
+            candidate.music.enabled = enabled;
+            candidate.music.reference = reference;
         } else {
             adjust_eq(&mut candidate.eq, row, direction)?;
         }

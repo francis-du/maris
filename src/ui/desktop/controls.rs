@@ -1,5 +1,5 @@
 //! Menu Bar quick controls. No callback, platform-device mutation or model code lives here.
-//! A selection is an in-memory preview; explicit apply uses the shared validated control paths.
+//! Native selection builds a guarded transaction that the Menu Bar applies in the same event.
 use crate::{
     audio::{self, DeviceInfo},
     control::store::{Snapshot, Store},
@@ -34,6 +34,10 @@ pub const PRESET_GROUPS: &[(&str, &[&str])] = &[
         ],
     ),
     ("Device listening", &["small-speakers"]),
+    (
+        "Spatial effects",
+        &["surround-360", "cinema-360", "stereo-focus"],
+    ),
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -620,11 +624,22 @@ impl Summary {
                 label,
                 i18n::text(status)
             ),
-            eq: format!(
-                "{}: {}",
-                i18n::text("Tone curve"),
-                i18n::preset_name(&eq.profile.name, &eq.profile.name)
-            ),
+            eq: {
+                let rate = runtime["sample_rate"]
+                    .as_u64()
+                    .filter(|rate| (44_100..=192_000).contains(rate))
+                    .unwrap_or(48_000) as u32;
+                let tone = crate::presets::list()
+                    .into_iter()
+                    .find(|preset| {
+                        crate::presets::tone_curve_matches(&eq.profile, &preset.id, rate)
+                    })
+                    .map_or_else(
+                        || i18n::text("Custom").to_owned(),
+                        |preset| i18n::preset_name(&preset.id, &preset.name).to_owned(),
+                    );
+                format!("{}: {}", i18n::text("Tone curve"), tone)
+            },
             compare: format!(
                 "A/B: {}",
                 i18n::text(if eq.profile.bypass {

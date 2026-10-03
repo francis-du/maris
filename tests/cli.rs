@@ -211,7 +211,10 @@ fn scene_cli_keeps_machine_fields_english_and_preview_read_only_in_every_locale(
             String::from_utf8_lossy(&listed.stdout)
         );
         let listed: Value = serde_json::from_slice(&listed.stdout).unwrap();
-        assert_eq!(listed["count"], 10);
+        assert_eq!(
+            listed["count"].as_u64(),
+            Some(maris::scenes::SCENES.len() as u64)
+        );
         assert_eq!(listed["scenes"][0]["id"], "focus");
         let output = run(
             directory.path(),

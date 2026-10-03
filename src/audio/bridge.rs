@@ -238,7 +238,7 @@ where
                 .fetch_add(frame_count as u64, Ordering::Relaxed);
         },
         move |_| {
-            errors.errors.fetch_add(1, Ordering::Relaxed);
+            output_stream_error(&errors);
         },
         None,
     )?)
@@ -292,6 +292,13 @@ where
     )?)
 }
 
+pub(super) fn output_stream_error(metrics: &Metrics) {
+    metrics.errors.fetch_add(1, Ordering::Relaxed);
+    metrics
+        .callback_discontinuities
+        .fetch_add(1, Ordering::Release);
+}
+
 /// Shared PCM renderer for native callbacks and local-server workers.
 /// Buffer transport, file access and route changes remain the caller's responsibility.
 pub(super) struct Renderer {
@@ -302,6 +309,7 @@ pub(super) struct Renderer {
     initial: Option<Settings>,
     rate: u32,
     last_callback: Option<(Instant, usize)>,
+    observed_discontinuities: u64,
 }
 impl Renderer {
     pub fn new(
@@ -310,6 +318,7 @@ impl Renderer {
         updates: Arc<ArrayQueue<Update>>,
         metrics: Arc<Metrics>,
     ) -> Self {
+        let observed_discontinuities = metrics.callback_discontinuities.load(Ordering::Acquire);
         Self {
             render: RenderState::new(settings, rate),
             updates,
@@ -318,6 +327,7 @@ impl Renderer {
             initial: Some(settings),
             rate,
             last_callback: None,
+            observed_discontinuities,
         }
     }
     #[cfg(unix)]
@@ -358,6 +368,12 @@ impl Renderer {
             data.fill(T::from_sample(0.0));
             return;
         }
+        let discontinuities = metrics.callback_discontinuities.load(Ordering::Acquire);
+        if discontinuities != self.observed_discontinuities {
+            self.render.resume_from_silence();
+            self.last_callback = None;
+            self.observed_discontinuities = discontinuities;
+        }
         let started = Instant::now();
         if let Some(settings) = self.initial.take() {
             metrics
@@ -382,9 +398,10 @@ impl Renderer {
                     // Hardware has already had a gap: an old held sample cannot
                     // retroactively fade it. Restart from silence and flush live backlog.
                     self.render.resume_from_silence();
-                    metrics
+                    self.observed_discontinuities = metrics
                         .callback_discontinuities
-                        .fetch_add(1, Ordering::Release);
+                        .fetch_add(1, Ordering::Release)
+                        .saturating_add(1);
                 }
             }
             self.last_callback = Some((now, frame_count));

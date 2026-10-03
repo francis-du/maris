@@ -20,12 +20,16 @@ pub(super) fn menu_review(capture: bool) -> Result<Value> {
     menu_review::run(capture)
 }
 
+#[cfg(target_os = "macos")]
+pub(super) fn menu_capture_one(locale: &str, state: &str, appearance: &str) -> Result<Value> {
+    menu_review::run_capture_one(locale, state, appearance)
+}
+
 struct Indicator {
     icon: TrayIcon,
     mark: super::native_mark::Mark,
     reduced_motion: bool,
-    menu: Menu,
-    pending_rows_visible: bool,
+    _menu: Menu,
     status: MenuItem,
     profile: MenuItem,
     toggle: MenuItem,
@@ -43,10 +47,6 @@ struct Indicator {
     follow: MenuItem,
     compare: MenuItem,
     undo: MenuItem,
-    apply_selection: MenuItem,
-    cancel_selection: MenuItem,
-    preview_menu: Submenu,
-    preview_rows: Vec<MenuItem>,
     notice: MenuItem,
     controller: Controller,
     language_menu: Submenu,
@@ -86,10 +86,11 @@ impl Indicator {
         output_menu.append(&follow)?;
         let compare = MenuItem::new(t("Compare reference / enhanced"), false, None);
         let undo = MenuItem::new(t("Undo listening change"), false, None);
-        let apply_selection = MenuItem::new(t("Apply selection"), false, None);
-        let cancel_selection = MenuItem::new(t("Cancel selection"), false, None);
-        let preview_menu = Submenu::new(t("Selection details"), false);
-        let notice = MenuItem::new(t("Select an output or preset to preview"), false, None);
+        let notice = MenuItem::new(
+            t("Output and preset selections apply immediately"),
+            false,
+            None,
+        );
         menu.append_items(&[
             &status,
             &output_caption,
@@ -160,8 +161,7 @@ impl Indicator {
             icon,
             mark,
             reduced_motion: reduce_motion(),
-            menu,
-            pending_rows_visible: false,
+            _menu: menu,
             status,
             profile,
             toggle,
@@ -179,10 +179,6 @@ impl Indicator {
             follow,
             compare,
             undo,
-            apply_selection,
-            cancel_selection,
-            preview_menu,
-            preview_rows: Vec::new(),
             notice,
             controller: Controller::default(),
             language_menu,
@@ -244,11 +240,7 @@ impl Indicator {
             .set_text(desktop_controls::menu_text(&summary.eq));
         #[cfg(target_os = "macos")]
         self.header.update(
-            t(if self.controller.has_pending() {
-                "Selection ready; review then apply"
-            } else {
-                summary.status
-            }),
+            t(summary.status),
             &desktop_controls::menu_text(&summary.output),
         );
         self.compare.set_text(format!(
@@ -297,58 +289,6 @@ impl Indicator {
             ));
             item.set_enabled(summary.controls_enabled);
         }
-        if self.pending_rows_visible != self.controller.has_pending() {
-            if self.controller.has_pending() {
-                self.menu.insert_items(
-                    &[
-                        &self.apply_selection,
-                        &self.cancel_selection,
-                        &self.preview_menu,
-                    ],
-                    7,
-                )?;
-            } else {
-                self.menu.remove(&self.apply_selection)?;
-                self.menu.remove(&self.cancel_selection)?;
-                self.menu.remove(&self.preview_menu)?;
-            }
-            self.pending_rows_visible = self.controller.has_pending();
-        }
-        self.apply_selection
-            .set_text(desktop_controls::menu_text(&self.controller.apply_title()));
-        let inventory: Vec<_> = self
-            .outputs
-            .iter()
-            .map(|(_, device)| device.clone())
-            .collect();
-        let pending_valid = match self.controller.pending_valid(&self.store, &inventory) {
-            Ok(valid) => valid,
-            Err(error) => {
-                self.controller.notice = Some(Notice::error(format!("{error:#}")));
-                false
-            }
-        };
-        self.apply_selection.set_enabled(pending_valid);
-        self.cancel_selection.set_text(t("Cancel selection"));
-        self.cancel_selection
-            .set_enabled(self.controller.has_pending());
-        self.preview_menu.set_text(t("Selection details"));
-        self.preview_menu.set_enabled(self.controller.has_pending());
-        let lines = self.controller.preview_lines();
-        if self.preview_rows.len() != lines.len() {
-            for item in &self.preview_rows {
-                self.preview_menu.remove(item)?;
-            }
-            self.preview_rows.clear();
-            for _ in &lines {
-                let item = MenuItem::new("", false, None);
-                self.preview_menu.append(&item)?;
-                self.preview_rows.push(item);
-            }
-        }
-        for (item, line) in self.preview_rows.iter().zip(lines) {
-            item.set_text(desktop_controls::menu_text(&line));
-        }
         self.language_menu.set_text(t("Language"));
         for (item, code) in &self.languages {
             item.set_text(format!(
@@ -376,7 +316,7 @@ impl Indicator {
             }
         }
         let text = self.controller.notice.as_ref().map_or_else(
-            || t("Select an output or preset to preview").to_owned(),
+            || t("Output and preset selections apply immediately").to_owned(),
             Notice::render,
         );
         self.notice.set_text(desktop_controls::menu_text(&text));
@@ -417,7 +357,7 @@ impl Indicator {
     fn menu_action(
         &mut self,
         event: MenuEvent,
-        confirm: impl FnOnce(&str, &[String]) -> Result<Option<bool>>,
+        _confirm: impl FnOnce(&str, &[String]) -> Result<Option<bool>>,
     ) -> Result<()> {
         let passive = event.id == *self.open.id()
             || self
@@ -426,12 +366,7 @@ impl Indicator {
                 .any(|(item, _)| event.id == *item.id());
         #[cfg(target_os = "macos")]
         let passive = passive || event.id == *self.mini.id();
-        if self.closing
-            && !passive
-            && event.id != *self.stop.id()
-            && event.id != *self.quit.id()
-            && event.id != *self.cancel_selection.id()
-        {
+        if self.closing && !passive && event.id != *self.stop.id() && event.id != *self.quit.id() {
             bail!("Stopping audio");
         }
         #[cfg(target_os = "macos")]
@@ -439,31 +374,32 @@ impl Indicator {
             self.hud.toggle();
             return Ok(());
         }
-        let preview = event.id == *self.follow.id()
-            || self.outputs.iter().any(|(item, _)| event.id == *item.id())
-            || self.presets.iter().any(|(item, _)| event.id == *item.id());
         let result = (|| {
             if event.id == *self.open.id() {
                 events::open_console(&self.store)?;
-            } else if event.id == *self.apply_selection.id() {
-                self.controller
-                    .apply(&self.store, &audio::console_devices()?)?;
-            } else if event.id == *self.cancel_selection.id() {
-                self.controller.cancel();
             } else if event.id == *self.compare.id() {
                 self.controller.compare(&self.store)?;
             } else if event.id == *self.undo.id() {
                 self.controller.undo(&self.store)?;
             } else if event.id == *self.follow.id() {
                 self.controller.select_output(&self.store, None, &[])?;
+                if let Err(error) = self
+                    .controller
+                    .apply(&self.store, &audio::console_devices()?)
+                {
+                    self.controller.cancel();
+                    return Err(error);
+                }
             } else if let Some((_, device)) =
                 self.outputs.iter().find(|(item, _)| event.id == *item.id())
             {
-                self.controller.select_output(
-                    &self.store,
-                    Some(&device.id),
-                    &audio::console_devices()?,
-                )?;
+                let inventory = audio::console_devices()?;
+                self.controller
+                    .select_output(&self.store, Some(&device.id), &inventory)?;
+                if let Err(error) = self.controller.apply(&self.store, &inventory) {
+                    self.controller.cancel();
+                    return Err(error);
+                }
             } else if let Some((_, code)) = self
                 .languages
                 .iter()
@@ -483,19 +419,9 @@ impl Indicator {
                 self.presets.iter().find(|(item, _)| event.id == *item.id())
             {
                 self.controller.select_preset(&self.store, name)?;
-            }
-            if preview && self.controller.has_pending() {
-                // Native menus close on selection. Present the review immediately instead
-                // of requiring users to discover newly inserted rows by opening it again.
-                match confirm(
-                    &self.controller.apply_title(),
-                    &self.controller.preview_lines(),
-                )? {
-                    Some(true) => self
-                        .controller
-                        .apply(&self.store, &audio::console_devices()?)?,
-                    Some(false) => self.controller.cancel(),
-                    None => {} // Linux retains the explicit in-menu Apply/Cancel fallback.
+                if let Err(error) = self.controller.apply(&self.store, &[]) {
+                    self.controller.cancel();
+                    return Err(error);
                 }
             }
             Ok(())
@@ -525,7 +451,6 @@ impl Indicator {
             self.preset_menu.set_enabled(false);
             self.compare.set_enabled(false);
             self.undo.set_enabled(false);
-            self.apply_selection.set_enabled(false);
             self.resume.set_enabled(false);
             self.show_status(t("Stopping audio"), &self.output_caption.text());
             if control::is_stopped(&self.store) {
@@ -577,7 +502,6 @@ impl Indicator {
                 self.application_status = "Apply state unknown";
                 self.toggle.set_enabled(false);
                 self.controller.notice = Some(Notice::error(format!("{error:#}")));
-                self.apply_selection.set_enabled(false);
                 self.compare.set_enabled(false);
                 self.undo.set_enabled(false);
                 self.output_menu.set_enabled(false);
@@ -605,14 +529,10 @@ impl Indicator {
             if !self.store.directory.join("route.json").exists() {
                 self.recovery_error = None;
             }
-            let display = self.recovery_error.clone().unwrap_or_else(|| {
-                t(if self.controller.has_pending() {
-                    "Selection ready; review then apply"
-                } else {
-                    mode
-                })
-                .to_owned()
-            });
+            let display = self
+                .recovery_error
+                .clone()
+                .unwrap_or_else(|| t(mode).to_owned());
             self.show_status(&display, &self.output_caption.text());
             if runtime["active"] != true && startup["phase"] == "failed" {
                 self.profile.set_text(format!(

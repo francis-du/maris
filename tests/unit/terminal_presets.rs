@@ -41,6 +41,18 @@ fn highlighted_preset(process: &ConsoleProcess) -> Option<String> {
         .find_map(|row| row.strip_prefix('▶').map(|name| name.trim().to_owned()))
 }
 
+fn visible_preset_row(process: &ConsoleProcess, expected: &str) -> Option<u16> {
+    process
+        .terminal
+        .screen()
+        .rows(29, 70)
+        .enumerate()
+        .find_map(|(row, text)| {
+            text.contains(expected)
+                .then_some(u16::try_from(row).expect("PTY row fits u16"))
+        })
+}
+
 fn wait_for_preset(
     process: &mut ConsoleProcess,
     expected: Option<&str>,
@@ -187,6 +199,49 @@ fn real_terminal_reopening_preset_allows_new_enter_but_not_held_confirmation() {
 }
 
 #[test]
+fn real_terminal_reopening_preset_starts_on_the_last_applied_matching_layer() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path());
+    let _lease = store.session_lock().unwrap();
+    let _heartbeat = Heartbeat::start(store.clone());
+    let mut process = spawn_console(dir.path());
+
+    select_preset(&mut process, "scene:dialogue");
+    process.send("\r");
+    wait_until(&mut process, "Dialogue scene did not apply", || {
+        listening::load(&store).unwrap().revision == 1
+    });
+    process.send("p");
+    wait_for_preset(
+        &mut process,
+        Some("Dialogue"),
+        Instant::now() + Duration::from_secs(5),
+    );
+    process.send("\x1b");
+    idle(&mut process, Duration::from_millis(150));
+
+    select_preset(&mut process, "warm");
+    process.send("\r");
+    wait_until(&mut process, "Warm EQ preset did not apply", || {
+        store.load().unwrap().revision == 1
+    });
+    assert_eq!(
+        listening::load(&store)
+            .unwrap()
+            .effective("OFFLINE PTY fixture")
+            .presence_db,
+        1.0,
+        "EQ preset must not erase the active listening scene"
+    );
+    process.send("p");
+    wait_for_preset(
+        &mut process,
+        Some("warm"),
+        Instant::now() + Duration::from_secs(5),
+    );
+}
+
+#[test]
 fn real_terminal_cancelled_preset_does_not_write_or_consume_undo() {
     let dir = tempfile::tempdir().unwrap();
     let store = Store::at(dir.path());
@@ -210,10 +265,22 @@ fn real_terminal_clicking_a_visible_preset_then_enter_applies_that_row() {
     let _heartbeat = Heartbeat::start(store.clone());
     let mut process = spawn_console(dir.path());
     process.send("p");
-    idle(&mut process, Duration::from_millis(200));
-    // Independent fixed-size UI contract: at 140x40 the popup starts at (28,4),
-    // its header is y=5, and Dialogue is the third data row, y=8.
-    process.send(&click(Rect::new(35, 8, 1, 1)));
+    wait_for_preset(&mut process, None, Instant::now() + Duration::from_secs(5));
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let dialogue_row = loop {
+        let mut output = String::new();
+        process.drain(&mut output);
+        if let Some(row) = visible_preset_row(&process, "Dialogue") {
+            break row;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Dialogue preset was not visible for pointer selection; screen: {}",
+            process.terminal.screen().contents()
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    process.send(&click(Rect::new(35, dialogue_row, 1, 1)));
     idle(&mut process, Duration::from_millis(100));
     assert_eq!(
         listening::load(&store).unwrap().revision,

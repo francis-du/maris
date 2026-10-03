@@ -123,6 +123,20 @@ pub fn describe_changes(before: &MusicProfile, after: &MusicProfile) -> Vec<Stri
             "%",
         ),
         ("Stereo width", before.width, after.width, 100.0, "%"),
+        (
+            "Virtual 360",
+            before.virtual_surround,
+            after.virtual_surround,
+            100.0,
+            "%",
+        ),
+        (
+            "Stereo Focus",
+            before.stereo_focus,
+            after.stereo_focus,
+            100.0,
+            "%",
+        ),
         ("Balance", before.balance, after.balance, 1.0, ""),
     ] {
         if (a - b).abs() > 1e-9 {

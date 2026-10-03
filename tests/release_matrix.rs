@@ -39,6 +39,9 @@ fn seeded_release_safety_case() {
         "tight-bass",
         "game-clarity",
         "small-speakers",
+        "surround-360",
+        "cinema-360",
+        "stereo-focus",
     ];
     let scene = scenes[(seed as usize / 4) % scenes.len()];
     let before = MusicProfile {

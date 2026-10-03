@@ -155,6 +155,14 @@ fn same_device_and_rate_do_not_hide_buffer_latency_or_liveness_changes() {
 }
 
 #[test]
+fn follow_default_rebuilds_when_the_coreaudio_default_changes_or_temporarily_disappears() {
+    assert!(!default_output_changed(None, Some(42)));
+    assert!(!default_output_changed(Some(42), Some(42)));
+    assert!(default_output_changed(Some(42), Some(77)));
+    assert!(default_output_changed(Some(42), None));
+}
+
+#[test]
 fn process_selection_rejects_empty_duplicate_self_and_stale_objects() {
     let available = [10_u32, 20, 30];
     assert!(validate_process_set(&[], &available, 99).is_err());

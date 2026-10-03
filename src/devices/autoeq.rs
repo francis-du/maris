@@ -344,8 +344,47 @@ pub fn profile_for(store: &Store, entry: &Entry) -> Result<MusicProfile> {
 }
 
 pub fn resolve(device_name: &str, store: &Store) -> Result<Match> {
+    resolve_with_model_id(device_name, None, store)
+}
+
+pub fn resolve_with_model_id(
+    device_name: &str,
+    model_id: Option<&str>,
+    store: &Store,
+) -> Result<Match> {
     let entries = ensure_index(store)?;
-    Ok(match_device(device_name, &entries))
+    let primary = match_device(device_name, &entries);
+    let Some(model_id) = model_id.filter(|value| !value.trim().is_empty()) else {
+        return Ok(primary);
+    };
+    let mut secondary = match_device(model_id, &entries);
+    if secondary.auto_apply {
+        secondary.device_name = device_name.to_owned();
+        secondary.reason = format!(
+            "Exact unique AutoEq model match from hardware model identity: {}",
+            model_id
+        );
+        return Ok(secondary);
+    }
+    match (&primary.candidate, &secondary.candidate) {
+        (None, Some(_)) => {
+            secondary.device_name = device_name.to_owned();
+            secondary.reason = format!(
+                "{} (hardware model identity: {})",
+                secondary.reason, model_id
+            );
+            Ok(secondary)
+        }
+        (Some(a), Some(b)) if a.name == b.name && secondary.confidence > primary.confidence => {
+            secondary.device_name = device_name.to_owned();
+            secondary.reason = format!(
+                "{} (confirmed by hardware model identity: {})",
+                secondary.reason, model_id
+            );
+            Ok(secondary)
+        }
+        _ => Ok(primary),
+    }
 }
 
 pub fn apply_entry(
@@ -356,31 +395,11 @@ pub fn apply_entry(
     let profile = profile_for(store, entry)?;
     let correction_source = profile.correction_source.clone();
     let library = crate::tuning::preferences::edit(store, None, Some(device_name), |current| {
-        let preference = (
-            current.bass_db,
-            current.presence_db,
-            current.air_db,
-            current.softness,
-            current.intensity,
-            current.width,
-            current.balance,
-            current.compressor,
-            current.adaptive,
-            current.bass_assist,
-        );
+        // AutoEq owns correction evidence only. Every subjective preference,
+        // playback/A-B policy and spatial setting remains exactly as the user set it.
         current.correction = profile.correction.clone();
         current.correction_preamp_db = profile.correction_preamp_db;
         current.correction_source = profile.correction_source.clone();
-        current.bass_db = preference.0;
-        current.presence_db = preference.1;
-        current.air_db = preference.2;
-        current.softness = preference.3;
-        current.intensity = preference.4;
-        current.width = preference.5;
-        current.balance = preference.6;
-        current.compressor = preference.7;
-        current.adaptive = preference.8;
-        current.bass_assist = preference.9;
         Ok(())
     })?;
     let _ = crate::devices::capability::remember_applied_correction(

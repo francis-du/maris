@@ -232,6 +232,12 @@ pub fn menu_capture_review() -> Result<Value> {
     native::menu_review(true)
 }
 
+#[cfg(all(feature = "desktop", target_os = "macos"))]
+#[doc(hidden)]
+pub fn menu_capture_one(locale: &str, state: &str, appearance: &str) -> Result<Value> {
+    native::menu_capture_one(locale, state, appearance)
+}
+
 /// Exercise native event delivery and shutdown using an isolated fixture, without audio.
 #[cfg(all(feature = "desktop", any(target_os = "macos", target_os = "windows")))]
 pub fn event_loop_review() -> Result<Value> {

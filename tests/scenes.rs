@@ -22,6 +22,8 @@ fn corrected() -> MusicProfile {
         correction_source: Some("Fixture measurement".into()),
         highpass_hz: Some(45.0),
         balance: -0.1,
+        enabled: false,
+        reference: true,
         level_match: false,
         ..MusicProfile::default()
     }
@@ -30,10 +32,10 @@ fn corrected() -> MusicProfile {
 #[test]
 fn scene_catalog_is_unique_localized_and_separate_from_legacy_eq() {
     let names: BTreeSet<_> = scenes::SCENES.iter().map(|scene| scene.id).collect();
-    assert_eq!(names.len(), 10);
+    assert_eq!(names.len(), 13);
     assert_eq!(presets::list().len(), 27);
     let picker = presets::console_catalog();
-    assert_eq!(picker.len(), 37);
+    assert_eq!(picker.len(), 46);
     for preset in &picker {
         let key = maris::i18n::preset_key(&preset.id, &preset.name);
         assert!(
@@ -42,9 +44,17 @@ fn scene_catalog_is_unique_localized_and_separate_from_legacy_eq() {
             preset.id
         );
     }
-    assert!(picker[..10]
+    assert!(picker[..6]
+        .iter()
+        .all(|p| p.category == "listening" && p.id.starts_with("listening:")));
+    assert!(picker[6..19]
         .iter()
         .all(|p| p.category == "scene" && p.id.starts_with("scene:")));
+    assert_eq!(
+        picker.iter().filter(|p| p.name == "warm").count(),
+        2,
+        "Warm must expose separate Listening and Global EQ rows"
+    );
     for scene in scenes::SCENES {
         assert!(maris::music::PRESETS.contains(&scene.id));
         assert!(maris::i18n::has_translation(scene.name), "{}", scene.name);
@@ -76,6 +86,8 @@ fn every_scene_preserves_correction_balance_highpass_and_comparison_policy() {
         );
         assert_eq!(preview.profile.highpass_hz, before.highpass_hz);
         assert_eq!(preview.profile.balance, before.balance);
+        assert_eq!(preview.profile.enabled, before.enabled);
+        assert_eq!(preview.profile.reference, before.reference);
         assert_eq!(preview.profile.level_match, before.level_match);
         assert!(preview.profile.bass_db <= 0.25);
         assert!(preview.profile.presence_db <= 0.25);
@@ -85,6 +97,45 @@ fn every_scene_preserves_correction_balance_highpass_and_comparison_policy() {
             maris::music_tuning::describe_changes(&before, &preview.profile)
         );
     }
+}
+
+#[test]
+fn spatial_effect_scenes_change_only_spatial_fields_and_regular_scenes_preserve_them() {
+    let mut before = corrected();
+    before.bass_db = 1.25;
+    before.presence_db = -0.75;
+    before.air_db = 0.5;
+    before.softness = 0.35;
+    before.compressor.enabled = true;
+    before.virtual_surround = 0.2;
+    before.stereo_focus = 0.15;
+    let capability = Capability::default();
+
+    for id in ["surround-360", "cinema-360", "stereo-focus"] {
+        let preview = scenes::prepare(&before, &capability, id).unwrap();
+        assert_eq!(preview.profile.bass_db, before.bass_db);
+        assert_eq!(preview.profile.presence_db, before.presence_db);
+        assert_eq!(preview.profile.air_db, before.air_db);
+        assert_eq!(preview.profile.softness, before.softness);
+        assert_eq!(preview.profile.compressor, before.compressor);
+        assert!(
+            preview.profile.virtual_surround != before.virtual_surround
+                || preview.profile.stereo_focus != before.stereo_focus
+        );
+    }
+
+    let restrictive = Capability {
+        max_preference_boost_db: 0.1,
+        ..Capability::default()
+    };
+    let spatial = scenes::prepare(&before, &restrictive, "surround-360").unwrap();
+    assert_eq!(spatial.profile.bass_db, before.bass_db);
+    assert_eq!(spatial.profile.presence_db, before.presence_db);
+    assert_eq!(spatial.profile.air_db, before.air_db);
+
+    let dialogue = scenes::prepare(&before, &capability, "dialogue").unwrap();
+    assert_eq!(dialogue.profile.virtual_surround, before.virtual_surround);
+    assert_eq!(dialogue.profile.stereo_focus, before.stereo_focus);
 }
 
 #[test]

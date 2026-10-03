@@ -5,7 +5,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 pub const MAX_FILTERS: usize = 20;
-pub const PRESETS: [&str; 16] = [
+pub const PRESETS: [&str; 19] = [
     "natural",
     "warm",
     "vocal",
@@ -22,6 +22,9 @@ pub const PRESETS: [&str; 16] = [
     "tight-bass",
     "game-clarity",
     "small-speakers",
+    "surround-360",
+    "cinema-360",
+    "stereo-focus",
 ];
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
 #[serde(default, deny_unknown_fields)]
@@ -33,6 +36,8 @@ pub struct MusicProfile {
     pub intensity: f64,
     pub width: f64,
     pub balance: f64,
+    pub virtual_surround: f64,
+    pub stereo_focus: f64,
     pub highpass_hz: Option<f64>,
     pub correction: Vec<Filter>,
     pub correction_preamp_db: f64,
@@ -54,6 +59,8 @@ impl Default for MusicProfile {
             intensity: 1.0,
             width: 1.0,
             balance: 0.0,
+            virtual_surround: 0.0,
+            stereo_focus: 0.0,
             highpass_hz: None,
             correction: Vec::new(),
             correction_preamp_db: 0.0,
@@ -155,6 +162,8 @@ impl MusicProfile {
         baseline.intensity = 1.0;
         baseline.width = 1.0;
         baseline.balance = 0.0;
+        baseline.virtual_surround = 0.0;
+        baseline.stereo_focus = 0.0;
         baseline.compressor.enabled = false;
         baseline.adaptive.enabled = false;
         baseline.bass_assist.enabled = false;
@@ -171,6 +180,8 @@ impl MusicProfile {
         bound(self.intensity, 0.0, 1.0, "intensity")?;
         bound(self.width, 0.0, 1.5, "width")?;
         bound(self.balance, -1.0, 1.0, "balance")?;
+        bound(self.virtual_surround, 0.0, 1.0, "virtual_surround")?;
+        bound(self.stereo_focus, 0.0, 1.0, "stereo_focus")?;
         bound(
             self.correction_preamp_db,
             -30.0,
@@ -288,6 +299,17 @@ impl MusicProfile {
             },
             width: self.width,
             balance: self.balance,
+            virtual_surround: self.virtual_surround,
+            stereo_focus: self.stereo_focus,
+            surround_highpass: Filter {
+                kind: Kind::HighPass,
+                frequency_hz: 180.0,
+                gain_db: 0.0,
+                q: std::f64::consts::FRAC_1_SQRT_2,
+            }
+            .compile(rate)?,
+            surround_allpass_a: Biquad::allpass(700.0, 0.7, rate)?,
+            surround_allpass_b: Biquad::allpass(3200.0, 0.8, rate)?,
             compressor: self.compressor,
             attack: (-1.0 / (rate as f64 * self.compressor.attack_ms * 0.001)).exp(),
             release: (-1.0 / (rate as f64 * self.compressor.release_ms * 0.001)).exp(),
@@ -399,6 +421,11 @@ pub struct Settings {
     pub gain: f64,
     width: f64,
     balance: f64,
+    virtual_surround: f64,
+    stereo_focus: f64,
+    surround_highpass: Biquad,
+    surround_allpass_a: Biquad,
+    surround_allpass_b: Biquad,
     compressor: Compressor,
     attack: f64,
     release: f64,
@@ -434,6 +461,9 @@ pub struct Processor {
     bass_source_lowpass: [State; 2],
     bass_harmonic_highpass: [State; 2],
     bass_harmonic_lowpass: [State; 2],
+    surround_highpass: State,
+    surround_allpass_a: State,
+    surround_allpass_b: State,
     program_power: f64,
     reduction_db: f64,
     dry_power: f64,
@@ -452,6 +482,9 @@ impl Processor {
             bass_source_lowpass: [State::default(); 2],
             bass_harmonic_highpass: [State::default(); 2],
             bass_harmonic_lowpass: [State::default(); 2],
+            surround_highpass: State::default(),
+            surround_allpass_a: State::default(),
+            surround_allpass_b: State::default(),
             program_power: 0.0,
             reduction_db: 0.0,
             dry_power: 0.0,
@@ -484,6 +517,14 @@ impl Processor {
             next.bass_source_lowpass = self.bass_source_lowpass;
             next.bass_harmonic_highpass = self.bass_harmonic_highpass;
             next.bass_harmonic_lowpass = self.bass_harmonic_lowpass;
+        }
+        if self.settings.surround_highpass == settings.surround_highpass
+            && self.settings.surround_allpass_a == settings.surround_allpass_a
+            && self.settings.surround_allpass_b == settings.surround_allpass_b
+        {
+            next.surround_highpass = self.surround_highpass;
+            next.surround_allpass_a = self.surround_allpass_a;
+            next.surround_allpass_b = self.surround_allpass_b;
         }
         next
     }
@@ -579,9 +620,22 @@ impl Processor {
         wet = self.adaptive(dry, wet);
         wet = self.bass_assist(dry, wet);
         let mid = (wet[0] + wet[1]) * 0.5;
-        let side = (wet[0] - wet[1]) * 0.5 * s.width;
-        // Preserve the Mid channel at unity while scaling Side. A previous normalization
-        // divided the entire signal by width and made centered music quieter at width > 1.
+        let mut side = (wet[0] - wet[1]) * 0.5;
+        if s.virtual_surround > 1e-9 {
+            // Always advance the spatial filter state so mono/silent passages
+            // drain previous Side history instead of freezing it for later.
+            let high = self.surround_highpass.process(side, s.surround_highpass);
+            let phased = self.surround_allpass_b.process(
+                self.surround_allpass_a.process(high, s.surround_allpass_a),
+                s.surround_allpass_b,
+            );
+            // Do not inject the filter's decaying history into a true mono center.
+            if side.abs() > 1e-15 {
+                side += (phased - high) * s.virtual_surround;
+            }
+        }
+        side *= (1.0 - 0.75 * s.stereo_focus) * s.width;
+        // Preserve the Mid channel at unity while scaling/decorrelating Side.
         wet = [mid + side, mid - side];
         wet[0] *= 1.0 - s.balance.max(0.0);
         wet[1] *= 1.0 + s.balance.min(0.0);

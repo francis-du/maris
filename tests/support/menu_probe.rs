@@ -14,6 +14,13 @@ fn main() -> anyhow::Result<()> {
             }
             #[cfg(not(target_os = "macos"))]
             anyhow::bail!("Native menu capture requires macOS")
+        } else if args.len() == 4 && args[0] == "--capture-one" {
+            #[cfg(target_os = "macos")]
+            {
+                maris::desktop::menu_capture_one(&args[1], &args[2], &args[3])?
+            }
+            #[cfg(not(target_os = "macos"))]
+            anyhow::bail!("Native menu capture requires macOS")
         } else {
             anyhow::bail!("Unsupported native menu review argument")
         };

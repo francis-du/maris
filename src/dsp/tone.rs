@@ -122,6 +122,28 @@ impl Default for Biquad {
     }
 }
 impl Biquad {
+    pub fn allpass(frequency_hz: f64, q: f64, rate: u32) -> Result<Self> {
+        ensure!(
+            frequency_hz.is_finite()
+                && q.is_finite()
+                && (20.0..=20000.0).contains(&frequency_hz)
+                && (0.2..=10.0).contains(&q)
+                && (44100..=192000).contains(&rate)
+                && frequency_hz < rate as f64 * 0.5,
+            "Invalid all-pass parameters"
+        );
+        let w = 2.0 * PI * frequency_hz / rate as f64;
+        let alpha = w.sin() / (2.0 * q);
+        let a0 = 1.0 + alpha;
+        Ok(Self {
+            b0: (1.0 - alpha) / a0,
+            b1: (-2.0 * w.cos()) / a0,
+            b2: 1.0,
+            a1: (-2.0 * w.cos()) / a0,
+            a2: (1.0 - alpha) / a0,
+        })
+    }
+
     pub fn bandpass(frequency_hz: f64, q: f64, rate: u32) -> Result<Self> {
         ensure!(
             frequency_hz.is_finite()

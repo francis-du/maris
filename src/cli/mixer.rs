@@ -119,22 +119,20 @@ pub fn run(store: &Store, expected: Option<u64>, action: Action) -> Result<Value
             }
             crate::audio::mix::run(store.clone(), rate, true, seconds)
         }
-        Action::Eq { id, preset } => {
-            let profile = crate::presets::profile(&preset, 48_000)?;
-            Ok(serde_json::to_value(mixer::edit(
-                store,
-                expected,
-                |config| {
-                    let strip = config
-                        .strips
-                        .iter_mut()
-                        .find(|s| s.id == id)
-                        .ok_or_else(|| anyhow::anyhow!("Unknown mixer strip"))?;
-                    strip.eq = Some(profile);
-                    Ok(())
-                },
-            )?)?)
-        }
+        Action::Eq { id, preset } => Ok(serde_json::to_value(mixer::edit(
+            store,
+            expected,
+            |config| {
+                let strip = config
+                    .strips
+                    .iter_mut()
+                    .find(|s| s.id == id)
+                    .ok_or_else(|| anyhow::anyhow!("Unknown mixer strip"))?;
+                let current = strip.eq.clone().unwrap_or_default();
+                strip.eq = Some(crate::presets::apply_tone_curve(&current, &preset, 48_000)?);
+                Ok(())
+            },
+        )?)?),
         Action::Band { id, index, gain } => {
             ensure!((1..=10).contains(&index), "Band index must be 1..10");
             Ok(serde_json::to_value(mixer::edit(

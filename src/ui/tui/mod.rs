@@ -6,8 +6,10 @@ pub mod input;
 pub mod inspector;
 pub mod monitor;
 pub mod music;
+pub mod output_picker;
 pub mod preset_picker;
 pub mod presets;
+mod session;
 pub mod settings;
 pub mod studio;
 pub mod view;
@@ -28,10 +30,7 @@ use crate::{
 mod actions;
 #[cfg(test)]
 use crate::ui::tui::input::EQ_ROW_START;
-use actions::{
-    adjust_sound, application_pids, application_state, captured_application_pids, source_args,
-    toggle_reference,
-};
+use actions::{adjust_sound, application_pids, application_state, toggle_reference};
 use anyhow::{ensure, Result};
 use crossterm::{
     cursor::Show,
@@ -43,6 +42,10 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
+use session::{
+    apply_output_choice, discard_application_draft, launch_system, navigate, start_initial_audio,
+    sync_application_scope,
+};
 use std::{
     io::{self, IsTerminal},
     path::PathBuf,
@@ -135,13 +138,14 @@ pub fn run(
     let sound_scroll = 0_usize;
     let mut app_row = 0_usize;
     let mut pending_apps = Vec::<i32>::new();
-    let mut pending_initialized = false;
+    let mut pending_apps_dirty = false;
     let mut output_choice = if pin_output {
         output_index.map_or(0, |index| index + 1)
     } else {
         0
     };
     let mut preset_choice = 0_usize;
+    let mut preset_revisions: Option<(u64, u64)> = None;
     let mut goal_index = 0_usize;
     let mut proposal: Option<Proposal> = None;
     let mut motion = crate::analysis::spectrum::Motion::default();
@@ -208,7 +212,7 @@ pub fn run(
                 if runtime["last_control_result"]["action"] == "select_applications"
                     && runtime["last_control_result"]["ok"] == true
                 {
-                    pending_initialized = false;
+                    pending_apps_dirty = false;
                 }
                 notice = if runtime["last_control_result"]["ok"] == true {
                     Notice::new("Applied: {action}").label_arg(
@@ -229,10 +233,7 @@ pub fn run(
             }
         }
 
-        if !pending_initialized && runtime["active"] == true {
-            pending_apps = captured_application_pids(&runtime);
-            pending_initialized = true;
-        }
+        sync_application_scope(&runtime, &mut pending_apps, pending_apps_dirty);
 
         let frame_dt = last_frame.elapsed().as_secs_f64();
         motion.update(&runtime, frame_dt, crate::analysis::now_ms());
@@ -356,6 +357,19 @@ pub fn run(
                     }
                     continue;
                 }
+                if overlay == Overlay::Output {
+                    config_pointer.reset();
+                    if let Some(choice) = output_picker::pointer_choice(
+                        drawn_area,
+                        picker_outputs.len().saturating_add(1),
+                        output_choice,
+                        runtime["selection_invalidated"] == true,
+                        mouse,
+                    ) {
+                        output_choice = choice;
+                    }
+                    continue;
+                }
                 match config_pointer
                     .handle(drawn_area, &view, mouse)
                     .or_else(|| {
@@ -379,6 +393,13 @@ pub fn run(
                             notice = "Apply or cancel this draft before leaving".into();
                             continue;
                         }
+                        discard_application_draft(
+                            workspace,
+                            to,
+                            &runtime,
+                            &mut pending_apps,
+                            &mut pending_apps_dirty,
+                        );
                         navigate(&mut workspace, &mut sound_row, &mut cursors, to);
                         continue;
                     }
@@ -528,7 +549,7 @@ pub fn run(
                                     .filter(|rate| (44_100..=192_000).contains(rate))
                                     .unwrap_or(48_000)
                                     as u32;
-                                if preset.category == "scene" {
+                                if matches!(preset.category, "scene" | "listening") {
                                     ensure!(
                                         !snapshot.profile.bypass,
                                         "Global bypass is active; enable processing first"
@@ -538,16 +559,17 @@ pub fn run(
                                         &store,
                                         Some(listening.revision),
                                         profile_key.as_deref(),
-                                        &preset.id,
+                                        preset.id.strip_prefix("listening:").unwrap_or(&preset.id),
                                     )?;
                                     if applied.revision != listening.revision {
                                         undo_target = UndoTarget::Listening;
                                     }
                                 } else {
-                                    let profile = crate::presets::profile(&preset.id, rate)?;
                                     let applied =
                                         store.edit(Some(snapshot.revision), |current| {
-                                            *current = profile;
+                                            *current = crate::presets::apply_tone_curve(
+                                                current, &preset.id, rate,
+                                            )?;
                                             Ok(())
                                         })?;
                                     if applied.revision != snapshot.revision {
@@ -688,12 +710,20 @@ pub fn run(
             }
         });
         if let Some(destination) = destination {
+            discard_application_draft(
+                workspace,
+                destination,
+                &runtime,
+                &mut pending_apps,
+                &mut pending_apps_dirty,
+            );
             navigate(&mut workspace, &mut sound_row, &mut cursors, destination);
             continue;
         }
 
         let result: Result<()> = (|| {
             if workspace == Workspace::Apps {
+                let before = pending_apps.clone();
                 if let Some(message) = actions::application_key(
                     &store,
                     &runtime,
@@ -707,6 +737,9 @@ pub fn run(
                     },
                     key.code,
                 )? {
+                    if pending_apps != before {
+                        pending_apps_dirty = true;
+                    }
                     mixer_state = crate::mixer::load(&store).ok();
                     notice = message;
                     return Ok(());
@@ -724,6 +757,13 @@ pub fn run(
                     } else {
                         workspace.next()
                     };
+                    discard_application_draft(
+                        workspace,
+                        destination,
+                        &runtime,
+                        &mut pending_apps,
+                        &mut pending_apps_dirty,
+                    );
                     navigate(&mut workspace, &mut sound_row, &mut cursors, destination);
                 }
                 KeyCode::Char('?') => overlay = Overlay::Help,
@@ -749,10 +789,26 @@ pub fn run(
                         snapshot.revision,
                         crate::analysis::now_ms(),
                     ));
-                    preset_choice = presets
-                        .iter()
-                        .position(|preset| preset.id == snapshot.profile.name)
-                        .unwrap_or(0);
+                    let (eq_changed, listening_changed) = preset_revisions.map_or(
+                        (false, false),
+                        |(eq_revision, listening_revision)| {
+                            (
+                                eq_revision != snapshot.revision,
+                                listening_revision != listening.revision,
+                            )
+                        },
+                    );
+                    preset_choice = preset_picker::preferred_choice(
+                        &presets,
+                        preset_choice,
+                        &snapshot,
+                        music,
+                        &runtime,
+                        eq_changed,
+                        listening_changed,
+                    )
+                    .unwrap_or_else(|| preset_choice.min(presets.len().saturating_sub(1)));
+                    preset_revisions = Some((snapshot.revision, listening.revision));
                     overlay = Overlay::Preset;
                 }
                 KeyCode::Char('b') => {
@@ -857,102 +913,6 @@ pub fn run(
     }
 
     Ok(())
-}
-
-fn navigate(workspace: &mut Workspace, row: &mut usize, cursors: &mut CursorMemory, to: Workspace) {
-    *row = cursors.visit(*workspace, to, *row);
-    *workspace = to;
-}
-
-fn start_initial_audio(
-    store: &Store,
-    play: Option<&PathBuf>,
-    input_name: Option<&String>,
-    input: Option<&DeviceInfo>,
-    output: Option<&DeviceInfo>,
-    notice: &mut Notice,
-) -> Result<()> {
-    if let Some(path) = play {
-        let mut args = vec![
-            "play".into(),
-            path.canonicalize()?.to_string_lossy().into_owned(),
-            "--repeat".into(),
-        ];
-        if let Some(output) = output {
-            args.extend(["--output".into(), output.id.clone()]);
-        }
-        desktop::launch_audio(store, &args)?;
-    } else if input_name.is_some() {
-        desktop::launch_audio(store, &source_args("run", input, output))?;
-    } else if control::is_stopped(store) {
-        launch_system(store, output)?;
-        *notice = "Starting native system audio.".into();
-    }
-    Ok(())
-}
-
-fn launch_system(store: &Store, output: Option<&DeviceInfo>) -> Result<()> {
-    let mut args = source_args("system", None, output);
-    args.push("--accept-routing".into());
-    desktop::launch_audio(store, &args).map(|_| ())
-}
-
-fn apply_output_choice(
-    store: &Store,
-    runtime: &serde_json::Value,
-    selected: Option<&DeviceInfo>,
-    pin_output: &mut bool,
-    output_index: &mut Option<usize>,
-    outputs: &[DeviceInfo],
-    notice: &mut Notice,
-) -> Result<()> {
-    if runtime["active"] == true && audio::native_controls(runtime) {
-        control::request_output(store, selected.map(|device| device.id.as_str()))?;
-        *notice = selected.map_or_else(
-            || "Output request queued: follow system default.".into(),
-            |device| Notice::new("Output request queued: {device}.").arg("device", &device.name),
-        );
-    } else if control::is_stopped(store) {
-        launch_system(store, selected)?;
-        *notice = selected.map_or_else(
-            || "Starting on the system default output.".into(),
-            |device| Notice::new("Starting on {device}.").arg("device", &device.name),
-        );
-    } else {
-        anyhow::bail!("Live output switching requires native system audio");
-    }
-    *pin_output = selected.is_some();
-    *output_index = selected
-        .and_then(|device| outputs.iter().position(|item| item.id == device.id))
-        .or_else(|| outputs.iter().position(|device| device.is_default));
-    Ok(())
-}
-
-fn apply_application_scope(
-    store: &Store,
-    runtime: &serde_json::Value,
-    pids: &[i32],
-    output: Option<&DeviceInfo>,
-) -> Result<()> {
-    if runtime["active"] == true && audio::native_controls(runtime) {
-        return control::request_applications(store, pids);
-    }
-    ensure!(
-        control::is_stopped(store),
-        "Application capture requires native system audio"
-    );
-    if pids.is_empty() {
-        return launch_system(store, output);
-    }
-    let mut args = vec!["application".to_owned()];
-    for pid in pids {
-        args.extend(["--pid".into(), pid.to_string()]);
-    }
-    if let Some(output) = output {
-        args.extend(["--output".into(), output.id.clone()]);
-    }
-    args.push("--accept-routing".into());
-    desktop::launch_audio(store, &args).map(|_| ())
 }
 
 #[cfg(test)]

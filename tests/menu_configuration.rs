@@ -105,7 +105,6 @@ fn menu_control_strings_and_confirmation_templates_cover_all_six_languages() {
         "Processing bypassed",
         "Global bypass is active; enable processing first",
         "Apply: {selection}",
-        "Selection ready; review then apply",
         "Configuration changed; reopen the picker",
         "No current audio telemetry",
         "Output must be a selector or explicit null",

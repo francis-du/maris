@@ -14,7 +14,8 @@ GUIDES = ('index', 'guide', 'install')
 BRAND = ('mark.svg', 'mark-mono.svg', 'wordmark.svg')
 REFERENCES = {
     'architecture': 'reference/architecture.md', 'audio-quality': 'reference/audio-quality.md',
-    'commands': 'reference/commands.md', 'third-party': 'reference/third-party.md',
+    'commands': 'reference/commands.md', 'headphones': 'reference/headphones.md',
+    'third-party': 'reference/third-party.md',
     'ui-design': 'development/ui-design.md', 'models': 'development/models.md',
     'product-gates': 'development/product-gates.md', 'releasing': 'development/releasing.md',
     'dependency-security': 'development/dependency-security.md',
@@ -94,6 +95,41 @@ def diagram(title: str, values: list[str], kind: str) -> str:
             ''.join(f'<li><span aria-hidden="true">{i+1:02d}</span><strong>{escape(value)}</strong></li>' for i, value in enumerate(values)) + '</ol></section>')
 
 
+def headphone_catalog(root: Path) -> str:
+    index = root / 'third_party/autoeq/results-index.md'
+    entries = []
+    for line in index.read_text(encoding='utf-8').splitlines():
+        line = line.strip()
+        if not line.startswith('- ['):
+            continue
+        rest = line[3:]
+        close = rest.find('](')
+        if close > 0:
+            entries.append(rest[:close])
+    if len(entries) != 6033:
+        raise ValueError(f'Pinned AutoEq model count changed unexpectedly: {len(entries)}')
+    groups = {}
+    for name in entries:
+        first = name[:1].upper()
+        key = '0–9' if first.isdigit() else first if 'A' <= first <= 'Z' else 'Other'
+        groups.setdefault(key, []).append(name)
+    order = ['0–9'] + [chr(code) for code in range(ord('A'), ord('Z') + 1)] + ['Other']
+    body = [
+        '<section class="headphone-catalog" aria-labelledby="supported-models">',
+        '<h2 id="supported-models">Bundled correction profiles · 6,033 models</h2>',
+        '<p>Use your browser find command to search this pinned model list. Parenthesized variants such as ANC mode, pad type or filter are distinct measurements and must not be treated as interchangeable.</p>',
+    ]
+    for key in order:
+        values = groups.get(key)
+        if not values:
+            continue
+        body.append('<h3>' + escape(key) + ' · ' + str(len(values)) + '</h3><ul>')
+        body.extend('<li>' + escape(name) + '</li>' for name in values)
+        body.append('</ul>')
+    body.append('</section>')
+    return ''.join(body)
+
+
 
 def page_html(root: Path, locale: str, page: str, labels: dict, version: str, output: str | None = None) -> str:
     output = output or f'{locale}/{page}.html'
@@ -113,6 +149,8 @@ def page_html(root: Path, locale: str, page: str, labels: dict, version: str, ou
     title = '<div class="eyebrow">' + escape(ui['tagline']) + '</div><h1' + (' lang="en"' if technical else '') + '>' + escape(doc['title']) + '</h1>'
     lead = '<div class="lead"' + (' lang="en"' if technical else '') + '>' + doc['lead'] + '</div>'
     content = doc['body']
+    if page == 'headphones':
+        content += headphone_catalog(root)
     if home:
         hero = '<section class="hero">' + preview + title + lead + '<div class="hero-actions"><a class="button primary" href="' + target('install') + '">' + escape(ui['start']) + ' <span aria-hidden="true">↗</span></a><a class="button" href="' + target('guide') + '">' + escape(ui['explore']) + ' →</a></div><div class="traits">' + ''.join('<span>' + escape(ui[key]) + '</span>' for key in ('local','device','reversible')) + '</div></section>'
         body = '<main id="main" class="home" tabindex="-1">' + hero + '<div class="hero-screen">' + doc['hero'] + '</div>' + diagram(ui['flow_title'], ui['flow'], 'signal-flow') + '<article class="home-article">' + content + '</article>' + diagram(ui['workflow_title'], ui['workflow'], 'workflow') + '</main>'

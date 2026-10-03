@@ -24,6 +24,8 @@ fn set_bass(bass: Option<f64>) -> Action {
         intensity: None,
         adaptive: None,
         width: None,
+        virtual_surround: None,
+        stereo_focus: None,
         balance: None,
         compressor: None,
     }
@@ -134,6 +136,32 @@ fn enabling_an_effect_starts_with_one_visible_step_not_a_hidden_cached_amount() 
 }
 
 #[test]
+fn spatial_effect_steps_are_bounded_and_undoable_without_touching_tone() {
+    for row in [10, 11] {
+        let (_dir, store) = store();
+        listening::edit(&store, Some(0), Some("Headphones"), |p| {
+            p.bass_db = 1.25;
+            p.presence_db = -0.5;
+            Ok(())
+        })
+        .unwrap();
+        assert!(music_view::adjust(&store, Some("Headphones"), 1, row, 1.0).unwrap());
+        let state = listening::load(&store).unwrap();
+        let p = state.effective("Headphones");
+        assert_eq!(p.bass_db, 1.25);
+        assert_eq!(p.presence_db, -0.5);
+        if row == 10 {
+            assert!((p.virtual_surround - 0.1).abs() < 1e-9);
+        } else {
+            assert!((p.stereo_focus - 0.1).abs() < 1e-9);
+        }
+        let undone = listening::undo_device(&store, state.revision, "Headphones").unwrap();
+        assert_eq!(undone.effective("Headphones").virtual_surround, 0.0);
+        assert_eq!(undone.effective("Headphones").stereo_focus, 0.0);
+    }
+}
+
+#[test]
 fn unsupported_virtual_bass_rejects_without_enabling_an_inaudible_setting() {
     let (_dir, store) = store();
     assert!(music_view::adjust(&store, Some("Headphones"), 0, 1, 1.0).is_err());
@@ -213,6 +241,30 @@ fn implicit_cli_writes_never_fall_back_to_default_when_current_output_is_unknown
         // Read-only discovery stays usable without an audio session.
         assert!(sound_cli::run(&store, None, None, Action::Status).is_ok());
     }
+}
+
+#[test]
+fn cli_sound_set_preserves_processing_and_reference_policy() {
+    let (_dir, store) = store();
+    listening::edit(&store, Some(0), Some("Headphones"), |p| {
+        p.enabled = false;
+        p.reference = true;
+        Ok(())
+    })
+    .unwrap();
+
+    sound_cli::run(
+        &store,
+        Some("Headphones".into()),
+        Some(1),
+        set_bass(Some(1.0)),
+    )
+    .unwrap();
+    let state = listening::load(&store).unwrap();
+    let profile = state.effective("Headphones");
+    assert_eq!(profile.bass_db, 1.0);
+    assert!(!profile.enabled);
+    assert!(profile.reference);
 }
 
 #[test]

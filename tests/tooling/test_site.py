@@ -37,7 +37,7 @@ class Documentation(unittest.TestCase):
         cls.output = build(ROOT)
 
     def test_one_source_tree_produces_all_languages_and_legacy_urls(self):
-        self.assertEqual(len(check_output(self.output)), 103)
+        self.assertEqual(len(check_output(self.output)), 109)
         for locale in LANGUAGES:
             for page in GUIDES:
                 data = self.output[f'{locale}/{page}.html'].decode()
@@ -56,6 +56,18 @@ class Documentation(unittest.TestCase):
         self.assertNotIn('/status.html', generated)
         self.assertNotIn('class="state ', generated)
         self.assertNotIn('class="release-notice"', generated)
+
+    def test_supported_headphone_catalog_matches_the_pinned_autoeq_snapshot(self):
+        for locale in LANGUAGES:
+            page = self.output[f'{locale}/headphones.html'].decode()
+            self.assertIn('6,033 models', page)
+            for model in ('AKG K371', 'Sennheiser HD 600', 'Sony WH-1000XM5', 'Apple Airpods Pro 2'):
+                self.assertIn(model, page)
+        self.assertEqual(
+            sum(1 for line in (ROOT / 'third_party/autoeq/results-index.md').read_text(encoding='utf-8').splitlines()
+                if line.startswith('- [')),
+            6033,
+        )
 
     def test_language_switch_preserves_current_page_and_all_images_have_alt(self):
         for locale in LANGUAGES:

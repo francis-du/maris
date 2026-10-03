@@ -148,9 +148,18 @@ fn capture_menu_once(
             timerWithTimeInterval:0.15_f64, target:&*target,
             selector:sel!(snapshotMenu:), userInfo:None::<&AnyObject>, repeats:false];
         let run_loop: Retained<AnyObject> = msg_send![class!(NSRunLoop), currentRunLoop];
-        // Menu tracking runs in its own public AppKit run-loop mode.
-        let _: () = msg_send![&run_loop, addTimer:&*timer,
-            forMode:&*NSString::from_str("NSEventTrackingRunLoopMode")];
+        // AppKit normally tracks menus in NSEventTrackingRunLoopMode, but
+        // headless/shared runners may service the nested popup through a common
+        // or default run-loop mode. Register the same non-repeating timer in all
+        // public modes so one callback always snapshots and cancels the menu.
+        for mode in [
+            "NSEventTrackingRunLoopMode",
+            "NSRunLoopCommonModes",
+            "NSDefaultRunLoopMode",
+        ] {
+            let _: () = msg_send![&run_loop, addTimer:&*timer,
+                forMode:&*NSString::from_str(mode)];
+        }
         let bounds: NSRect = msg_send![button, bounds];
         let _: bool = msg_send![&native, popUpMenuPositioningItem:None::<&AnyObject>,
             atLocation:NSPoint::new(0.0,bounds.size.height), inView:button];

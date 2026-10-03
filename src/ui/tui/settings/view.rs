@@ -200,7 +200,7 @@ pub fn draw(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
     };
     let current_rows = dashboard::sound_rows(&before_view);
     let draft_rows = dashboard::sound_rows(&staged);
-    let selected = view.sound_row.min(25);
+    let selected = view.sound_row.min(27);
     let group = Group::of(selected);
     let pending = draft.is_some_and(Draft::dirty);
     let invalid = draft.is_some_and(|d| d.invalidated);
@@ -446,7 +446,7 @@ pub fn draw(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
         enabled,
         false,
     );
-    if selected >= EQ_ROW_START {
+    if (EQ_ROW_START..EQ_ROW_START + 10).contains(&selected) {
         put(
             frame,
             row(a.station, 6, 1),
@@ -568,12 +568,12 @@ pub fn pointer_action(area: Rect, view: &Console<'_>, event: MouseEvent) -> Opti
             (
                 a.q_minus,
                 KeyCode::Char('['),
-                enabled && view.sound_row >= 16,
+                enabled && (16..26).contains(&view.sound_row),
             ),
             (
                 a.q_plus,
                 KeyCode::Char(']'),
-                enabled && view.sound_row >= 16,
+                enabled && (16..26).contains(&view.sound_row),
             ),
             (a.cancel, KeyCode::Esc, true),
         ] {

@@ -476,10 +476,9 @@ fn run(cli: Cli) -> Result<()> {
                 }
                 PresetCatalogAction::Show { name } => print(presets::show(&name, rate)?),
                 PresetCatalogAction::Apply { name } => {
-                    let p = presets::profile(&name, rate)?;
                     let details = presets::show(&name, rate)?;
                     let state = store.edit(revision, |profile| {
-                        *profile = p;
+                        *profile = presets::apply_tone_curve(profile, &name, rate)?;
                         Ok(())
                     })?;
                     print(json!({"preset":details,"state":state}))
@@ -493,9 +492,8 @@ fn run(cli: Cli) -> Result<()> {
                 .as_u64()
                 .filter(|rate| (44100..=192000).contains(rate))
                 .unwrap_or(48000) as u32;
-            let p = presets::profile(&name, rate)?;
             print(store.edit(revision, |profile| {
-                *profile = p;
+                *profile = presets::apply_tone_curve(profile, &name, rate)?;
                 Ok(())
             })?)
         }
