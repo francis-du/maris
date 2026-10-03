@@ -5,7 +5,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 pub const MAX_FILTERS: usize = 20;
-pub const PRESETS: [&str; 16] = [
+pub const PRESETS: [&str; 19] = [
     "natural",
     "warm",
     "vocal",
@@ -22,6 +22,9 @@ pub const PRESETS: [&str; 16] = [
     "tight-bass",
     "game-clarity",
     "small-speakers",
+    "surround-360",
+    "cinema-360",
+    "stereo-focus",
 ];
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
 #[serde(default, deny_unknown_fields)]
