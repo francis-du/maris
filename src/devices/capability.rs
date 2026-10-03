@@ -13,6 +13,7 @@ pub struct Capability {
     pub autoeq_path: Option<String>,
     pub match_confidence: f64,
     pub match_confirmed: bool,
+    pub match_reason: Option<String>,
     pub bass_floor_hz: Option<f64>,
     pub treble_ceiling_hz: Option<f64>,
     pub max_preference_boost_db: f64,
@@ -27,6 +28,7 @@ impl Default for Capability {
             autoeq_path: None,
             match_confidence: 0.0,
             match_confirmed: false,
+            match_reason: None,
             bass_floor_hz: None,
             treble_ceiling_hz: None,
             max_preference_boost_db: 3.0,
@@ -41,6 +43,12 @@ impl Capability {
             self.match_confidence.is_finite() && (0.0..=1.0).contains(&self.match_confidence),
             "match_confidence must be in [0, 1]"
         );
+        if let Some(reason) = &self.match_reason {
+            ensure!(
+                !reason.is_empty() && reason.len() <= 512 && !reason.chars().any(char::is_control),
+                "Invalid AutoEq match reason"
+            );
+        }
         if let Some(hz) = self.bass_floor_hz {
             ensure!(
                 hz.is_finite() && (10.0..=500.0).contains(&hz),
@@ -175,6 +183,7 @@ pub fn remember_match(
     write(store, device_name, |capability| {
         capability.match_confidence = matched.confidence;
         capability.match_confirmed = confirmed || matched.auto_apply;
+        capability.match_reason = Some(matched.reason.clone());
         if let Some(entry) = &matched.candidate {
             capability.model = Some(entry.name.clone());
             capability.autoeq_path = Some(entry.path.clone());
@@ -200,6 +209,7 @@ pub fn remember_applied_correction(
         capability.autoeq_path = Some(entry.path.clone());
         capability.correction_source = correction_source.map(str::to_owned);
         capability.match_confirmed = true;
+        capability.match_reason = Some("Correction profile applied".into());
         if entry.form_factor != "unknown" {
             capability.device_class = "headphone".into();
             capability.virtual_bass_allowed = false;
