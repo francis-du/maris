@@ -50,6 +50,7 @@ fn delayed_pointer_or_key_cannot_edit_a_previous_output_or_an_offline_default() 
     let store = Store::at(dir.path());
     let displayed = runtime();
     store.write_json("runtime.json", &displayed).unwrap();
+    let displayed = live_telemetry::refresh(&store);
     control_panel::ensure_displayed_output(&store, &displayed).unwrap();
     let mut changed = displayed.clone();
     changed["profile_key"] = json!("Speakers");
