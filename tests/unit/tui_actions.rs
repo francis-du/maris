@@ -405,3 +405,43 @@ fn leaving_apps_discards_an_unapplied_scope_and_restores_the_live_capture() {
         "staying on Apps must not discard the pending selection"
     );
 }
+
+
+#[test]
+fn output_picker_mouse_uses_the_same_visible_rows_as_rendering() {
+    use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+    use ratatui::layout::Rect;
+
+    let area = Rect::new(0, 0, 100, 24);
+    let count = 20;
+    let selected = 15;
+    let layout = output_picker::layout(area, count, selected);
+    assert!(layout.offset > 0, "fixture must exercise a scrolled picker");
+
+    let click = MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: layout.rows.x + 3,
+        row: layout.rows.y + 2,
+        modifiers: KeyModifiers::NONE,
+    };
+    assert_eq!(
+        output_picker::pointer_choice(area, count, selected, false, click),
+        Some(layout.offset + 2)
+    );
+
+    let scroll = MouseEvent {
+        kind: MouseEventKind::ScrollDown,
+        column: layout.modal.x + 2,
+        row: layout.modal.y + 2,
+        modifiers: KeyModifiers::NONE,
+    };
+    assert_eq!(
+        output_picker::pointer_choice(area, count, selected, false, scroll),
+        Some(selected + 1)
+    );
+    assert_eq!(
+        output_picker::pointer_choice(area, count, selected, true, click),
+        None,
+        "an invalidated routing preview must not accept a stale click"
+    );
+}
