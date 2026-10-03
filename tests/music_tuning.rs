@@ -270,6 +270,7 @@ fn context_tuning_never_changes_measurement_correction() {
 
 #[test]
 fn apply_rejects_tampering_and_accepts_matching_live_state() {
+    let _clock = maris::analysis::DebugClock::freeze_at(maris::analysis::now_ms());
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path());
     let mut evidence = analysis::measure(&tone(1000.0), 48_000).unwrap();
@@ -470,6 +471,7 @@ fn soft_goal_does_not_silently_add_compression_to_low_crest_audio() {
 
 #[test]
 fn no_op_preview_preserves_revision_and_the_previous_undo_snapshot() {
+    let _clock = maris::analysis::DebugClock::freeze_at(maris::analysis::now_ms());
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path());
     listening::edit(&store, Some(0), Some("Fixture"), |p| {
