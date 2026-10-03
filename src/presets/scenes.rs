@@ -134,6 +134,8 @@ pub fn prepare(before: &MusicProfile, capability: &Capability, id: &str) -> Resu
     requested.correction_source = before.correction_source.clone();
     requested.highpass_hz = before.highpass_hz;
     requested.balance = before.balance;
+    requested.enabled = before.enabled;
+    requested.reference = before.reference;
     requested.level_match = before.level_match;
     let mut profile = crate::devices::capability::apply_constraints(&requested, capability);
     if find(id).is_some() && profile.bass_assist.enabled {
@@ -146,8 +148,12 @@ pub fn prepare(before: &MusicProfile, capability: &Capability, id: &str) -> Resu
         profile.correction == before.correction
             && profile.correction_source == before.correction_source
             && profile.correction_preamp_db == before.correction_preamp_db
-            && profile.highpass_hz == before.highpass_hz,
-        "A listening scene must preserve device correction"
+            && profile.highpass_hz == before.highpass_hz
+            && profile.balance == before.balance
+            && profile.enabled == before.enabled
+            && profile.reference == before.reference
+            && profile.level_match == before.level_match,
+        "A listening scene must preserve correction and playback/comparison policy"
     );
     Ok(Preview {
         id: id.to_owned(),
