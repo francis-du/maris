@@ -21,6 +21,10 @@ jobs:
           check-latest: false
       - name: Install declared Rust toolchain
         run: rustup toolchain install 1.94.0 --profile minimal --component rustfmt && rustup override set 1.94.0
+      - name: Install Linux audio build headers
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config psmisc pulseaudio pulseaudio-utils
+      - name: Verify UI probe directly
+        run: cargo run --locked --example ui_probe -- --locales
       - name: Regenerate actual offline Ratatui documentation illustrations
         run: python scripts/docs_assets.py --refresh
       - name: Validate generated documentation assets
