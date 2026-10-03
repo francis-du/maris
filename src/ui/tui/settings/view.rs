@@ -446,7 +446,7 @@ pub fn draw(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
         enabled,
         false,
     );
-    if selected >= EQ_ROW_START {
+    if (EQ_ROW_START..EQ_ROW_START + 10).contains(&selected) {
         put(
             frame,
             row(a.station, 6, 1),
@@ -568,7 +568,7 @@ pub fn pointer_action(area: Rect, view: &Console<'_>, event: MouseEvent) -> Opti
             (
                 a.q_minus,
                 KeyCode::Char('['),
-                enabled && view.sound_row >= 16,
+                enabled && (16..26).contains(&view.sound_row),
             ),
             (
                 a.q_plus,
