@@ -1,11 +1,12 @@
 name: Build application artifacts
 on:
   workflow_dispatch:
+  release:
+    types:
+      - published
   push:
     branches:
       - 'release-validation/**'
-    tags:
-      - 'v[0-9]*'
 permissions:
   contents: read
 concurrency:
