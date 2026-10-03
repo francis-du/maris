@@ -291,7 +291,6 @@ fn invalid_row_and_stale_revision_leave_both_libraries_unchanged() {
     assert_eq!(crate::listening::load(&store).unwrap().revision, 0);
 }
 
-
 #[test]
 fn preset_picker_prefers_the_last_applied_layer_when_both_scene_and_eq_match() {
     let presets = crate::presets::console_catalog();
@@ -401,5 +400,8 @@ fn leaving_apps_discards_an_unapplied_scope_and_restores_the_live_capture() {
         &mut dirty,
     );
     assert_eq!(pending, vec![333]);
-    assert!(dirty, "staying on Apps must not discard the pending selection");
+    assert!(
+        dirty,
+        "staying on Apps must not discard the pending selection"
+    );
 }
