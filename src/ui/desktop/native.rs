@@ -89,7 +89,7 @@ impl Indicator {
         let apply_selection = MenuItem::new(t("Apply selection"), false, None);
         let cancel_selection = MenuItem::new(t("Cancel selection"), false, None);
         let preview_menu = Submenu::new(t("Selection details"), false);
-        let notice = MenuItem::new(t("Select an output or preset to preview"), false, None);
+        let notice = MenuItem::new(t("Output and preset selections apply immediately"), false, None);
         menu.append_items(&[
             &status,
             &output_caption,
@@ -376,7 +376,7 @@ impl Indicator {
             }
         }
         let text = self.controller.notice.as_ref().map_or_else(
-            || t("Select an output or preset to preview").to_owned(),
+            || t("Output and preset selections apply immediately").to_owned(),
             Notice::render,
         );
         self.notice.set_text(desktop_controls::menu_text(&text));
