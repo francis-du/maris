@@ -791,10 +791,10 @@ pub fn run(
                     ));
                     let (eq_changed, listening_changed) = preset_revisions.map_or(
                         (false, false),
-                        |(eq, listening)| {
+                        |(eq_revision, listening_revision)| {
                             (
-                                eq != snapshot.revision,
-                                listening != listening.revision,
+                                eq_revision != snapshot.revision,
+                                listening_revision != listening.revision,
                             )
                         },
                     );
