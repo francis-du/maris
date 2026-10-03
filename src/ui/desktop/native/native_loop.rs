@@ -42,17 +42,24 @@ impl ApplicationHandler<MenuEvent> for Application {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        let mut exit = false;
         if let Some(indicator) = &mut self.indicator {
             match indicator.tick(self.quitting.load(Ordering::Relaxed)) {
-                Ok(true) => event_loop.exit(),
+                Ok(true) => exit = true,
                 Ok(false) => event_loop.set_control_flow(ControlFlow::WaitUntil(
                     Instant::now() + indicator.wait_interval(),
                 )),
                 Err(error) => {
                     self.failure = Some(error);
-                    event_loop.exit();
+                    exit = true;
                 }
             }
+        }
+        if exit {
+            // tray-icon's Windows Drop calls Shell_NotifyIconW(NIM_DELETE).
+            // Do that while the native event loop is still alive instead of after teardown.
+            drop(self.indicator.take());
+            event_loop.exit();
         }
     }
 }
