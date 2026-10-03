@@ -36,6 +36,22 @@ fn fixture() -> (tempfile::TempDir, Store) {
     (temp, store)
 }
 
+#[test]
+fn runtime_status_uses_the_same_debug_clock_as_live_fixture_heartbeats() {
+    let temp = tempfile::tempdir().unwrap();
+    let store = Store::at(temp.path());
+    store
+        .write_json(
+            "runtime.json",
+            &json!({"active":true,"updated_at_ms":1_u64}),
+        )
+        .unwrap();
+    let _clock = maris::analysis::DebugClock::freeze_at(1);
+    let status = maris::audio::runtime_status(&store);
+    assert_eq!(status["active"], true);
+    assert_ne!(status["stale"], true);
+}
+
 fn observe_live(controller: &mut Controller, store: &Store) -> maris::analysis::DebugClock {
     let runtime = live_telemetry::refresh(store);
     let now = runtime["updated_at_ms"].as_u64().unwrap();
