@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   refresh:
@@ -38,3 +38,21 @@ jobs:
             docs/assets/illustrations.json
           if-no-files-found: error
           retention-days: 1
+      - name: Commit only reviewed generated illustrations and remove this temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t changed < <(git diff --name-only)
+          for path in "${changed[@]}"; do
+            case "$path" in
+              docs/assets/studio-*.svg|docs/assets/settings-*.svg|docs/assets/presets-*.svg|docs/assets/illustrations.json) ;;
+              *) echo "Unexpected generated change: $path" >&2; exit 1 ;;
+            esac
+          done
+          test "${#changed[@]}" -ge 1
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/assets/studio-*.svg docs/assets/settings-*.svg docs/assets/presets-*.svg docs/assets/illustrations.json
+          git rm .github/workflows/tui-docs-refresh.yml
+          git commit -m "docs: refresh TUI illustrations"
+          git push origin HEAD:fix/tui-preset-state-20261003
