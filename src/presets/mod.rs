@@ -194,8 +194,20 @@ pub fn list() -> Vec<PresetSummary> {
 }
 
 /// Customer picker: useful listening scenes first; original EQ IDs remain unchanged.
+pub const LISTENING_PRESETS: [&str; 6] = ["natural", "warm", "vocal", "detail", "soft", "night"];
+
 pub fn console_catalog() -> Vec<PresetSummary> {
-    let mut catalog: Vec<_> = crate::presets::scenes::SCENES
+    let mut catalog: Vec<_> = LISTENING_PRESETS
+        .into_iter()
+        .map(|id| PresetSummary {
+            id: format!("listening:{id}"),
+            category: "listening",
+            name: id.to_owned(),
+            source: "Maris",
+            description: "Device listening preset; measured correction stays unchanged.".into(),
+        })
+        .collect();
+    catalog.extend(crate::presets::scenes::SCENES
         .iter()
         .map(|scene| PresetSummary {
             id: format!("scene:{}", scene.id),
@@ -204,7 +216,7 @@ pub fn console_catalog() -> Vec<PresetSummary> {
             source: "Maris",
             description: scene.description.into(),
         })
-        .collect();
+        .collect::<Vec<_>>());
     catalog.extend(list());
     catalog
 }
