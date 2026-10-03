@@ -4,6 +4,11 @@ use anyhow::Result;
 use serde_json::Value;
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
+const INITIAL_FRAME: Frame = Frame {
+    mode: Mode::Idle,
+    level: 0,
+};
+
 pub(super) struct Mark {
     images: Vec<Icon>,
     animation: Animation,
@@ -21,16 +26,11 @@ impl Mark {
             .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(Self {
             images,
-            animation: Animation::default(),
+            animation: Animation::seeded(INITIAL_FRAME),
         })
     }
     pub fn build(&self, builder: TrayIconBuilder) -> TrayIconBuilder {
-        let image = self.images[Frame {
-            mode: Mode::Idle,
-            level: 0,
-        }
-        .cache_index()]
-        .clone();
+        let image = self.images[INITIAL_FRAME.cache_index()].clone();
         #[cfg(target_os = "macos")]
         {
             builder.with_icon_templated(image)
