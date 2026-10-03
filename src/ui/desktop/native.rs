@@ -378,15 +378,23 @@ impl Indicator {
                 self.controller.undo(&self.store)?;
             } else if event.id == *self.follow.id() {
                 self.controller.select_output(&self.store, None, &[])?;
-                self.controller
-                    .apply(&self.store, &audio::console_devices()?)?;
+                if let Err(error) = self
+                    .controller
+                    .apply(&self.store, &audio::console_devices()?)
+                {
+                    self.controller.cancel();
+                    return Err(error);
+                }
             } else if let Some((_, device)) =
                 self.outputs.iter().find(|(item, _)| event.id == *item.id())
             {
                 let inventory = audio::console_devices()?;
                 self.controller
                     .select_output(&self.store, Some(&device.id), &inventory)?;
-                self.controller.apply(&self.store, &inventory)?;
+                if let Err(error) = self.controller.apply(&self.store, &inventory) {
+                    self.controller.cancel();
+                    return Err(error);
+                }
             } else if let Some((_, code)) = self
                 .languages
                 .iter()
@@ -406,7 +414,10 @@ impl Indicator {
                 self.presets.iter().find(|(item, _)| event.id == *item.id())
             {
                 self.controller.select_preset(&self.store, name)?;
-                self.controller.apply(&self.store, &[])?;
+                if let Err(error) = self.controller.apply(&self.store, &[]) {
+                    self.controller.cancel();
+                    return Err(error);
+                }
             }
             Ok(())
         })();
