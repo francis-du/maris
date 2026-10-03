@@ -504,8 +504,16 @@ pub fn ensure_displayed_output(
     store: &crate::control::store::Store,
     displayed: &Value,
 ) -> Result<()> {
-    let now = crate::analysis::now_ms();
-    let current = crate::audio::runtime_status(store);
+    ensure_displayed_output_at(store, displayed, crate::analysis::now_ms())
+}
+
+#[doc(hidden)]
+pub fn ensure_displayed_output_at(
+    store: &crate::control::store::Store,
+    displayed: &Value,
+    now: u64,
+) -> Result<()> {
+    let current = crate::audio::runtime_status_at(store, now);
     ensure!(
         crate::ui::tui::studio::live(displayed, now) && crate::ui::tui::studio::live(&current, now),
         "No current audio telemetry"
