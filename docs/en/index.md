@@ -20,7 +20,7 @@ In Settings, select a control and use minus or plus to prepare a change. Current
 
 The compact M follows measured audio level and stays still with Reduce Motion. Output and preset selections apply immediately; Compare and Undo remain directly available. Expired audio disables changes, and recovery failures keep their message visible.
 
-![Actual macOS menus in light and dark appearance, including a selection awaiting Apply](../assets/menu-bar-en.svg)
+![Actual macOS menus in light and dark appearance, including active and recovery states](../assets/menu-bar-en.svg)
 
 These native views use isolated offline state, without starting or capturing audio.
 
