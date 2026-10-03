@@ -111,7 +111,7 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
         "Internal output-switch transition queue is unavailable"
     );
     if let Some(device_id) = binding.coreaudio_id {
-        tap.watch_output(device_id)?;
+        tap.watch_output(device_id, output.is_none())?;
         // Capture the negotiated output, not the pre-construction buffer snapshot.
         binding.buffer_frames = tap_ffi::output_buffer_frames(device_id).ok();
         binding.latency_frames = tap_ffi::output_latency_frames(device_id).ok();
@@ -349,7 +349,14 @@ impl Session {
     }
 
     pub(super) fn refresh_system_output(&mut self) -> Result<()> {
-        if self.tap.is_none() || self.last_device_check.elapsed() < Duration::from_millis(300) {
+        let pending_configuration = self
+            .tap
+            .as_ref()
+            .is_some_and(TapCapture::configuration_pending);
+        if self.tap.is_none()
+            || (!pending_configuration
+                && self.last_device_check.elapsed() < Duration::from_millis(300))
+        {
             return Ok(());
         }
         self.last_device_check = Instant::now();
