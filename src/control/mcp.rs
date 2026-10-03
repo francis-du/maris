@@ -614,11 +614,10 @@ pub fn invoke(store: &Store, name: &str, arguments: Value, allow_write: bool) ->
                 .as_u64()
                 .filter(|rate| (44100..=192000).contains(rate))
                 .unwrap_or(48000) as u32;
-            let preset = presets::profile(&a.name, rate)?;
             Ok(serde_json::to_value(store.edit(
                 Some(a.expected_revision),
                 |p| {
-                    *p = preset;
+                    *p = presets::apply_tone_curve(p, &a.name, rate)?;
                     Ok(())
                 },
             )?)?)
