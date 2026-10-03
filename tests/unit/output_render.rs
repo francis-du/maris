@@ -549,7 +549,7 @@ fn all_settings_rows_commit_through_the_session_queue_into_the_real_renderer() {
     use crossterm::event::KeyCode;
     use serde_json::json;
     const KEY: &str = "OFFLINE Renderer Speaker";
-    for initial_row in 0..26 {
+    for initial_row in 0..crate::ui::tui::input::SOUND_ROWS {
         let directory = tempfile::tempdir().unwrap();
         let store = Store::at(directory.path());
         let capability = device_profile::effective(&store, KEY).unwrap();
