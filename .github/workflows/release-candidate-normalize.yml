@@ -1,0 +1,59 @@
+name: 0.1.0 candidate normalize
+
+on:
+  push:
+    branches:
+      - release/0.1.0-final
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+          check-latest: false
+      - name: Install declared Rust toolchain
+        run: |
+          rustup toolchain install 1.94.0 --profile minimal --component rustfmt,clippy
+          rustup override set 1.94.0
+      - name: Normalize Rust formatting
+        run: |
+          cargo fmt --all
+          cargo fmt --all --check
+      - name: Compile and test default feature set
+        run: cargo test --locked --all-targets
+      - name: Compile and test minimal feature set
+        run: cargo test --locked --all-targets --no-default-features
+      - name: Regenerate actual Ratatui documentation illustrations
+        run: python3 scripts/docs_assets.py --refresh
+      - name: Regenerate actual native Menu Bar illustrations
+        run: python3 scripts/capture_menu_docs.py --refresh
+      - name: Validate documentation assets and tooling
+        run: |
+          python3 scripts/docs_assets.py
+          python3 scripts/capture_menu_docs.py
+          python3 -m unittest discover -s tests/tooling -v
+          python3 scripts/site.py --check
+      - name: Commit only normalization outputs and remove this temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t changed < <(git diff --name-only)
+          for path in "${changed[@]}"; do
+            case "$path" in
+              *.rs|docs/assets/*.svg|docs/assets/illustrations.json|docs/assets/menu-bar-review-manifest.json) ;;
+              *) echo "Unexpected normalize change: $path" >&2; exit 1 ;;
+            esac
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- ':(glob)**/*.rs' docs/assets/*.svg docs/assets/illustrations.json docs/assets/menu-bar-review-manifest.json
+          git rm .github/workflows/release-candidate-normalize.yml
+          git commit -m "release: normalize 0.1.0 candidate"
+          git push origin HEAD:release/0.1.0-final
