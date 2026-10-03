@@ -24,6 +24,8 @@ fn set_bass(bass: Option<f64>) -> Action {
         intensity: None,
         adaptive: None,
         width: None,
+        virtual_surround: None,
+        stereo_focus: None,
         balance: None,
         compressor: None,
     }
@@ -130,6 +132,32 @@ fn enabling_an_effect_starts_with_one_visible_step_not_a_hidden_cached_amount() 
         };
         assert!((actual - 0.1).abs() < 1e-9, "first step was {actual}");
         assert_eq!(state.revision, 2);
+    }
+}
+
+#[test]
+fn spatial_effect_steps_are_bounded_and_undoable_without_touching_tone() {
+    for row in [10, 11] {
+        let (_dir, store) = store();
+        listening::edit(&store, Some(0), Some("Headphones"), |p| {
+            p.bass_db = 1.25;
+            p.presence_db = -0.5;
+            Ok(())
+        })
+        .unwrap();
+        assert!(music_view::adjust(&store, Some("Headphones"), 1, row, 1.0).unwrap());
+        let state = listening::load(&store).unwrap();
+        let p = state.effective("Headphones");
+        assert_eq!(p.bass_db, 1.25);
+        assert_eq!(p.presence_db, -0.5);
+        if row == 10 {
+            assert!((p.virtual_surround - 0.1).abs() < 1e-9);
+        } else {
+            assert!((p.stereo_focus - 0.1).abs() < 1e-9);
+        }
+        let undone = listening::undo_device(&store, state.revision, "Headphones").unwrap();
+        assert_eq!(undone.effective("Headphones").virtual_surround, 0.0);
+        assert_eq!(undone.effective("Headphones").stereo_focus, 0.0);
     }
 }
 
