@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - 'release-validation/**'
+    tags:
+      - 'v[0-9]*'
 permissions:
   contents: read
 concurrency:
@@ -22,7 +24,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Require release validation pushes to match current main
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release-validation/')
         shell: bash
         run: |
           set -euo pipefail
@@ -154,4 +156,5 @@ jobs:
           path: dist/cli-manifest/maris-release.tsv
           if-no-files-found: error
           retention-days: 14
-# CLI manifests bind six exact native CI outputs. No GitHub Release is published here.
+# CLI manifests bind six exact native CI outputs. Tag builds are published only by
+# release-assets.yml after this entire workflow succeeds and the manifest is rechecked.
