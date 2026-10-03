@@ -9,7 +9,6 @@ from urllib.parse import quote, unquote, urlsplit
 from docs_assets import LANGUAGES, validate as validate_illustrations
 from capture_menu_docs import MANIFEST as MENU_MANIFEST, validate as validate_menu_illustrations
 from docs_markdown import render, slug
-from release_requirements import load as load_requirements, REQUIRED
 
 GUIDES = ('index', 'guide', 'install')
 BRAND = ('mark.svg', 'mark-mono.svg', 'wordmark.svg')
