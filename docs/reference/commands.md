@@ -34,7 +34,7 @@ TUI listening edits are already persisted through the device-specific listening 
 # Writes without --device require a fresh active output and a known profile key.
 maris sound status --json
 maris sound preset warm --json
-maris sound set --bass 1.5 --presence 0.5 --softness 0.2 --adaptive 0.6 --json
+maris sound set --bass 1.5 --presence 0.5 --softness 0.2 --adaptive 0.6 --virtual-surround 0.7 --json
 maris sound compare true --json
 maris sound compare false --json
 maris sound save-device --json
@@ -53,7 +53,10 @@ The original music presets `natural`, `warm`, `vocal`, `detail`, `soft`, and `ni
 | `focus` | Subtle bass/treble reduction for background listening; no compression. |
 | `long-listening` | Softer high end and bounded dynamic control; not hearing protection. |
 | `dialogue` | Reduced bass and a small presence lift for dialogue/podcasts; no denoising. |
-| `cinema` | Modest weight and dialogue presence, without surround or spatial-processing claims. |
+| `cinema` | Modest weight and dialogue presence; preserves any separately selected spatial effect. |
+| `surround-360` | Virtual 360 side decorrelation above the bass region; preserves the current tonal/dynamics settings. |
+| `cinema-360` | Gentler virtual surround for film playback; preserves the current tonal/dynamics settings. |
+| `stereo-focus` | Reduces unstable Side energy while preserving the mono center and current tonal settings. |
 | `night-dialogue` | Reduced bass and peak dynamics; explicitly enables compression without makeup gain. |
 | `acoustic-listening` | Restrained presence/air lift for acoustic recordings; compression stays off. |
 | `orchestral` | Neutral static tone and very light dynamic control, preserving original stereo width. |
@@ -175,7 +178,7 @@ The Profile EQ curve displays only the original ten-band filter response, not a 
 
 CLI, TUI and MCP share atomic, revision-checked state. The original ten-band profile remains backward compatible. Additional music preferences live in `listening.json` with their own revision; no existing original profile is migrated or silently overwritten.
 
-`maris status --json` reports the original `applied_revision` and the additional `applied_music_revision`. `maris sound status --json` shows the effective device preference and whether the running engine implements the music stage. A newly saved preference is not proof that an old engine has applied it. `engine_revision`, `restart_required`, and `pending` distinguish the new client from a still-running old engine. This fidelity revision is `music-fidelity-6`: a newly built physical-output path starts from the target device's correction with subjective preference controls neutral, then crossfades into the saved target over 120 ms instead of presenting the complete tonal target immediately. Historical untouched Maris built-in profiles that still carry the old fixed -6 dB preamp are compatibility-normalized to a 0 dB requested preamp when their built-in curve is unchanged; custom profiles keep their explicit preamp. Actual positive EQ cascades still reserve calculated digital headroom.
+`maris status --json` reports the original `applied_revision` and the additional `applied_music_revision`. `maris sound status --json` shows the effective device preference and whether the running engine implements the music stage. A newly saved preference is not proof that an old engine has applied it. `engine_revision`, `restart_required`, and `pending` distinguish the new client from a still-running old engine. This fidelity revision is `music-fidelity-7`: it retains the correction-first 120 ms physical-output startup/rebind ramp and adds bounded Virtual 360 / Stereo Focus processing in the device-listening stage. Older running engines are reported as restart-required rather than pretending to apply the new fields. Historical untouched Maris built-in profiles that still carry the old fixed -6 dB preamp are compatibility-normalized to a 0 dB requested preamp when their built-in curve is unchanged; custom profiles keep their explicit preamp. Actual positive EQ cascades still reserve calculated digital headroom.
 
 ```sh
 maris mcp                    # read-only
@@ -219,7 +222,7 @@ The mixer data plane opens multiple explicit hardware or application sources and
 
 The Rust DSP, state, CLI, TUI, localization and model adapters are cross-platform source. Native system/application paths are implemented with CoreAudio process taps on macOS 14.2+, WASAPI process loopback plus reversible session routing on Windows, and a local PulseAudio-compatible route (including PipeWire-Pulse) on Linux. `maris --json applications` is read-only; `maris application --pid <PID> --accept-routing` starts explicit selected-process processing. Implementation does not equal three-platform hardware validation; the native CI and device checks remain separate release evidence.
 
-Each Maris stream is stereo. The multi-strip/two-bus engine supports simultaneous explicit inputs and two outputs, independent application strips on the native platform backends, per-strip processing, independent clock bridges and user-set output alignment delay. Per-device preference memory remains separate from mixer routing, and stereo widening is not discrete surround sound. Maris does not claim unrelated plug-in hosting or room-measurement features.
+Each Maris stream is stereo. The multi-strip/two-bus engine supports simultaneous explicit inputs and two outputs, independent application strips on the native platform backends, per-strip processing, independent clock bridges and user-set output alignment delay. Per-device preference memory remains separate from mixer routing. Virtual 360 is a bounded stereo-side spatial effect, not multichannel object audio, head-tracked binaural rendering or a room model. Maris does not claim unrelated plug-in hosting or room-measurement features.
 
 The clock bridge uses a preallocated 128-tap windowed-sinc interpolator for near-unity independent-clock correction with a 50 ms native capture reserve. This is not an arbitrary sample-rate converter or a measured end-to-end latency figure. The original EQ and music filters now share one estimated headroom reserve instead of independently attenuating the signal twice. Disabled music processing no longer applies its own gain. See [audio quality](audio-quality.md) for reproduced regressions, research, tests and limitations.
 
