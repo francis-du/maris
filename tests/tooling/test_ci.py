@@ -133,6 +133,21 @@ class ToolchainRequirements(unittest.TestCase):
         text = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
         self.assertRegex(text, r"name: Native Windows download regression\s*\n\s*if: runner.os == 'Windows'\s*\n\s*run: python -m unittest discover -s tests/tooling -p test_online.py -v")
 
+    def test_release_publication_builds_and_proves_public_installers(self):
+        build = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')
+        publish = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
+        self.assertRegex(build, r"release:\s*\n\s*types:\s*\n\s*- published")
+        self.assertIn('workflow_run:', publish)
+        self.assertIn("gh release upload", publish)
+        self.assertIn("maris-release.tsv", publish)
+        self.assertIn("public-install-smoke:", publish)
+        self.assertIn("bash install.sh --version", publish)
+        self.assertIn("& ./install.ps1 -Version", publish)
+        for runner in ('macos-15', 'macos-15-intel', 'ubuntu-24.04', 'ubuntu-24.04-arm',
+                       'windows-2025', 'windows-11-arm'):
+            with self.subTest(runner=runner):
+                self.assertIn(runner, publish)
+
     def test_developer_install_instructions_match_cargo(self):
         required = 'Rust ' + minimum_rust()
         paths = [ROOT / 'docs' / language / 'install.md'
