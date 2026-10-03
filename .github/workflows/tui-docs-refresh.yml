@@ -1,6 +1,9 @@
 name: TUI docs refresh
 
 on:
+  push:
+    branches:
+      - fix/tui-preset-state-20261003
   workflow_dispatch:
 
 permissions:
