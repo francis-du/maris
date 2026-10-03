@@ -885,11 +885,7 @@ pub fn run(
     Ok(())
 }
 
-fn sync_application_scope(
-    runtime: &serde_json::Value,
-    pending: &mut Vec<i32>,
-    dirty: bool,
-) {
+fn sync_application_scope(runtime: &serde_json::Value, pending: &mut Vec<i32>, dirty: bool) {
     if !dirty {
         *pending = if runtime["active"] == true {
             captured_application_pids(runtime)
