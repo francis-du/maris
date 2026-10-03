@@ -1,6 +1,6 @@
 # Model provenance and third-party components
 
-Initial research checked on 2026-09-30; model-admission and commercial-license review updated on 2026-10-01 in MODEL_REVIEW.md. This is an engineering provenance record, not a complete dependency-license audit or a legal clearance opinion. Before distributing binaries, retain the full license/copyright notices required by every selected dependency and model.
+Initial research checked on 2026-09-30; model-admission and redistribution provenance is recorded here and in the pinned `third_party/*/SOURCE.md` and license files. This is an engineering provenance and notice record, not a legal clearance opinion. Native CLI/TUI packaging derives the locked runtime dependency inventory and verifies the actual archived notice bytes before a stable manifest can be assembled.
 
 ## Packaging and documentation tooling
 
@@ -52,7 +52,7 @@ Normal UI/CLI/MCP inventory contains only local backends. MusicNN is bundled in 
 ### MusicNN PyTorch
 
 - Source: https://huggingface.co/oriyonay/musicnn-pytorch
-- Repository/model-card license metadata: Apache-2.0. The original `jordipons/musicnn` code is ISC-licensed. Public release remains blocked until the final weight-redistribution and notice review is complete.
+- Repository/model-card license metadata: Apache-2.0. The original `jordipons/musicnn` code is ISC-licensed. The pinned distribution record retains the Apache-2.0 text, the original ISC notice, source revisions and accepted weight digest under `third_party/musicnn/`; the native CLI/TUI notice inventory includes and hash-checks those files. This records the engineering redistribution basis and required notices without claiming legal clearance.
 - Reviewed PyTorch-port revision: `7cff1a4f9899825ddba77130899dfac4c8cfe9d5`. The current MTT safetensors artifact is approximately 792k parameters / 3.18 MB F32 with SHA-256 `cc0b9400fcaed6e9ce7fbcfa97ec91e4fcb5f2ab34ca3a0cd6bef4af74753e1a`.
 - The original MusicNN preprocessing downsamples to 16 kHz mono, uses a 512-point Hann STFT with 256-sample hop, 96 mel bands, then `log10(10000*x + 1)`. Upstream documentation recommends approximately three-second input patches because the models were trained with three-second inputs.
 - The Hugging Face convenience path uses custom code (`trust_remote_code=True`). Maris does not execute that code and does not bundle PyTorch. Release builds obtain only the exact reviewed `model.safetensors` artifact from revision `7cff1a4f9899825ddba77130899dfac4c8cfe9d5`, require the expected 3,175,212-byte size and SHA-256 `cc0b9400fcaed6e9ce7fbcfa97ec91e4fcb5f2ab34ca3a0cd6bef4af74753e1a`, then embed the verified bytes. The native Rust/Candle adapter implements the reviewed MusicNN MTT architecture and runs only on the background music-context worker. Normal users do not fetch or import this model at runtime. The original ISC architecture snapshots used for comparison and provenance are retained under `third_party/musicnn/`.
