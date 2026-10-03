@@ -20,7 +20,7 @@ pub struct Scene {
     pub virtual_bass: f64,
 }
 
-pub const SCENES: [Scene; 10] = [
+pub const SCENES: [Scene; 13] = [
     Scene {
         id: "focus", name: "Focus", category: "work",
         description: "Subtle bass and treble cuts for background listening; no compression.",
@@ -81,11 +81,42 @@ pub const SCENES: [Scene; 10] = [
         bass_db: 0.0, presence_db: 0.25, air_db: -0.25, softness: 0.25,
         adaptive_strength: 0.55, width: 1.0, compression: false, virtual_bass: 0.18,
     },
+    Scene {
+        id: "surround-360", name: "Surround 360", category: "spatial",
+        description: "Virtual 360 side decorrelation above the bass region; keeps mono and center content stable.",
+        bass_db: 0.0, presence_db: 0.0, air_db: 0.0, softness: 0.0,
+        adaptive_strength: 0.0, width: 1.0, compression: false, virtual_bass: 0.0,
+    },
+    Scene {
+        id: "cinema-360", name: "Cinema 360", category: "spatial",
+        description: "A gentler virtual surround stage for films; preserves the current tonal and dynamics settings.",
+        bass_db: 0.0, presence_db: 0.0, air_db: 0.0, softness: 0.0,
+        adaptive_strength: 0.0, width: 1.0, compression: false, virtual_bass: 0.0,
+    },
+    Scene {
+        id: "stereo-focus", name: "Stereo Focus", category: "spatial",
+        description: "Reduces unstable Side energy while leaving the mono center untouched.",
+        bass_db: 0.0, presence_db: 0.0, air_db: 0.0, softness: 0.0,
+        adaptive_strength: 0.0, width: 1.0, compression: false, virtual_bass: 0.0,
+    },
 ];
 
 pub fn find(id: &str) -> Option<&'static Scene> {
     let id = id.strip_prefix("scene:").unwrap_or(id);
     SCENES.iter().find(|scene| scene.id == id)
+}
+
+fn spatial_effect(id: &str) -> Option<(f64, f64)> {
+    match id.strip_prefix("scene:").unwrap_or(id) {
+        "surround-360" => Some((0.75, 0.0)),
+        "cinema-360" => Some((0.50, 0.0)),
+        "stereo-focus" => Some((0.0, 0.55)),
+        _ => None,
+    }
+}
+
+fn effect_only(id: &str) -> bool {
+    spatial_effect(id).is_some()
 }
 
 /// Requested parameters only; prepare() applies device constraints and retained correction.
@@ -110,6 +141,10 @@ pub fn profile(id: &str) -> Result<MusicProfile> {
     }
     profile.bass_assist.enabled = scene.virtual_bass > 0.0;
     profile.bass_assist.amount = scene.virtual_bass;
+    if let Some((surround, focus)) = spatial_effect(scene.id) {
+        profile.virtual_surround = surround;
+        profile.stereo_focus = focus;
+    }
     profile.validate()?;
     Ok(profile)
 }
@@ -128,7 +163,19 @@ pub struct Preview {
 pub fn prepare(before: &MusicProfile, capability: &Capability, id: &str) -> Result<Preview> {
     before.validate()?;
     capability.validate()?;
-    let mut requested = MusicProfile::preset(id.strip_prefix("scene:").unwrap_or(id))?;
+    let scene_id = id.strip_prefix("scene:").unwrap_or(id);
+    let mut requested = if effect_only(scene_id) {
+        before.clone()
+    } else {
+        MusicProfile::preset(scene_id)?
+    };
+    if let Some((surround, focus)) = spatial_effect(scene_id) {
+        requested.virtual_surround = surround;
+        requested.stereo_focus = focus;
+    } else {
+        requested.virtual_surround = before.virtual_surround;
+        requested.stereo_focus = before.stereo_focus;
+    }
     requested.correction = before.correction.clone();
     requested.correction_preamp_db = before.correction_preamp_db;
     requested.correction_source = before.correction_source.clone();
@@ -152,8 +199,11 @@ pub fn prepare(before: &MusicProfile, capability: &Capability, id: &str) -> Resu
             && profile.balance == before.balance
             && profile.enabled == before.enabled
             && profile.reference == before.reference
-            && profile.level_match == before.level_match,
-        "A listening scene must preserve correction and playback/comparison policy"
+            && profile.level_match == before.level_match
+            && (effect_only(scene_id)
+                || (profile.virtual_surround == before.virtual_surround
+                    && profile.stereo_focus == before.stereo_focus)),
+        "A listening scene must preserve correction, playback policy and unrelated effects"
     );
     Ok(Preview {
         id: id.to_owned(),
