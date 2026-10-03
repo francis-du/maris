@@ -8,7 +8,6 @@ Edit the Markdown and language resources here. `scripts/site.py` generates the w
 | --- | --- |
 | Install or upgrade | [Installation](en/install.md) |
 | Use presets, settings and Menu Bar | [User guide](en/guide.md) |
-| Check current limitations | [Release status](en/status.md) |
 | Use CLI or MCP | [Command reference](reference/commands.md) |
 | Change the implementation | [Architecture](reference/architecture.md) and [interface design](development/ui-design.md) |
 | Run tests or prepare a release | [Audio tests](reference/audio-quality.md) and [build procedure](development/releasing.md) |
