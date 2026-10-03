@@ -142,3 +142,19 @@ fn applying_a_tone_curve_preserves_independent_global_controls() {
     assert_eq!(eqmac.stereo_width, current.stereo_width);
     assert_eq!(eqmac.bypass, current.bypass);
 }
+
+
+#[test]
+fn tone_curve_matching_ignores_independent_global_controls() {
+    let mut current = presets::apply_tone_curve(
+        &maris::profile::Profile::default(),
+        "warm",
+        48_000,
+    )
+    .unwrap();
+    current.crossfeed = 0.17;
+    current.stereo_width = 1.25;
+    current.bypass = true;
+    assert!(presets::tone_curve_matches(&current, "warm", 48_000));
+    assert!(!presets::tone_curve_matches(&current, "vocal", 48_000));
+}
