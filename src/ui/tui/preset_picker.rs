@@ -30,7 +30,7 @@ fn matches_current(
         .as_u64()
         .filter(|rate| (44_100..=192_000).contains(rate))
         .unwrap_or(48_000) as u32;
-    crate::presets::profile(&preset.id, rate).is_ok_and(|profile| profile == snapshot.profile)
+    crate::presets::tone_curve_matches(&snapshot.profile, &preset.id, rate)
 }
 
 /// Keep the last applied picker row when that layer still matches. If another
