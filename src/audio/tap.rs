@@ -293,10 +293,10 @@ impl TapCapture {
         // Device insertion/removal can disturb the CoreAudio graph even when the
         // active output's own format does not change. Quarantine PCM immediately;
         // the control thread later decides whether a rebuild is actually required.
-        self.watch(1, ca::address(b"dev#"))?;
+        self.watch(ca::SYSTEM_OBJECT, ca::address(b"dev#"))?;
         if follow_default {
             self.expected_default_output = Some(device);
-            self.watch(1, ca::address(b"dOut"))?;
+            self.watch(ca::SYSTEM_OBJECT, ca::address(b"dOut"))?;
         }
         self.watch(device, ca::address(b"nsrt"))?;
         // A driver need not expose every optional latency property. Observe only
