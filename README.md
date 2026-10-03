@@ -62,7 +62,7 @@ Sound controls include EQ, dynamic reduction of strong frequency bands, optional
 
 ## Menu bar
 
-![Native Maris menu in light and dark appearance, with selection and recovery states](docs/assets/menu-bar-en.svg)
+![Native Maris menu in light and dark appearance, with active and recovery states](docs/assets/menu-bar-en.svg)
 
 The compact M responds to measured audio level and stays still with Reduce Motion. Select an output or preset and it applies immediately through the same guarded state checks; Compare and Undo remain directly available. Expired audio disables changes, and failed restoration keeps its diagnostic visible. These are actual macOS menu views rendered with isolated offline state; they do not establish audio-device acceptance.
 
