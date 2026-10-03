@@ -46,7 +46,7 @@ fn key(
     key: KeyCode,
 ) -> anyhow::Result<Option<crate::i18n::Notice>> {
     let mut selected = row;
-    application_key(
+    application_key_at(
         store,
         runtime,
         &json!({"applications":[]}),
@@ -54,6 +54,7 @@ fn key(
         &mut vec![],
         None,
         key,
+        crate::analysis::now_ms(),
     )
 }
 
