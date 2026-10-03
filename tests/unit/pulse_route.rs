@@ -5,7 +5,15 @@ use std::{
     fs,
     os::unix::{fs::PermissionsExt, net::UnixListener},
     path::PathBuf,
+    sync::{Mutex, MutexGuard},
 };
+
+static PULSE_FIXTURE_LOCK: Mutex<()> = Mutex::new(());
+fn pulse_fixture_lock() -> MutexGuard<'static, ()> {
+    PULSE_FIXTURE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 struct Fixture {
     directory: tempfile::TempDir,
@@ -81,6 +89,7 @@ impl Fixture {
 
 #[test]
 fn redirects_application_after_journaling_and_never_captures_own_output() {
+    let _fixture_lock = pulse_fixture_lock();
     let f = Fixture::new();
     let mut guard = f.guard();
     guard.reconcile().unwrap();
@@ -99,6 +108,7 @@ fn redirects_application_after_journaling_and_never_captures_own_output() {
 
 #[test]
 fn recovery_preserves_manual_routes_and_does_not_follow_reused_stream_ids() {
+    let _fixture_lock = pulse_fixture_lock();
     for manual in [true, false] {
         let f = Fixture::new();
         let mut guard = f.guard();
@@ -118,6 +128,7 @@ fn recovery_preserves_manual_routes_and_does_not_follow_reused_stream_ids() {
 
 #[test]
 fn manual_routing_is_not_immediately_taken_back_by_refresh() {
+    let _fixture_lock = pulse_fixture_lock();
     let f = Fixture::new();
     let mut guard = f.guard();
     guard.reconcile().unwrap();
@@ -132,6 +143,7 @@ fn manual_routing_is_not_immediately_taken_back_by_refresh() {
 
 #[test]
 fn a_failed_move_keeps_a_recovery_record_and_does_not_change_defaults() {
+    let _fixture_lock = pulse_fixture_lock();
     let f = Fixture::new();
     let mut guard = f.guard();
     let mut state = f.read();
@@ -148,6 +160,7 @@ fn a_failed_move_keeps_a_recovery_record_and_does_not_change_defaults() {
 
 #[test]
 fn disappearing_original_output_restores_to_current_physical_default() {
+    let _fixture_lock = pulse_fixture_lock();
     let f = Fixture::new();
     let mut guard = f.guard();
     guard.reconcile().unwrap();
@@ -165,6 +178,7 @@ fn disappearing_original_output_restores_to_current_physical_default() {
 
 #[test]
 fn unrelated_module_is_never_unloaded_when_an_id_is_reused() {
+    let _fixture_lock = pulse_fixture_lock();
     let f = Fixture::new();
     let mut guard = f.guard();
     guard.reconcile().unwrap();
@@ -184,6 +198,7 @@ fn unrelated_module_is_never_unloaded_when_an_id_is_reused() {
 
 #[test]
 fn output_selection_rejects_private_sink_and_ambiguous_device_labels() {
+    let _fixture_lock = pulse_fixture_lock();
     let f = Fixture::new();
     let mut snapshot = f.server.snapshot().unwrap();
     assert_eq!(
@@ -202,6 +217,7 @@ fn output_selection_rejects_private_sink_and_ambiguous_device_labels() {
 
 #[test]
 fn flat_volume_or_unknown_volume_policy_blocks_output_and_application_moves() {
+    let _fixture_lock = pulse_fixture_lock();
     for flags in [
         json!(["LATENCY", "FLAT_VOLUME"]),
         json!("LATENCY FLAT_VOLUME"),
@@ -221,6 +237,7 @@ fn flat_volume_or_unknown_volume_policy_blocks_output_and_application_moves() {
 
 #[test]
 fn graph_subscription_ignores_client_churn_from_read_only_queries() {
+    let _fixture_lock = pulse_fixture_lock();
     use crate::audio::pulse::server::graph_event;
     assert!(graph_event("Event 'change' on sink #1"));
     assert!(graph_event("Event 'new' on sink-input #2"));
@@ -231,6 +248,7 @@ fn graph_subscription_ignores_client_churn_from_read_only_queries() {
 
 #[test]
 fn remote_server_and_unsafe_endpoint_names_are_not_accepted() {
+    let _fixture_lock = pulse_fixture_lock();
     assert!(SocketId::read(std::path::Path::new("tcp:example.test:4713")).is_err());
     for name_value in [
         "",
