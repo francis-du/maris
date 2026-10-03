@@ -200,7 +200,7 @@ pub fn draw(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
     };
     let current_rows = dashboard::sound_rows(&before_view);
     let draft_rows = dashboard::sound_rows(&staged);
-    let selected = view.sound_row.min(25);
+    let selected = view.sound_row.min(27);
     let group = Group::of(selected);
     let pending = draft.is_some_and(Draft::dirty);
     let invalid = draft.is_some_and(|d| d.invalidated);
