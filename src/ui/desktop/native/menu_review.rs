@@ -11,10 +11,12 @@ fn heartbeat(store: &Store) -> Result<()> {
 #[derive(Clone, Copy)]
 enum CaptureMode<'a> {
     None,
+    #[cfg(target_os = "macos")]
     All,
+    #[cfg(target_os = "macos")]
     One { state: &'a str, appearance: &'a str },
 }
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(target_os = "macos")]
 impl CaptureMode<'_> {
     fn wants(self, state: &str, appearance: &str) -> bool {
         match self {
@@ -42,7 +44,7 @@ fn snapshot(view: &Indicator, locale: &str, state: &str, appearance: &str) -> Re
     let bar_path = directory.join(format!("{locale}-{state}-{appearance}-bar.png"));
     let header_path = directory.join(format!("{locale}-{state}-{appearance}-header.png"));
     let menu = menu_capture::capture_menu(
-        &view.menu,
+        &view._menu,
         &view.header.view,
         &view.header.button,
         &menu_path,
