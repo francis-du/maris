@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: 0.1.0-candidate-normalize
+  cancel-in-progress: true
+
 jobs:
   normalize:
     runs-on: macos-15
