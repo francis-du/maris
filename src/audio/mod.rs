@@ -895,6 +895,10 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 pub fn runtime_status(store: &Store) -> Value {
+    runtime_status_at(store, now_ms())
+}
+
+pub(crate) fn runtime_status_at(store: &Store, now: u64) -> Value {
     let mut status = read_json::<Value>(&store.directory.join("runtime.json"))
         .unwrap_or_else(|_| json!({"active":false}));
     if !status.is_object() {
@@ -903,7 +907,7 @@ pub fn runtime_status(store: &Store) -> Value {
     let stale = status
         .get("updated_at_ms")
         .and_then(Value::as_u64)
-        .and_then(|time| now_ms().checked_sub(time))
+        .and_then(|time| now.checked_sub(time))
         .is_none_or(|age| age > 3000);
     if stale {
         status["active"] = json!(false);

@@ -172,6 +172,7 @@ fn renew_settings_telemetry(store: &Store, displayed: &mut serde_json::Value) {
 
 #[test]
 fn expired_settings_cannot_apply_and_recovery_requires_an_explicit_new_draft() {
+    let clock = crate::analysis::test_clock::Clock::freeze();
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path());
     let mut runtime = serde_json::json!({
@@ -198,7 +199,7 @@ fn expired_settings_cannot_apply_and_recovery_requires_an_explicit_new_draft() {
             KeyCode::Char('+'),
         )
         .unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(2000));
+    clock.advance(4_000);
     assert!(editor
         .handle(
             &store,

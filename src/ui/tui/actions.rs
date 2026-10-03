@@ -79,6 +79,12 @@ pub(super) fn preserve_mixer_row(
         .unwrap_or(after.config.strips.len())
 }
 
+#[derive(Clone, Copy)]
+pub(super) struct ApplicationInput {
+    pub key: crossterm::event::KeyCode,
+    pub now: u64,
+}
+
 /// The Apps page controls the active mixer by strip ID, not an application-list index.
 /// Changing inputs or output assignments remains an explicit separate operation.
 pub(super) fn application_key(
@@ -90,8 +96,33 @@ pub(super) fn application_key(
     output: Option<&crate::audio::DeviceInfo>,
     key: crossterm::event::KeyCode,
 ) -> Result<Option<crate::i18n::Notice>> {
+    application_key_at(
+        store,
+        runtime,
+        applications,
+        row,
+        pending,
+        output,
+        ApplicationInput {
+            key,
+            now: crate::analysis::now_ms(),
+        },
+    )
+}
+
+#[doc(hidden)]
+pub(super) fn application_key_at(
+    store: &Store,
+    runtime: &serde_json::Value,
+    applications: &serde_json::Value,
+    row: &mut usize,
+    pending: &mut Vec<i32>,
+    output: Option<&crate::audio::DeviceInfo>,
+    input: ApplicationInput,
+) -> Result<Option<crate::i18n::Notice>> {
     use crate::i18n::Notice;
     use crossterm::event::KeyCode;
+    let ApplicationInput { key, now } = input;
     let mixing = mixer_mode(runtime);
     let count = if mixing {
         mixer_rows(runtime).len()
@@ -125,8 +156,8 @@ pub(super) fn application_key(
                 "Mixer controls apply immediately; assignments need a restart",
             )));
         }
-        crate::ui::tui::input::ensure_displayed_output(store, runtime)?;
-        let current = crate::audio::runtime_status(store);
+        crate::ui::tui::input::ensure_displayed_output_at(store, runtime, now)?;
+        let current = crate::audio::runtime_status_at(store, now);
         ensure!(mixer_mode(&current), "Audio session changed; select again");
         ensure!(
             current["mixer"]["restart_required"] == false,
@@ -151,7 +182,7 @@ pub(super) fn application_key(
                 .find(|strip| strip.id == selected.id)
                 .ok_or_else(|| anyhow::anyhow!("Selected mixer channel is no longer available"))?;
             ensure!(*strip == *selected, "Mixer channel changed; select again");
-            crate::ui::tui::input::ensure_displayed_output(store, runtime)?;
+            crate::ui::tui::input::ensure_displayed_output_at(store, runtime, now)?;
             match key {
                 KeyCode::Left | KeyCode::Char('-') => {
                     strip.gain_db = (strip.gain_db - 0.5).max(-60.0)

@@ -46,14 +46,17 @@ fn key(
     key: KeyCode,
 ) -> anyhow::Result<Option<crate::i18n::Notice>> {
     let mut selected = row;
-    application_key(
+    application_key_at(
         store,
         runtime,
         &json!({"applications":[]}),
         &mut selected,
         &mut vec![],
         None,
-        key,
+        ApplicationInput {
+            key,
+            now: crate::analysis::now_ms(),
+        },
     )
 }
 
@@ -204,9 +207,10 @@ fn header_waits_for_the_actual_mixer_revision() {
 
 #[test]
 fn a_real_expired_heartbeat_rejects_a_channel_until_the_same_target_is_live_again() {
+    let clock = crate::analysis::test_clock::Clock::freeze();
     let (_directory, store, mut displayed) = fixture();
     let before = std::fs::read(store.directory.join("mixer.json")).unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(2000));
+    clock.advance(4_000);
     assert!(key(&store, &displayed, 1, KeyCode::Right).is_err());
     assert_eq!(
         std::fs::read(store.directory.join("mixer.json")).unwrap(),

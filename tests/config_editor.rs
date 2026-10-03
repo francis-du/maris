@@ -384,9 +384,9 @@ fn band_q_draft_uses_the_visible_sample_rate_conversion_and_remains_undoable() {
     let visible_q = before.bands[0].q_at(48000);
     let mut editor = Editor::default();
     let mut row = 16;
-    press(&mut editor, &store, &mut row, KeyCode::Char(']')).unwrap();
+    press_live(&mut editor, &store, &mut row, KeyCode::Char(']')).unwrap();
     assert_eq!(store.load().unwrap().profile, before);
-    press(&mut editor, &store, &mut row, KeyCode::Enter).unwrap();
+    press_live(&mut editor, &store, &mut row, KeyCode::Enter).unwrap();
     let current = store.load().unwrap();
     assert!((current.profile.bands[0].q - (visible_q + 0.1).clamp(0.2, 5.0)).abs() < 1e-9);
     assert_eq!(current.profile.bands[0].bandwidth_octaves, None);
@@ -399,7 +399,7 @@ fn capability_changes_invalidate_pending_edits_without_writing_other_parameters(
     let (_dir, store) = fixture();
     let mut editor = Editor::default();
     let mut row = 0;
-    press(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap();
+    press_live(&mut editor, &store, &mut row, KeyCode::Char('+')).unwrap();
     let cap = Capability {
         max_preference_boost_db: 0.0,
         ..Capability::default()

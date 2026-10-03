@@ -22,7 +22,7 @@ fn event(rect: Rect, kind: MouseEventKind) -> MouseEvent {
 fn with_view(f: impl FnOnce(Console<'_>)) {
     let dir = tempfile::tempdir().unwrap();
     let store = Store::at(dir.path());
-    let runtime = json!({"active":true,"session_id":"fixture","profile_key":"Fixture Headphones",
+    let mut runtime = json!({"active":true,"session_id":"fixture","profile_key":"Fixture Headphones",
         "output":"Fixture Headphones","sample_rate":48000,"updated_at_ms":maris::analysis::now_ms(),
         "device_capability":Capability::default()});
     store.write_json("runtime.json", &runtime).unwrap();
@@ -30,6 +30,7 @@ fn with_view(f: impl FnOnce(Console<'_>)) {
     let library = listening::load(&store).unwrap();
     let mut editor = Editor::default();
     let mut row = 16;
+    runtime["updated_at_ms"] = json!(maris::analysis::now_ms());
     editor
         .handle(
             &store,
