@@ -95,9 +95,9 @@ struct Current {
     capability: Capability,
 }
 impl Current {
-    fn read(store: &Store, now: u64) -> Result<Self> {
-        let runtime = audio::runtime_status_at(store, now);
-        let target = Target::read(&runtime, now)?;
+    fn read(store: &Store) -> Result<Self> {
+        let runtime = audio::runtime_status(store);
+        let target = Target::read(&runtime, crate::analysis::now_ms())?;
         Ok(Self {
             capability: device_profile::effective(store, &target.key)?,
             listening: listening::load(store)?,
@@ -119,12 +119,12 @@ struct Guard {
     created_at_ms: u64,
 }
 impl Guard {
-    fn new(current: &Current, now: u64) -> Self {
+    fn new(current: &Current) -> Self {
         Self {
             target: current.target.clone(),
             listening_revision: current.listening.revision,
             eq_revision: current.eq.revision,
-            created_at_ms: now,
+            created_at_ms: crate::analysis::now_ms(),
         }
     }
     fn validate(&self, current: &Current, now: u64) -> Result<()> {
@@ -175,69 +175,41 @@ pub struct Controller {
     displayed: Option<Guard>,
     observed: bool,
     pub notice: Option<Notice>,
-    #[cfg(debug_assertions)]
-    test_now_ms: Option<u64>,
 }
 impl Controller {
-    fn now_ms(&self) -> u64 {
-        #[cfg(debug_assertions)]
-        if let Some(now) = self.test_now_ms {
-            return now;
-        }
-        crate::analysis::now_ms()
-    }
-
-    #[cfg(debug_assertions)]
-    #[doc(hidden)]
-    pub fn set_test_now(&mut self, now: u64) {
-        self.test_now_ms = Some(now);
-    }
-
     /// Bind immediate native actions to the state used to draw their labels.
     pub fn observe(&mut self, summary: &Summary) {
         self.observed = true;
         self.displayed = summary.guard.clone();
     }
-    fn check_displayed(&self, current: &Current, now: u64) -> Result<()> {
+    fn check_displayed(&self, current: &Current) -> Result<()> {
         if self.observed {
             let guard = self
                 .displayed
                 .as_ref()
                 .context("No current audio telemetry")?;
-            guard.validate(current, now)?;
+            guard.validate(current, crate::analysis::now_ms())?;
         }
         Ok(())
     }
-    fn acknowledge(
-        &mut self,
-        current: &Current,
-        eq_revision: u64,
-        listening_revision: u64,
-        now: u64,
-    ) {
+    fn acknowledge(&mut self, current: &Current, eq_revision: u64, listening_revision: u64) {
         if self.displayed.is_some() {
             self.displayed = Some(Guard {
                 target: current.target.clone(),
                 eq_revision,
                 listening_revision,
-                created_at_ms: now,
+                created_at_ms: crate::analysis::now_ms(),
             });
         }
     }
     pub fn toggle_processing(&mut self, store: &Store) -> Result<()> {
-        let now = self.now_ms();
-        let current = Current::read(store, now)?;
-        self.check_displayed(&current, now)?;
+        let current = Current::read(store)?;
+        self.check_displayed(&current)?;
         let updated = store.edit(Some(current.eq.revision), |profile| {
             profile.bypass = !profile.bypass;
             Ok(())
         })?;
-        self.acknowledge(
-            &current,
-            updated.revision,
-            current.listening.revision,
-            now,
-        );
+        self.acknowledge(&current, updated.revision, current.listening.revision);
         self.pending = None;
         self.notice = Some(Notice::new("Saved; waiting for audio application"));
         Ok(())
@@ -251,9 +223,8 @@ impl Controller {
     }
     pub fn select_preset(&mut self, store: &Store, id: &str) -> Result<()> {
         self.pending = None;
-        let now = self.now_ms();
-        let current = Current::read(store, now)?;
-        self.check_displayed(&current, now)?;
+        let current = Current::read(store)?;
+        self.check_displayed(&current)?;
         ensure!(
             !current.eq.profile.bypass,
             "Global bypass is active; enable processing first"
@@ -262,7 +233,7 @@ impl Controller {
         crate::dsp::Settings::compile(&current.eq.profile, current.target.rate)?
             .with_music(&preview.profile, current.target.rate)?;
         self.pending = Some(Pending {
-            guard: Guard::new(&current, now),
+            guard: Guard::new(&current),
             selection: Selection::Preset {
                 id: id.to_owned(),
                 before: Box::new(current.profile().clone()),
@@ -280,9 +251,8 @@ impl Controller {
         inventory: &[DeviceInfo],
     ) -> Result<()> {
         self.pending = None;
-        let now = self.now_ms();
-        let current = Current::read(store, now)?;
-        self.check_displayed(&current, now)?;
+        let current = Current::read(store)?;
+        self.check_displayed(&current)?;
         ensure!(
             crate::audio::native_controls(&current.runtime),
             "Live output switching requires native system audio"
@@ -290,7 +260,7 @@ impl Controller {
         validate_output_backend(selector, &current.runtime)?;
         let label = output_label(selector, inventory)?;
         self.pending = Some(Pending {
-            guard: Guard::new(&current, now),
+            guard: Guard::new(&current),
             selection: Selection::Output {
                 selector: selector.map(str::to_owned),
                 label,
@@ -303,11 +273,10 @@ impl Controller {
         let Some(pending) = &self.pending else {
             return Ok(false);
         };
-        let now = self.now_ms();
-        let current = Current::read(store, now)?;
+        let current = Current::read(store)?;
         pending
             .guard
-            .validate(&current, now)?;
+            .validate(&current, crate::analysis::now_ms())?;
         match &pending.selection {
             Selection::Preset {
                 capability, before, ..
@@ -334,11 +303,10 @@ impl Controller {
     pub fn apply(&mut self, store: &Store, inventory: &[DeviceInfo]) -> Result<()> {
         self.pending_valid(store, inventory)?;
         let pending = self.pending.as_ref().context("No pending selection")?;
-        let now = self.now_ms();
-        let current = Current::read(store, now)?;
+        let current = Current::read(store)?;
         pending
             .guard
-            .validate(&current, now)?;
+            .validate(&current, crate::analysis::now_ms())?;
         let mut saved_music_revision = current.listening.revision;
         match &pending.selection {
             Selection::Preset {
@@ -370,8 +338,10 @@ impl Controller {
                                 *profile == **before,
                                 "Listening profile changed after preview"
                             );
-                            let live =
-                                Target::read(&audio::runtime_status_at(store, now), now)?;
+                            let live = Target::read(
+                                &audio::runtime_status(store),
+                                crate::analysis::now_ms(),
+                            )?;
                             ensure!(
                                 live == pending.guard.target,
                                 "Active output changed after preview"
@@ -394,19 +364,13 @@ impl Controller {
             }
         }
         // Acknowledge only this transaction, not a fresh read that could accept someone else's edit.
-        self.acknowledge(
-            &current,
-            current.eq.revision,
-            saved_music_revision,
-            now,
-        );
+        self.acknowledge(&current, current.eq.revision, saved_music_revision);
         self.pending = None;
         Ok(())
     }
     pub fn compare(&mut self, store: &Store) -> Result<()> {
-        let now = self.now_ms();
-        let current = Current::read(store, now)?;
-        self.check_displayed(&current, now)?;
+        let current = Current::read(store)?;
+        self.check_displayed(&current)?;
         ensure!(
             !current.eq.profile.bypass,
             "Global bypass is active; enable processing first"
@@ -417,18 +381,17 @@ impl Controller {
             Some(&current.target.key),
             !current.profile().reference,
         )?;
-        self.acknowledge(&current, current.eq.revision, updated.revision, now);
+        self.acknowledge(&current, current.eq.revision, updated.revision);
         self.pending = None;
         self.notice = Some(Notice::new("Saved; waiting for audio application"));
         Ok(())
     }
     pub fn undo(&mut self, store: &Store) -> Result<()> {
-        let now = self.now_ms();
-        let current = Current::read(store, now)?;
-        self.check_displayed(&current, now)?;
+        let current = Current::read(store)?;
+        self.check_displayed(&current)?;
         let updated =
             listening::undo_device(store, current.listening.revision, &current.target.key)?;
-        self.acknowledge(&current, current.eq.revision, updated.revision, now);
+        self.acknowledge(&current, current.eq.revision, updated.revision);
         self.pending = None;
         self.notice = Some(Notice::new("Previous change undone."));
         Ok(())
