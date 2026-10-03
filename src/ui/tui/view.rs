@@ -512,10 +512,10 @@ fn draw_preset_picker(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
             }
             .to_owned(),
             crate::i18n::preset_name(&preset.id, &preset.name).to_owned(),
-            t(if preset.category == "scene" {
-                "Scene"
-            } else {
-                "Tone curve"
+            t(match preset.category {
+                "scene" => "Scene",
+                "listening" => "Listening preset",
+                _ => "Tone curve",
             })
             .to_owned(),
             if preset.category == "eqmac" {
@@ -553,12 +553,11 @@ fn draw_preset_picker(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
     );
     if let Some(preset) = view.presets.get(view.preset_choice) {
         let mut lines = vec![Line::from(t(&preset.description).to_owned())];
-        if preset.category == "scene" {
+        if matches!(preset.category, "scene" | "listening") {
             let capability = serde_json::from_value(view.runtime["device_capability"].clone())
                 .unwrap_or_default();
-            if let Ok(preview) =
-                crate::presets::scenes::prepare(view.music, &capability, &preset.id)
-            {
+            let id = preset.id.strip_prefix("listening:").unwrap_or(&preset.id);
+            if let Ok(preview) = crate::presets::scenes::prepare(view.music, &capability, id) {
                 lines.push(Line::from(t("Correction stays unchanged")));
                 if preview.compression_enabled {
                     lines.push(Line::from(t("Compression enabled")));
