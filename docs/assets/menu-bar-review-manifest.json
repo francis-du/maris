@@ -5,25 +5,17 @@
   "whole_desktop_captured": false,
   "source_sha256": {
     "Cargo.toml": "490a59fb6bce2e4000d483a717b31d0f9e13306dea4effe3da9a1ecbea3368ea",
-    "Cargo.lock": "30105e8e55ef425d9a46d091b925fc7944ed7ecd06a22f1f1e3b8c1c4942c8a2",
-    "src/ui/desktop/native.rs": "0c7c55ba0cdf3bafa42e4f8d3bd5132fab81eb050daf9b30395a364763e210f8",
-    "src/ui/desktop/native/menu_review.rs": "cdff6d4b3cf5782c1cdfd104aeaa0afe32d0b9a86f18406131314f8a1527f3d4",
-    "src/ui/desktop/native/native_loop.rs": "10de7ca5568c67abe9502f3f982f09d223102268919dea242b8e4b0803dd1a97",
+    "src/ui/desktop/native.rs": "c5932cc6df9aca97e95e979e30d61399d7ff64337556da3b6513fcb82441b335",
     "src/ui/desktop/menu_header.rs": "e76197797c5b66ae0acb5ffe451769a2074172dc27baedc4abcae612f3bca57d",
     "src/ui/desktop/native_mark.rs": "1b721a31705f5690188151921a729b0bd692cb0f90c144ca9482c815e64e91d2",
     "src/ui/desktop/status_icon.rs": "48221387a92932f34eda3b6e9f3edf223655a4c0a209787a47e696bbeeeaae45",
-    "src/ui/desktop/menu_capture.rs": "a4ea5090249b483f5876134b977e66fc9004f9fd04dc7b009c9fd654d35a6e3c",
     "src/ui/desktop/monitor_state.rs": "d14a26186e7d5a42bea00ffbfde302f64c73c4a9d2faab07eeca091c0cd1edbb",
     "src/ui/desktop/controls.rs": "e114f6dfa5c4d1fc570cbfdd2d62a57891b52c8025edcab1f2abe0851dc78c2b",
-    "src/ui/desktop/events.rs": "8503f2740e5c10f64254b03027ebff2944f9840604cd55f456c6c2b2777fa4d3",
-    "src/ui/desktop/mod.rs": "f88395fc4eed5dace6fa20031cef0563f8a5d6bbe164297df828514d74a47746",
     "src/presets/scenes.rs": "4b4803a821f17e521ecb8699d5905f0f3818aa2412c0eab62074621bd2a8194e",
     "src/i18n/mod.rs": "52dad2f6e7ffeeab6dc852c442e2de5d02be021c628b802bc571fccbf0e6f01f",
     "src/i18n/console.rs": "221f3e6d4e647e5681a11302f62c0e3342ceeb19b8bfff75126b93af653173eb",
     "src/i18n/surface.rs": "02f8ff5343c057964514fd2e0af86775799fe1ed6bec46badc79a69d0ccfe99a",
-    "src/i18n/messages.rs": "f523252bfe6c4bfe21d828959ec33019fb2b1f1fc1383f336e2bb4e2b9ae144d",
-    "tests/support/menu_probe.rs": "e6c5caa8da50688dd57ecd26a6b407f0ed1cd131a5e9b56e7a47c85c1ecee330",
-    "scripts/capture_menu_docs.py": "2142589cc1e2581c369c2cfe410935aa8658b51f75aba70b897e23e57cfb356b"
+    "src/i18n/messages.rs": "f523252bfe6c4bfe21d828959ec33019fb2b1f1fc1383f336e2bb4e2b9ae144d"
   },
   "probe_sha256": "5e5350e0b8748a2e240d2f9c427f2c33cae4b3a994bf4ef74a23bf78e43e2121",
   "images": {
