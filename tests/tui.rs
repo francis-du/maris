@@ -307,6 +307,8 @@ fn full_sound_control_rows_match_the_event_dispatch_indices() {
             (10, "Preamp"),
             (14, "Music processing"),
             (15, "Level match"),
+            (26, "Virtual 360"),
+            (27, "Stereo Focus"),
         ] {
             assert_eq!(rows[row].0, maris::i18n::text(expected), "row {row}");
         }
@@ -318,9 +320,9 @@ fn full_sound_control_rows_match_the_event_dispatch_indices() {
 #[test]
 fn lowest_sound_rows_scroll_into_view_even_on_short_terminals() {
     let text = render_with(Workspace::Sound, Overlay::None, 96, 30, |view| {
-        view.sound_row = 25;
+        view.sound_row = 27;
     });
-    assert!(text.contains("16000"));
+    assert!(text.contains(maris::i18n::text("Stereo Focus")));
     assert!(text.contains('▶'));
 }
 
