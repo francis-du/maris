@@ -2,7 +2,7 @@
   "scope": "actual_offline_ratatui",
   "hardware_validation": false,
   "source_sha256": {
-    "src/ui/tui/view.rs": "632ed41af5b3ba666d29ba432a02d4b20fa141f51f92893e16fa01367b84b55a",
+    "src/ui/tui/view.rs": "3a8af997a579143dc713088e3d91581097beb54578d3e45c7db59e14acff2c68",
     "src/ui/tui/studio/mod.rs": "d04c1fe848125f3909a84ee94b0bd33cc7fc38dcc9e48a8073bdee08b5bc88f6",
     "src/ui/tui/studio/analyzer.rs": "a7147fc511ec2af7245c16d6cf58e740b94c6d84602c67c45b62a448c94fe089",
     "src/ui/tui/studio/appearance.rs": "59bd945beae348ae6d2ccfd43bdfb4dfbcbdd22dad11f9248aaad88cfc1b7ae7",
@@ -10,7 +10,7 @@
     "src/ui/tui/monitor.rs": "a4581810a74107b4a336a2202ac0722a3ddcdb4246f0b0e7b0c2d831c94353a6",
     "src/ui/tui/settings/view.rs": "eabfb2392e132a31dcbfcd6f20aa16d46cfd7266cf7e64fef0842738eda393ea",
     "src/ui/tui/presets.rs": "3e3e78093029b3fecc27a3aad422bfe874b0b881f105c55f0cd709b7f659c0a8",
-    "src/ui/tui/preset_picker.rs": "d16c9789c3ef38c2ea6b26752de9dce409a2bdd02dc3f45fe8dcbdc9e6fa8df1",
+    "src/ui/tui/preset_picker.rs": "866876e4ba1aee0b7b63de873bcb61a2eafc4a2165516b812e6c9926af5b96f7",
     "src/ui/tui/inspector.rs": "3bb15f7ca65f71d799f46b28a76327a8a2a7dabba321aa43ac91f585898b3a93",
     "src/i18n/mod.rs": "52dad2f6e7ffeeab6dc852c442e2de5d02be021c628b802bc571fccbf0e6f01f",
     "src/i18n/console.rs": "221f3e6d4e647e5681a11302f62c0e3342ceeb19b8bfff75126b93af653173eb",
