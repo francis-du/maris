@@ -80,6 +80,7 @@ pub const TRANSLATIONS: &[(&str, [&str; 5])] = &[
     ("Listening presets", ["聆听预设", "聆聽預設", "リスニング設定", "Hörpresets", "Preajustes de escucha"]),
     ("Listening preset", ["聆听预设", "聆聽預設", "リスニング設定", "Hörpreset", "Preajuste de escucha"]),
     ("Select an output or preset to preview", ["选择输出或预设可预览，确认后才应用", "選擇輸出或預設可預覽，確認後才套用", "出力・設定を選んで確認後に適用", "Ausgang oder Preset erst wählen, dann anwenden", "Elige salida o preajuste y confirma para aplicar"]),
+    ("Output and preset selections apply immediately", ["选择输出或预设后立即生效", "選擇輸出或預設後立即生效", "出力・プリセットは選択するとすぐ適用されます", "Ausgangs- und Preset-Auswahl wird sofort angewendet", "La salida y los preajustes se aplican al seleccionarlos"]),
     ("Apply selection", ["应用所选项", "套用所選項", "選択を適用", "Auswahl anwenden", "Aplicar selección"]),
     ("Cancel selection", ["取消待应用项", "取消待套用項", "選択を取り消す", "Auswahl verwerfen", "Cancelar selección"]),
     ("Selection details", ["待应用详情", "待套用詳情", "変更内容", "Änderungsdetails", "Detalles del cambio"]),
