@@ -467,11 +467,16 @@ pub fn propose_from(input: TuningInput<'_>) -> Result<Proposal> {
 }
 
 pub fn from_live(store: &Store, goal: &str) -> Result<Proposal> {
-    from_live_at(store, goal, analysis::now_ms())
+    from_live_snapshot(store, goal, analysis::now_ms())
 }
 
+#[cfg(debug_assertions)]
 #[doc(hidden)]
 pub fn from_live_at(store: &Store, goal: &str, now: u64) -> Result<Proposal> {
+    from_live_snapshot(store, goal, now)
+}
+
+fn from_live_snapshot(store: &Store, goal: &str, now: u64) -> Result<Proposal> {
     let runtime = crate::audio::runtime_status_at(store, now);
     ensure!(runtime["active"] == true, "No active audio session");
     let device = runtime["output"]
