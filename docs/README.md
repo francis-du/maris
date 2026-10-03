@@ -14,7 +14,7 @@ Edit the Markdown and language resources here. `scripts/site.py` generates the w
 | Review dependencies or models | [Third-party components](reference/third-party.md) and [model review](development/models.md) |
 | Review remaining product work | [Release checklist](development/product-gates.md) |
 
-Product, user-guide, installation and status pages exist in `en`, `zh-CN`, `zh-TW`, `ja`, `de` and `es`. Engineering references have one English source; the website labels them as English. The language menu stays on the same page.
+Product overview, user-guide and installation pages exist in `en`, `zh-CN`, `zh-TW`, `ja`, `de` and `es`. Engineering references have one English source; the website labels them as English. The language menu stays on the same page.
 
 ## Writing
 
@@ -46,8 +46,8 @@ python3 scripts/docs_assets.py --refresh
 
 Refresh runs the offline UI probe. Normal website generation does not run Maris, access audio devices, load models or download fonts. No font files are distributed.
 
-## Release status
+## Internal release gates
 
-`development/requirements.json` supplies the status table and release checks. Keep unfinished requirements until they have acceptance evidence. Source publication and Pages deployment do not approve an application release.
+`development/requirements.json` is internal release-gate data and is not rendered as a public status page. Keep unfinished requirements until they have acceptance evidence. Source publication and Pages deployment do not approve an application release.
 
 The document structure draws on [Diátaxis](https://diataxis.fr/), [W3C page structure](https://www.w3.org/WAI/tutorials/page-structure/) and [HTML language declarations](https://www.w3.org/International/questions/qa-html-language-declarations).
