@@ -101,9 +101,42 @@ impl Analysis {
 #[path = "../../tests/unit/test_clock.rs"]
 pub(crate) mod test_clock;
 
+#[cfg(debug_assertions)]
+std::thread_local! {
+    static DEBUG_NOW_MS: std::cell::Cell<Option<u64>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// Debug-only, thread-local clock override for deterministic integration fixtures.
+#[cfg(debug_assertions)]
+#[doc(hidden)]
+pub struct DebugClock {
+    previous: Option<u64>,
+    _thread: std::marker::PhantomData<std::rc::Rc<()>>,
+}
+#[cfg(debug_assertions)]
+impl DebugClock {
+    pub fn freeze_at(now: u64) -> Self {
+        Self {
+            previous: DEBUG_NOW_MS.with(|clock| clock.replace(Some(now))),
+            _thread: std::marker::PhantomData,
+        }
+    }
+}
+#[cfg(debug_assertions)]
+impl Drop for DebugClock {
+    fn drop(&mut self) {
+        DEBUG_NOW_MS.with(|clock| clock.set(self.previous));
+    }
+}
+
 pub fn now_ms() -> u64 {
     #[cfg(test)]
     if let Some(now) = test_clock::current() {
+        return now;
+    }
+    #[cfg(debug_assertions)]
+    if let Some(now) = DEBUG_NOW_MS.with(|clock| clock.get()) {
         return now;
     }
     SystemTime::now()

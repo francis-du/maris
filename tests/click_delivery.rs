@@ -36,6 +36,14 @@ fn fixture() -> (tempfile::TempDir, Store) {
     (temp, store)
 }
 
+fn observe_live(controller: &mut Controller, store: &Store) -> maris::analysis::DebugClock {
+    let runtime = live_telemetry::refresh(store);
+    let now = runtime["updated_at_ms"].as_u64().unwrap();
+    let clock = maris::analysis::DebugClock::freeze_at(now);
+    controller.observe(&Summary::read(store, &runtime, now).unwrap());
+    clock
+}
+
 #[test]
 fn motion_events_do_not_require_one_redraw_each_before_a_button_press() {
     let down = mouse(MouseEventKind::Down(MouseButton::Left));
@@ -94,15 +102,7 @@ fn enter_after_a_deliberate_adjustment_is_not_dropped_as_repeat() {
 fn successive_native_menu_actions_do_not_conflict_with_their_own_saved_revision() {
     let (_temp, store) = fixture();
     let mut controller = Controller::default();
-    live_telemetry::refresh(&store);
-    controller.observe(
-        &Summary::read(
-            &store,
-            &maris::audio::runtime_status(&store),
-            maris::analysis::now_ms(),
-        )
-        .unwrap(),
-    );
+    let _clock = observe_live(&mut controller, &store);
     live_telemetry::refresh(&store);
     controller.compare(&store).unwrap();
     live_telemetry::refresh(&store);
@@ -127,15 +127,7 @@ fn confirmed_menu_scene_can_be_compared_immediately_without_a_refresh() {
     // Audio heartbeats advance; the controller labels are never re-observed.
     let (_temp, store) = fixture();
     let mut controller = Controller::default();
-    live_telemetry::refresh(&store);
-    controller.observe(
-        &Summary::read(
-            &store,
-            &maris::audio::runtime_status(&store),
-            maris::analysis::now_ms(),
-        )
-        .unwrap(),
-    );
+    let _clock = observe_live(&mut controller, &store);
     live_telemetry::refresh(&store);
     controller.select_preset(&store, "focus").unwrap();
     live_telemetry::refresh(&store);
@@ -198,15 +190,7 @@ fn rapid_deliberate_plus_minus_clicks_are_not_throttled_as_keyboard_toggles() {
 fn removing_label_revision_guards_would_overwrite_an_external_edit() {
     let (_temp, store) = fixture();
     let mut controller = Controller::default();
-    live_telemetry::refresh(&store);
-    controller.observe(
-        &Summary::read(
-            &store,
-            &maris::audio::runtime_status(&store),
-            maris::analysis::now_ms(),
-        )
-        .unwrap(),
-    );
+    let _clock = observe_live(&mut controller, &store);
     listening::edit(&store, Some(0), Some("Headphones"), |p| {
         p.bass_db = 1.0;
         Ok(())
