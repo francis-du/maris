@@ -147,7 +147,7 @@ Acceptance: E opens the editor; first band adjustment is E, +, Enter. Clicking a
 
 ## Stable configuration interactions
 
-The configuration browser now has three fixed, one-action selectors: Device sound, Global EQ and Playback switches. These are local sections in the same edit surface, not mandatory application tabs. Every section remains directly accessible; all 26 existing row IDs remain supported. Navigation stays inside the chosen section. Clicking a visible row must not recenter the list: use stable bounded pages so repeated clicks address the same parameter.
+The configuration browser now has three fixed, one-action selectors: Device sound, Global EQ and Playback switches. These are local sections in the same edit surface, not mandatory application tabs. Every section remains directly accessible; the original 26 row IDs remain stable, with Virtual 360 and Stereo Focus appended as rows 26 and 27. Navigation stays inside the chosen section. Clicking a visible row must not recenter the list: use stable bounded pages so repeated clicks address the same parameter.
 
 Playback switches are not numeric gain controls. Show explicit OFF/ON actions, the affected output scope, and short warnings about correction, comparison level or global bypass. The configuration header cannot perform a live A/B change. Editing tone preserves the enabled/reference flags even after Apply; do not import the quick-listening audition behavior into a configuration transaction.
 
@@ -157,7 +157,7 @@ Only a complete press/release on the same Apply button and same draft can commit
 
 A valid button cannot appear inert because motion events occupy the input queue or because the previous successful action has not reached a timer-driven label refresh. Coalesce only motion; preserve all physical edges and matched draft confirmation. Acknowledge only a controller's own successful revision, never blindly adopt an external edit. Actual pseudo-terminal input tests complement geometry tests.
 
-A native menu closes after selection. On macOS/Windows, open the existing preview as a native dialog immediately, with Cancel as its default and explicit Apply as the only commit action. Do not require reopening the menu to find newly inserted controls. Linux keeps the visible in-menu fallback. Native callbacks wake the main loop and never perform state mutations themselves. The offline menu probe exercises production native-ID dispatch but does not pretend that injected dialog responses are a user acceptance test.
+A native menu closes after selection. Output and preset items therefore commit directly in the production menu-event handler after rechecking the displayed session, output identity, capability and revisions; there is no second confirmation dialog or hidden Apply/Cancel state. Native callbacks wake the main loop and state mutation remains on that event-loop thread. The offline menu probe dispatches real native IDs and fails if an immediate selection requests confirmation.
 
 ## Review gates
 
