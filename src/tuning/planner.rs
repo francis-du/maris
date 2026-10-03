@@ -467,13 +467,17 @@ pub fn propose_from(input: TuningInput<'_>) -> Result<Proposal> {
 }
 
 pub fn from_live(store: &Store, goal: &str) -> Result<Proposal> {
+    from_live_at(store, goal, analysis::now_ms())
+}
+
+#[doc(hidden)]
+pub fn from_live_at(store: &Store, goal: &str, now: u64) -> Result<Proposal> {
     let runtime = crate::audio::runtime_status(store);
     ensure!(runtime["active"] == true, "No active audio session");
     let device = runtime["output"]
         .as_str()
         .context("Missing active output")?
         .to_owned();
-    let now = analysis::now_ms();
     let evidence = preview_evidence(&runtime, now)?;
     let context = live_context(&runtime, &evidence, now);
     let profile_key = runtime["profile_key"]
