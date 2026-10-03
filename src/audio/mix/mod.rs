@@ -682,7 +682,7 @@ fn master_typed<T: SizedSample + FromSample<f32>>(
             renderer.render(data, channels, || graph.frame());
         },
         move |_| {
-            metrics.errors.fetch_add(1, Ordering::Relaxed);
+            bridge::output_stream_error(&metrics);
         },
         None,
     )?)
