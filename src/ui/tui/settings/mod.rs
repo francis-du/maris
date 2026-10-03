@@ -225,12 +225,16 @@ impl Draft {
         } else if row == 15 {
             candidate.music.level_match = direction > 0.0;
         } else if row == 26 || row == 27 {
+            let enabled = candidate.music.enabled;
+            let reference = candidate.music.reference;
             candidate.music = crate::ui::tui::music::adjusted_profile(
                 &candidate.music,
                 &self.capability,
                 if row == 26 { 10 } else { 11 },
                 direction,
             )?;
+            candidate.music.enabled = enabled;
+            candidate.music.reference = reference;
         } else {
             adjust_eq(&mut candidate.eq, row, direction)?;
         }
