@@ -17,11 +17,13 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 LANGUAGES = ('en', 'zh-CN', 'zh-TW', 'ja', 'de', 'es')
 VIEWS = {'studio': 'studio-140x40-signal', 'settings': 'inspector-eq-140x40-draft', 'presets': 'studio-140x40-picker'}
-SOURCES = ('src/ui/tui/view.rs', 'src/ui/tui/studio/mod.rs', 'src/ui/tui/studio/analyzer.rs', 'src/ui/tui/studio/appearance.rs',
-           'src/ui/tui/studio/controls.rs', 'src/ui/tui/monitor.rs', 'src/ui/tui/settings/view.rs',
-           'src/ui/tui/presets.rs', 'src/ui/tui/output_picker.rs', 'src/ui/tui/preset_picker.rs', 'src/ui/tui/inspector.rs',
-           'src/presets/mod.rs', 'src/presets/scenes.rs', 'src/i18n/mod.rs', 'src/i18n/console.rs',
-           'src/i18n/surface.rs', 'src/i18n/messages.rs', 'tests/support/ui_probe.rs')
+SOURCES = ('src/ui/tui/view.rs', 'src/ui/tui/dashboard.rs', 'src/ui/tui/input.rs', 'src/ui/tui/music.rs',
+           'src/ui/tui/studio/mod.rs', 'src/ui/tui/studio/analyzer.rs', 'src/ui/tui/studio/appearance.rs',
+           'src/ui/tui/studio/controls.rs', 'src/ui/tui/monitor.rs', 'src/ui/tui/settings/mod.rs',
+           'src/ui/tui/settings/input.rs', 'src/ui/tui/settings/view.rs', 'src/ui/tui/presets.rs',
+           'src/ui/tui/output_picker.rs', 'src/ui/tui/preset_picker.rs', 'src/ui/tui/inspector.rs',
+           'src/dsp/music.rs', 'src/presets/mod.rs', 'src/presets/scenes.rs', 'src/i18n/mod.rs',
+           'src/i18n/console.rs', 'src/i18n/surface.rs', 'src/i18n/messages.rs', 'tests/support/ui_probe.rs')
 
 
 def digest(path: Path) -> str:
