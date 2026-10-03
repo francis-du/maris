@@ -50,6 +50,10 @@ pub enum Action {
         adaptive: Option<f64>,
         #[arg(long)]
         width: Option<f64>,
+        #[arg(long, help = "Virtual 360 amount from 0 to 1")]
+        virtual_surround: Option<f64>,
+        #[arg(long, help = "Stereo Focus amount from 0 to 1")]
+        stereo_focus: Option<f64>,
         #[arg(long, allow_hyphen_values = true)]
         balance: Option<f64>,
         #[arg(long,action=clap::ArgAction::Set)]
@@ -218,6 +222,8 @@ pub fn run(
             intensity,
             adaptive,
             width,
+            virtual_surround,
+            stereo_focus,
             balance,
             compressor,
         } => {
@@ -230,6 +236,8 @@ pub fn run(
                     || intensity.is_some()
                     || adaptive.is_some()
                     || width.is_some()
+                    || virtual_surround.is_some()
+                    || stereo_focus.is_some()
                     || balance.is_some()
                     || compressor.is_some(),
                 "Select at least one sound parameter"
@@ -267,6 +275,14 @@ pub fn run(
                     }
                     if let Some(v) = width {
                         p.width = v;
+                    }
+                    if let Some(v) = virtual_surround {
+                        ensure!((0.0..=1.0).contains(&v), "virtual-surround must be in [0, 1]");
+                        p.virtual_surround = v;
+                    }
+                    if let Some(v) = stereo_focus {
+                        ensure!((0.0..=1.0).contains(&v), "stereo-focus must be in [0, 1]");
+                        p.stereo_focus = v;
                     }
                     if let Some(v) = balance {
                         p.balance = v;
