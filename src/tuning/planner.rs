@@ -472,7 +472,7 @@ pub fn from_live(store: &Store, goal: &str) -> Result<Proposal> {
 
 #[doc(hidden)]
 pub fn from_live_at(store: &Store, goal: &str, now: u64) -> Result<Proposal> {
-    let runtime = crate::audio::runtime_status(store);
+    let runtime = crate::audio::runtime_status_at(store, now);
     ensure!(runtime["active"] == true, "No active audio session");
     let device = runtime["output"]
         .as_str()
