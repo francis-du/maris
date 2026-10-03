@@ -1,0 +1,122 @@
+name: Publish release assets
+on:
+  workflow_run:
+    workflows:
+      - Build application artifacts
+    types:
+      - completed
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve matching version tag and published release
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --force --tags origin
+          mapfile -t tags < <(git tag --points-at "$SOURCE_SHA" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)
+          if [ "${#tags[@]}" -eq 0 ]; then
+            echo "No version tag points at successful build $SOURCE_SHA; nothing to publish."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${#tags[@]}" -ne 1 ]; then
+            printf 'Expected exactly one version tag for %s, found: %s\n' "$SOURCE_SHA" "${tags[*]}" >&2
+            exit 1
+          fi
+          tag="${tags[0]}"
+          version="${tag#v}"
+          cargo_version="$(sed -n 's/^version = "\([0-9][0-9.]*\)"$/\1/p' Cargo.toml | head -n 1)"
+          if [ "$cargo_version" != "$version" ]; then
+            echo "Tag $tag does not match Cargo version $cargo_version" >&2
+            exit 1
+          fi
+          gh release view "$tag" >/dev/null
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Download exact successful run artifacts
+        if: steps.release.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: gh run download "$SOURCE_RUN_ID" --pattern 'maris-cli-*' --dir .release-download
+      - name: Verify manifest and prepare public assets
+        if: steps.release.outputs.publish == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import shutil
+          import os
+
+          root = Path('.release-download')
+          manifests = list(root.rglob('maris-release.tsv'))
+          if len(manifests) != 1:
+              raise SystemExit(f'expected exactly one assembled manifest, found {len(manifests)}')
+          manifest = manifests[0]
+          lines = manifest.read_text(encoding='ascii').splitlines()
+          values = {}
+          assets = []
+          for line in lines:
+              fields = line.split('\t')
+              if fields[0] == 'asset':
+                  if len(fields) != 7:
+                      raise SystemExit('invalid asset row in release manifest')
+                  assets.append(fields[1:])
+              elif len(fields) == 2:
+                  values[fields[0]] = fields[1]
+          version = os.environ['RELEASE_TAG'].removeprefix('v')
+          if values.get('version') != version or values.get('channel') != 'stable' or values.get('interface') != 'cli':
+              raise SystemExit('assembled manifest is not the stable CLI release for this tag')
+          if len(assets) != 6:
+              raise SystemExit(f'expected six native assets, found {len(assets)}')
+
+          out = Path('.release-upload')
+          out.mkdir()
+          copied = []
+          for system, arch, name, expected_hash, expected_bytes, binary_hash in assets:
+              matches = [p for p in root.rglob(name) if p.is_file()]
+              if len(matches) != 1:
+                  raise SystemExit(f'expected one {name}, found {len(matches)}')
+              source = matches[0]
+              actual_bytes = source.stat().st_size
+              actual_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+              if actual_bytes != int(expected_bytes) or actual_hash != expected_hash:
+                  raise SystemExit(f'archive integrity mismatch: {name}')
+              target = out / name
+              shutil.copy2(source, target)
+              copied.append(target)
+
+          manifest_target = out / 'maris-release.tsv'
+          shutil.copy2(manifest, manifest_target)
+          copied.append(manifest_target)
+          sums = []
+          for path in sorted(copied, key=lambda p: p.name):
+              sums.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}")
+          (out / 'SHA256SUMS').write_text('\n'.join(sums) + '\n', encoding='ascii', newline='\n')
+          PY
+      - name: Upload verified assets to GitHub Release
+        if: steps.release.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: gh release upload "$RELEASE_TAG" .release-upload/* --clobber
