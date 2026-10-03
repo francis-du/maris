@@ -161,6 +161,9 @@ maris language
 | P | Open the flat preset picker; Enter applies; Esc cancels |
 | Mixer Matrix Up/Down, Space, Enter | Choose apps, mark a pending scope, then apply it once |
 | A in Mixer Matrix | Mark all system playback; Enter confirms the new scope |
+
+When there is no local Apps draft, the TUI follows the active runtime capture scope, including changes made through CLI, MCP or the native menu. Local marks stay stable while editing. Leaving Apps before Enter discards those unapplied marks and restores the active runtime scope.
+
 | Assist goal buttons | Click Balanced/Warm/Clear/Soft to generate a preview; no change is applied yet |
 | G / J / Enter | Choose a listening goal / preview / explicitly apply the preview |
 | B | Compare reference/enhanced through the same level-matching path |
