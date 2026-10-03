@@ -457,13 +457,12 @@ fn draw_output_picker(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
             Style::default().fg(view.palette.text)
         })
     }));
-    let rect = centered(
-        area,
-        70,
-        (outputs.len() as u16 + 5).min(area.height.saturating_sub(2)),
-    );
+    let areas = super::output_picker::layout(area, outputs.len().saturating_add(1), view.output_choice);
+    let rect = areas.modal;
     frame.render_widget(Clear, rect);
-    let mut state = TableState::default().with_selected(Some(view.output_choice));
+    let mut state = TableState::default()
+        .with_selected(Some(view.output_choice))
+        .with_offset(areas.offset);
     frame.render_stateful_widget(
         Table::new(
             rows,
@@ -649,13 +648,3 @@ fn modal_block(title: &str, palette: Palette) -> Block<'static> {
         .style(Style::default().bg(palette.panel).fg(palette.text))
 }
 
-fn centered(area: Rect, width: u16, height: u16) -> Rect {
-    let width = width.min(area.width.saturating_sub(2));
-    let height = height.min(area.height.saturating_sub(2));
-    Rect::new(
-        area.x + area.width.saturating_sub(width) / 2,
-        area.y + area.height.saturating_sub(height) / 2,
-        width,
-        height,
-    )
-}
