@@ -20,6 +20,11 @@ pub(super) fn menu_review(capture: bool) -> Result<Value> {
     menu_review::run(capture)
 }
 
+#[cfg(target_os = "macos")]
+pub(super) fn menu_capture_one(locale: &str, state: &str, appearance: &str) -> Result<Value> {
+    menu_review::run_capture_one(locale, state, appearance)
+}
+
 struct Indicator {
     icon: TrayIcon,
     mark: super::native_mark::Mark,

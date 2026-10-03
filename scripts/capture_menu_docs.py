@@ -20,6 +20,9 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 LOCALES = ('en', 'zh-CN')
 STATES = ('live', 'idle', 'stale', 'failed', 'stopping', 'restore-failed')
+CAPTURE_SPECS = (('live', 'light'), ('live', 'dark'),
+                 ('idle', 'dark'), ('stale', 'dark'), ('failed', 'dark'),
+                 ('stopping', 'dark'), ('restore-failed', 'dark'))
 SOURCES = ('Cargo.toml', 'Cargo.lock', 'src/ui/desktop/native.rs',
            'src/ui/desktop/native/menu_review.rs', 'src/ui/desktop/native/native_loop.rs', 'src/ui/desktop/menu_header.rs',
            'src/ui/desktop/native_mark.rs', 'src/ui/desktop/status_icon.rs',
@@ -227,20 +230,65 @@ def main() -> None:
         timeout=45,
         stdout=subprocess.DEVNULL,
     )
-    # Capturing many six-language AppKit states can be materially slower on
-    # shared macOS runners. The control path above already proved bounded.
-    subprocess.run(
-        [str(binary), '--capture'],
-        cwd=root,
-        env=environment,
-        check=True,
-        timeout=240,
-        stdout=subprocess.DEVNULL,
-    )
+    # AppKit menu tracking is a nested native run loop. Isolate every
+    # screenshot in its own process so one stuck popup cannot strand the complete
+    # documentation pass. The no-capture probe above already proved the actual
+    # menu construction and event-dispatch path terminates.
+    source = root / '.maris-review/menu-review.json'
+    locale_records = {
+        language: {'language': language, 'native_states': {'captures': []}}
+        for language in LOCALES
+    }
+    for language in LOCALES:
+        for state, appearance in CAPTURE_SPECS:
+            expected = (language, state, appearance)
+            for attempt in range(1, 3):
+                source.unlink(missing_ok=True)
+                try:
+                    subprocess.run(
+                        [str(binary), '--capture-one', language, state, appearance],
+                        cwd=root,
+                        env=environment,
+                        check=True,
+                        timeout=20,
+                        stdout=subprocess.DEVNULL,
+                    )
+                except subprocess.TimeoutExpired as error:
+                    if attempt < 2:
+                        continue
+                    raise ValueError(
+                        f'Native menu capture timed out: {language}/{state}/{appearance}'
+                    ) from error
+                report = json.loads(source.read_text(encoding='utf-8'))
+                records = [item for item in report.get('locales', [])
+                           if item.get('language') == language]
+                if len(records) != 1:
+                    raise ValueError(
+                        f'Native menu capture returned the wrong locale: {expected}'
+                    )
+                items = records[0].get('native_states', {}).get('captures', [])
+                matching = [item for item in items
+                            if (item.get('language'), item.get('state'), item.get('appearance'))
+                            == expected]
+                if len(matching) != 1:
+                    raise ValueError(
+                        f'Native menu capture returned the wrong state: {expected}'
+                    )
+                locale_records[language]['native_states']['captures'].append(matching[0])
+                break
+    report = {
+        'source': 'isolated offline fixture',
+        'native_menu_construction': True,
+        'native_event_dispatch': True,
+        'immediate_selection_apply': True,
+        'native_dialog_clicked': False,
+        'audio_started': False,
+        'hardware_validated': False,
+        'locales': [locale_records[language] for language in LOCALES],
+    }
+    source.write_text(json.dumps(report, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
     if source_hashes(root) != before:
         raise ValueError('Native render sources changed during the probe; rerun after source ownership is settled')
-    source = root / '.maris-review/menu-review.json'
-    report = json.loads(source.read_text(encoding='utf-8'))
     native = captures(root, report)
     manifest = {'scope': 'actual_offline_appkit', 'hardware_validation': False,
                 'audio_started': False, 'whole_desktop_captured': False, 'source_sha256': before,

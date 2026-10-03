@@ -7,14 +7,14 @@ fn heartbeat(store: &Store) -> Result<()> {
     store.write_json("runtime.json", &runtime)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 #[derive(Clone, Copy)]
 enum CaptureMode<'a> {
     None,
     All,
     One { state: &'a str, appearance: &'a str },
 }
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 impl CaptureMode<'_> {
     fn wants(self, state: &str, appearance: &str) -> bool {
         match self {
