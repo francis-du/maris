@@ -435,7 +435,6 @@ impl Indicator {
             self.preset_menu.set_enabled(false);
             self.compare.set_enabled(false);
             self.undo.set_enabled(false);
-            self.apply_selection.set_enabled(false);
             self.resume.set_enabled(false);
             self.show_status(t("Stopping audio"), &self.output_caption.text());
             if control::is_stopped(&self.store) {
@@ -487,7 +486,6 @@ impl Indicator {
                 self.application_status = "Apply state unknown";
                 self.toggle.set_enabled(false);
                 self.controller.notice = Some(Notice::error(format!("{error:#}")));
-                self.apply_selection.set_enabled(false);
                 self.compare.set_enabled(false);
                 self.undo.set_enabled(false);
                 self.output_menu.set_enabled(false);
@@ -515,14 +513,10 @@ impl Indicator {
             if !self.store.directory.join("route.json").exists() {
                 self.recovery_error = None;
             }
-            let display = self.recovery_error.clone().unwrap_or_else(|| {
-                t(if self.controller.has_pending() {
-                    "Selection ready; review then apply"
-                } else {
-                    mode
-                })
-                .to_owned()
-            });
+            let display = self
+                .recovery_error
+                .clone()
+                .unwrap_or_else(|| t(mode).to_owned());
             self.show_status(&display, &self.output_caption.text());
             if runtime["active"] != true && startup["phase"] == "failed" {
                 self.profile.set_text(format!(
