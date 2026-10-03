@@ -118,6 +118,15 @@ fn eqmac_profile(raw: EqMacRawPreset, rate: u32) -> Result<Profile> {
     Ok(profile)
 }
 
+pub fn tone_curve_matches(current: &Profile, id: &str, rate: u32) -> bool {
+    profile(id, rate).is_ok_and(|mut expected| {
+        expected.crossfeed = current.crossfeed;
+        expected.stereo_width = current.stereo_width;
+        expected.bypass = current.bypass;
+        expected == *current
+    })
+}
+
 pub fn apply_tone_curve(current: &Profile, id: &str, rate: u32) -> Result<Profile> {
     let mut next = profile(id, rate)?;
     // A tone-curve preset owns its curve/headroom metadata, not independent
