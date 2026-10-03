@@ -127,6 +127,15 @@ pub fn tone_curve_matches(current: &Profile, id: &str, rate: u32) -> bool {
     })
 }
 
+pub fn tone_curve_matches(current: &Profile, id: &str, rate: u32) -> bool {
+    profile(id, rate).is_ok_and(|target| {
+        current.name == target.name
+            && current.preamp_db == target.preamp_db
+            && current.safety_margin_db == target.safety_margin_db
+            && current.bands == target.bands
+    })
+}
+
 pub fn apply_tone_curve(current: &Profile, id: &str, rate: u32) -> Result<Profile> {
     let mut next = profile(id, rate)?;
     // A tone-curve preset owns its curve/headroom metadata, not independent
