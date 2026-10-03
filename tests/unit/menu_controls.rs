@@ -311,6 +311,7 @@ fn previews_expire_and_do_not_accept_future_timestamps() {
 
 #[test]
 fn capability_and_eq_changes_invalidate_scene_selection() {
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     let (_dir, store) = fixture();
     let mut controller = Controller::default();
     heartbeat(&store);
