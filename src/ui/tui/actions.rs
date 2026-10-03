@@ -272,12 +272,17 @@ pub(super) fn adjust_sound(
         direction == -1.0 || direction == 1.0,
         "Adjustment direction must be -1 or 1"
     );
-    if row < 10 {
+    if row < 10 || row == 26 || row == 27 {
+        let music_row = match row {
+            26 => 10,
+            27 => 11,
+            _ => row,
+        };
         return Ok(crate::ui::tui::music::adjust(
             store,
             device,
             listening_revision,
-            row,
+            music_row,
             direction,
         )?
         .then_some(UndoTarget::Listening));
