@@ -470,8 +470,10 @@ fn output_picker_mouse_uses_the_same_visible_rows_as_rendering() {
     use ratatui::layout::Rect;
 
     let area = Rect::new(0, 0, 100, 24);
-    let count = 20;
-    let selected = 15;
+    // The 24-row terminal exposes 19 output rows. Use enough devices and a
+    // late selection to exercise the same scrolled geometry users see.
+    let count = 40;
+    let selected = 35;
     let layout = output_picker::layout(area, count, selected);
     assert!(layout.offset > 0, "fixture must exercise a scrolled picker");
 
