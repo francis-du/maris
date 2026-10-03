@@ -227,7 +227,7 @@ pub(super) fn application_key_at(
                 pending.iter().all(|pid| available.contains(pid)),
                 "A selected application exited; update the selection before applying"
             );
-            super::apply_application_scope(store, runtime, pending, output)?;
+            super::session::apply_application_scope(store, runtime, pending, output)?;
             Ok(Some(if pending.is_empty() {
                 Notice::new("Returning to all system playback except Maris.")
             } else {
