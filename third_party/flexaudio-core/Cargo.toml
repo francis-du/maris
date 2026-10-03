@@ -15,8 +15,8 @@ documentation = "https://docs.rs/flexaudio-core"
 [dependencies]
 bitflags = "2"
 ringbuf = "=0.5.2"
-rtrb = "0.3"
-rubato = "3"
+rtrb = "0.4"
+rubato = "5"
 thiserror = "2"
 
 [workspace]
