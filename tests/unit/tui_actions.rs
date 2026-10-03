@@ -356,6 +356,24 @@ fn preset_picker_drops_a_preferred_row_after_that_layer_is_manually_changed() {
 }
 
 #[test]
+fn clean_app_scope_tracks_runtime_but_a_local_draft_is_not_overwritten() {
+    let runtime = serde_json::json!({
+        "active": true,
+        "captured_application_pids": [222, 111, 222]
+    });
+    let mut pending = vec![999];
+    sync_application_scope(&runtime, &mut pending, false);
+    assert_eq!(pending, vec![222, 111, 222]);
+
+    pending = vec![333];
+    sync_application_scope(&runtime, &mut pending, true);
+    assert_eq!(pending, vec![333]);
+
+    sync_application_scope(&serde_json::json!({"active":false}), &mut pending, false);
+    assert!(pending.is_empty());
+}
+
+#[test]
 fn leaving_apps_discards_an_unapplied_scope_and_restores_the_live_capture() {
     let runtime = serde_json::json!({
         "active": true,
