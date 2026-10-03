@@ -49,6 +49,7 @@ pub struct TimeStamp {
     pub reserved: u32,
 }
 pub type PropertyListener = unsafe extern "C" fn(u32, u32, *const Address, *mut c_void) -> i32;
+pub const SYSTEM_OBJECT: u32 = 1;
 #[repr(C)]
 pub struct Buffer {
     pub channels: u32,
