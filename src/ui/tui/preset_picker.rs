@@ -1,8 +1,10 @@
 //! One layout for rendered preset rows and read-only pointer selection.
 //! Selecting a row never applies it; Enter still uses the guarded transaction.
 use super::{input::Overlay, view::Console};
+use crate::{control::store::Snapshot, dsp::music::MusicProfile, presets::PresetSummary};
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::{Constraint, Layout, Rect};
+use serde_json::Value;
 
 pub struct Areas {
     pub modal: Rect,
@@ -10,6 +12,46 @@ pub struct Areas {
     pub preview: Rect,
     pub rows: Rect,
     pub offset: usize,
+}
+
+fn matches_current(
+    preset: &PresetSummary,
+    snapshot: &Snapshot,
+    music: &MusicProfile,
+    runtime: &Value,
+) -> bool {
+    if preset.category == "scene" {
+        let capability =
+            serde_json::from_value(runtime["device_capability"].clone()).unwrap_or_default();
+        return crate::presets::scenes::prepare(music, &capability, &preset.id)
+            .is_ok_and(|preview| preview.profile == *music);
+    }
+    let rate = runtime["sample_rate"]
+        .as_u64()
+        .filter(|rate| (44_100..=192_000).contains(rate))
+        .unwrap_or(48_000) as u32;
+    crate::presets::profile(&preset.id, rate).is_ok_and(|profile| profile == snapshot.profile)
+}
+
+/// Keep the last applied picker row when that layer still matches. If another
+/// surface changed it, fall back to the first preset that exactly matches the
+/// current listening or EQ state instead of resetting to row zero.
+pub fn preferred_choice(
+    presets: &[PresetSummary],
+    preferred: usize,
+    snapshot: &Snapshot,
+    music: &MusicProfile,
+    runtime: &Value,
+) -> Option<usize> {
+    presets
+        .get(preferred)
+        .filter(|preset| matches_current(preset, snapshot, music, runtime))
+        .map(|_| preferred)
+        .or_else(|| {
+            presets
+                .iter()
+                .position(|preset| matches_current(preset, snapshot, music, runtime))
+        })
 }
 
 pub fn layout(area: Rect, count: usize, selected: usize) -> Areas {
