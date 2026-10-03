@@ -45,4 +45,4 @@ maris mcp
 maris mcp --allow-write
 ```
 
-MCP は既定で読み取り専用。書き込みも共通検証・版番号・取り消しを使います。デバイス名、CLI、JSON キーは翻訳しません。[公開状況](status.md)と英語の[コマンドリファレンス](../reference/commands.md)をご覧ください。
+MCP は既定で読み取り専用。書き込みも共通検証・版番号・取り消しを使います。デバイス名、CLI、JSON キーは翻訳しません。英語の[コマンドリファレンス](../reference/commands.md)をご覧ください。
