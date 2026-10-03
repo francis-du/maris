@@ -241,11 +241,21 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
     process.send("e");
     output.clear();
     let start = Instant::now();
-    while !output.contains("Current") {
+    while !process
+        .terminal
+        .screen()
+        .contents()
+        .contains("Sound settings")
+    {
         process.drain(&mut output);
         assert!(
+            process.child.try_wait().unwrap().is_none(),
+            "Console exited before the settings editor rendered"
+        );
+        assert!(
             start.elapsed() < Duration::from_secs(5),
-            "Settings editor did not open"
+            "Settings editor did not render; screen: {}",
+            process.terminal.screen().contents()
         );
         std::thread::sleep(Duration::from_millis(20));
     }
