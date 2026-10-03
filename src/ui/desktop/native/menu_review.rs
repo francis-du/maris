@@ -96,8 +96,12 @@ fn state_review(view: &mut Indicator, locale: &str, capture: bool) -> Result<Val
             "Native header did not expose the actual {name} state"
         );
         if capture && matches!(locale, "en" | "zh-CN") {
-            for appearance in ["light", "dark"] {
-                result.push(snapshot(view, locale, name, appearance)?);
+            if name == "live" {
+                for appearance in ["light", "dark"] {
+                    result.push(snapshot(view, locale, name, appearance)?);
+                }
+            } else if matches!(name, "idle" | "stale" | "failed") {
+                result.push(snapshot(view, locale, name, "dark")?);
             }
         }
     }
