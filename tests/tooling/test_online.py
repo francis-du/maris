@@ -41,6 +41,8 @@ while [ "$#" -gt 0 ]; do
  case "$1" in --from) source=$2; shift 2;; --prefix) prefix=$2; shift 2;; --sha256) shift 2;; --yes) shift;; *) exit 23;; esac
 done
 [ -n "$source" ] && [ -n "$prefix" ]
+physical=$(CDPATH= cd -- "$source" && pwd -P)
+[ "$source" = "$physical" ] || exit 24
 mkdir -p "$prefix"
 printf 'verified fixture installer reached; no audio or real installation\\n' > "$prefix/fixture-receipt"
 '''.encode()
@@ -131,6 +133,13 @@ sys.stdout.buffer.write(file.read_bytes())
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertFalse(self.prefix.exists())
         self.assertFalse(list(self.root.glob('maris-download.*')))
+
+    @unittest.skipUnless(sys.platform == 'darwin', 'macOS compatibility symlink regression')
+    def test_macos_online_cli_source_is_physical_before_local_installer(self):
+        fixture(self.transport, self.system, self.arch, cli=True)
+        result = self.run_installer('--yes')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.prefix / 'fixture-receipt').is_file())
 
     def test_standalone_latest_download_pins_tag_and_installs_without_cargo(self):
         result = self.run_installer('--yes')
