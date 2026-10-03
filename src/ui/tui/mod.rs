@@ -6,6 +6,7 @@ pub mod input;
 pub mod inspector;
 pub mod monitor;
 pub mod music;
+pub mod output_picker;
 pub mod preset_picker;
 pub mod presets;
 pub mod settings;
@@ -350,6 +351,19 @@ pub fn run(
                     config_pointer.reset();
                     if let Some(choice) = preset_picker::pointer_choice(drawn_area, &view, mouse) {
                         preset_choice = choice;
+                    }
+                    continue;
+                }
+                if overlay == Overlay::Output {
+                    config_pointer.reset();
+                    if let Some(choice) = output_picker::pointer_choice(
+                        drawn_area,
+                        picker_outputs.len().saturating_add(1),
+                        output_choice,
+                        runtime["selection_invalidated"] == true,
+                        mouse,
+                    ) {
+                        output_choice = choice;
                     }
                     continue;
                 }
