@@ -2,6 +2,12 @@
 
 Initial research checked on 2026-09-30; model-admission and redistribution provenance is recorded here and in the pinned `third_party/*/SOURCE.md` and license files. This is an engineering provenance and notice record, not a legal clearance opinion. Native CLI/TUI packaging derives the locked runtime dependency inventory and verifies the actual archived notice bytes before a stable manifest can be assembled.
 
+## Acknowledgements
+
+Maris is an independent project. The project thanks **Roman Kisil and the eqMac contributors** for the open-source equalizer work and preset source used by Maris, and **Jaakko Pasanen and AutoEq contributors** for the headphone-measurement processing/catalog work used for bundled correction profiles. Maris also retains the original MusicNN project provenance and notices for the optional local music-recognition path.
+
+These acknowledgements do not imply endorsement or affiliation. The exact source revisions, license texts and modifications used by Maris are recorded below and in `third_party/*/SOURCE.md`.
+
 ## Packaging and documentation tooling
 
 The installer invokes system Bash and Apple bundle/signature tools and does not redistribute drivers or download models. Documentation, source audit, package assembly and round-report tooling use Python's standard library without bundled third-party Python packages. GitHub Actions references are pinned to exact commits in separate check/build/Pages workflows; their action code is not embedded in the Maris application.
