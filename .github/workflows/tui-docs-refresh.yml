@@ -1,0 +1,33 @@
+name: TUI docs refresh
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+          check-latest: false
+      - name: Install declared Rust toolchain
+        run: rustup toolchain install 1.94.0 --profile minimal --component rustfmt && rustup override set 1.94.0
+      - name: Regenerate actual offline Ratatui documentation illustrations
+        run: python scripts/docs_assets.py --refresh
+      - name: Validate generated documentation assets
+        run: python scripts/docs_assets.py
+      - name: Upload refreshed illustrations
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        with:
+          name: tui-docs-refresh
+          path: |
+            docs/assets/*.svg
+            docs/assets/illustrations.json
+          if-no-files-found: error
+          retention-days: 1
