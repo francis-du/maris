@@ -25,9 +25,9 @@ struct Capture {
 }
 
 unsafe extern "C" fn configuration_event(
-    _object: u32,
-    _count: u32,
-    _addresses: *const ca::Address,
+    object: u32,
+    count: u32,
+    addresses: *const ca::Address,
     context: *mut c_void,
 ) -> i32 {
     if !context.is_null() {
@@ -38,6 +38,18 @@ unsafe extern "C" fn configuration_event(
             .metrics
             .configuration_events
             .fetch_add(1, Ordering::Release);
+        if object == ca::SYSTEM_OBJECT && !addresses.is_null() {
+            let addresses = unsafe { std::slice::from_raw_parts(addresses, count as usize) };
+            if addresses
+                .iter()
+                .any(|address| address.selector == u32::from_be_bytes(*b"dev#"))
+            {
+                capture
+                    .metrics
+                    .device_list_events
+                    .fetch_add(1, Ordering::Release);
+            }
+        }
     }
     0
 }
@@ -330,7 +342,12 @@ impl TapCapture {
             .metrics;
         let generation = metrics.configuration_events.load(Ordering::Acquire);
         let current: ca::Format = unsafe { ca::property(self.tap, b"tfmt")? };
-        let mut changed = current != self.format
+        // A system device-list event means CoreAudio may have rebuilt the HAL
+        // graph even when this output keeps the same ID/rate. Do not resume PCM
+        // through that old graph; rebuild the quarantined pipeline instead.
+        let topology_changed = metrics.device_list_events.load(Ordering::Acquire) > 0;
+        let mut changed = topology_changed
+            || current != self.format
             || ca::sample_rate(self.aggregate)? != self.aggregate_rate
             || ca::output_buffer_frames(self.aggregate).ok() != self.aggregate_buffer;
         if let Some((device, expected)) = &self.output_configuration {
