@@ -27,3 +27,5 @@ Maris limita los picos de las muestras digitales, pero no protege la audición. 
 El análisis de audio y el reconocimiento musical de MusicNN funcionan localmente sin subir el audio original. Los resultados pueden ayudar a sugerir ajustes; aplicarlos sigue requiriendo tu confirmación. La reducción de ruido de voz es independiente y no se activa para música normal.
 
 El código incluye procesamiento de audio del sistema para macOS, Windows y Linux, además de un mezclador con varias entradas y dos salidas. Cada aplicación puede tener su propio canal con volumen, EQ y compresión. Las imágenes proceden de la aplicación con audio de prueba generado; no son registros de pruebas de escucha con equipos físicos.
+
+Maris se desarrolla con **Wcode**.
