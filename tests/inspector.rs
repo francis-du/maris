@@ -18,6 +18,8 @@ fn click(rect: Rect) -> MouseEvent {
     }
 }
 fn with_view(test: impl FnOnce(Console<'_>)) {
+    let now = maris::analysis::now_ms();
+    let _clock = maris::analysis::DebugClock::freeze_at(now);
     let snapshot = Snapshot::default();
     let runtime = json!({"active":false});
     let applications = json!({"available":true,"applications":[

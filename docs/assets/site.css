@@ -83,8 +83,7 @@ p { margin: 0 0 18px; }
 .toc { border-left: 1px solid var(--line); padding-left: 18px; font-size: 11px; }
 .toc > div { color: var(--muted); font-weight: 650; margin-bottom: 12px; }
 .toc nav a { display: block; margin: 0 0 11px; color: var(--muted); text-decoration: none; line-height: 1.6; }
-.reference-notice, .release-notice { padding: 15px 18px; border: 1px solid #645331; border-left: 3px solid var(--warning); border-radius: 5px; background: #211c13; color: #f0d9af; margin: 20px 0 28px; font-size: 13px; }
-blockquote { margin: 24px 0; padding: 16px 20px; border-left: 3px solid var(--accent); border-radius: 0 5px 5px 0; background: var(--surface); color: var(--text); }
+.reference-notice, blockquote { margin: 24px 0; padding: 16px 20px; border-left: 3px solid var(--accent); border-radius: 0 5px 5px 0; background: var(--surface); color: var(--text); }
 blockquote p { margin: 0; }
 code { font: .87em/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 p code, li code, td code { background: var(--surface); border: 1px solid #263244; padding: 1px 4px; border-radius: 4px; overflow-wrap: anywhere; }
@@ -98,8 +97,6 @@ th, td { padding: 13px 15px; text-align: left; vertical-align: top; border-botto
 thead th { color: var(--muted); background: var(--surface); font-weight: 550; }
 tbody th { font-weight: 500; }
 tr:last-child th, tr:last-child td { border-bottom: none; }
-.state { white-space: nowrap; border-radius: 30px; padding: 3px 9px; font-size: 11px; border: 1px solid var(--line); }
-.state.pending { color: var(--muted); }.state.in_progress { color: var(--warning); border-color: #66532e; }.state.verified { color: var(--accent); }
 .document-end { border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 20px; margin-top: 50px; padding-top: 20px; font-size: 12px; }
 .site-footer { max-width: 1400px; border-top: 1px solid var(--line); margin: 0 auto; padding: 28px 32px; display: flex; align-items: center; justify-content: space-between; gap: 24px; color: var(--muted); font-size: 12px; }
 .site-footer p { max-width: 70ch; margin: 0; }

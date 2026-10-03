@@ -30,6 +30,8 @@ fn stale_telemetry_stops_animation() {
 }
 #[test]
 fn music_linked_theme_uses_semantics_only_when_semantics_exist() {
+    let now = maris::analysis::now_ms();
+    let _clock = maris::analysis::DebugClock::freeze_at(now);
     let electronic = json!({"active":true,"music_context":{"mode":"semantic","updated_at_ms":maris::analysis::now_ms(),"confidence":0.9,"genre":[{"label":"electronic","confidence":0.9}]}});
     let semantic = maris::theme::palette(&electronic);
     assert_eq!(semantic.name, "Neon Drive");
@@ -95,6 +97,8 @@ fn theme_tracker_debounces_and_smoothly_adopts_stable_signal_context() {
 
 #[test]
 fn semantic_theme_requires_stable_context_before_switching() {
+    let now = maris::analysis::now_ms();
+    let _clock = maris::analysis::DebugClock::freeze_at(now);
     let semantic = json!({
         "active": true,
         "music_context": {

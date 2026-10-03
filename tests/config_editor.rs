@@ -65,7 +65,9 @@ fn press_live(
     row: &mut usize,
     key: KeyCode,
 ) -> anyhow::Result<Outcome> {
-    live_telemetry::refresh(store);
+    let runtime = live_telemetry::refresh(store);
+    let now = runtime["updated_at_ms"].as_u64().unwrap();
+    let _clock = maris::analysis::DebugClock::freeze_at(now);
     press(editor, store, row, key)
 }
 fn renew_telemetry(store: &Store) {

@@ -20,17 +20,19 @@ fn event(rect: Rect, kind: MouseEventKind) -> MouseEvent {
     }
 }
 fn with_view(f: impl FnOnce(Console<'_>)) {
+    let now = maris::analysis::now_ms();
+    let _clock = maris::analysis::DebugClock::freeze_at(now);
     let dir = tempfile::tempdir().unwrap();
     let store = Store::at(dir.path());
     let mut runtime = json!({"active":true,"session_id":"fixture","profile_key":"Fixture Headphones",
-        "output":"Fixture Headphones","sample_rate":48000,"updated_at_ms":maris::analysis::now_ms(),
+        "output":"Fixture Headphones","sample_rate":48000,"updated_at_ms":now,
         "device_capability":Capability::default()});
     store.write_json("runtime.json", &runtime).unwrap();
     let snapshot = store.load().unwrap();
     let library = listening::load(&store).unwrap();
     let mut editor = Editor::default();
     let mut row = 16;
-    runtime["updated_at_ms"] = json!(maris::analysis::now_ms());
+    runtime["updated_at_ms"] = json!(now);
     editor
         .handle(
             &store,

@@ -34,7 +34,7 @@ Comparisons and edits that make no actual change preserve the last sound-change 
 
 `O` opens the output list. Only confirmation switches Maris's output; system volume and the OS default device stay unchanged. Menu Bar changes also show a confirmation.
 
-“Saved; waiting to take effect” means the settings were stored but the audio processor has not acknowledged them. System-audio mode attempts recovery when an output disconnects. See [release status](status.md) for real-device and Bluetooth testing.
+“Saved; waiting to take effect” means the settings were stored but the audio processor has not acknowledged them. System-audio mode attempts recovery when an output disconnects.
 
 If connecting or disconnecting power produces a harsh noise, stop processing rather than repeatedly testing with headphones on. Dropout and reconnection handling does not establish that every physical power-related problem is fixed.
 

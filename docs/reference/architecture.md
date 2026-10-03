@@ -1,6 +1,6 @@
 # Maris architecture
 
-Maris separates audio rendering, device information, listening preferences and user interfaces. The terminal, menu bar, CLI and MCP use the same validated settings. This page describes the current source layout and the responsibilities of each module; [audio tests](audio-quality.md) record verification and [release status](../en/status.md) lists unfinished work.
+Maris separates audio rendering, device information, listening preferences and user interfaces. The terminal, menu bar, CLI and MCP use the same validated settings. This page describes the current source layout and the responsibilities of each module; [audio tests](audio-quality.md) record verification evidence.
 
 ## Source layout {#source-layout}
 

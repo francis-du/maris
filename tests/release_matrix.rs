@@ -18,6 +18,7 @@ use serde_json::json;
 
 #[test]
 fn seeded_release_safety_case() {
+    let _clock = maris::analysis::DebugClock::freeze_at(maris::analysis::now_ms());
     let seed: u64 = std::env::var("MARIS_CHECK_SEED")
         .unwrap_or_else(|_| "1".into())
         .parse()

@@ -89,7 +89,10 @@ fn render_with(
     height: u16,
     customize: impl FnOnce(&mut Console<'_>),
 ) -> String {
-    render_with_runtime(workspace, overlay, width, height, runtime(), customize)
+    let runtime = runtime();
+    let now = runtime["updated_at_ms"].as_u64().unwrap();
+    let _clock = maris::analysis::DebugClock::freeze_at(now);
+    render_with_runtime(workspace, overlay, width, height, runtime, customize)
 }
 
 fn render_with_runtime(

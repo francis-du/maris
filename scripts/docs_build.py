@@ -9,9 +9,8 @@ from urllib.parse import quote, unquote, urlsplit
 from docs_assets import LANGUAGES, validate as validate_illustrations
 from capture_menu_docs import MANIFEST as MENU_MANIFEST, validate as validate_menu_illustrations
 from docs_markdown import render, slug
-from release_requirements import load as load_requirements, REQUIRED
 
-GUIDES = ('index', 'guide', 'install', 'status')
+GUIDES = ('index', 'guide', 'install')
 BRAND = ('mark.svg', 'mark-mono.svg', 'wordmark.svg')
 REFERENCES = {
     'architecture': 'reference/architecture.md', 'audio-quality': 'reference/audio-quality.md',
@@ -37,17 +36,17 @@ def source_path(root: Path, locale: str, page: str) -> Path:
 def translations(root: Path) -> dict:
     labels = {lang: json.loads((root / 'docs/locales' / f'{lang}.json').read_text(encoding='utf-8')) for lang in LANGUAGES}
     expected = set(labels['en'])
-    required = {'tagline','preview','guide','install','status','index','source','skip','language','navigation',
+    required = {'tagline','preview','guide','install','index','source','skip','language','navigation',
                 'on_page','reference','reference_note','offline','zoom','footer','start','explore',
-                'flow_title','flow','workflow_title','workflow','pending','in_progress','verified','requirement',
-                'state','release_note','edit','top','local','device','reversible','read_more','refs','requirements'}
+                'flow_title','flow','workflow_title','workflow','edit','top','local','device','reversible',
+                'read_more','refs'}
     if expected != required:
         raise ValueError('Website shell translation schema mismatch')
     for lang, entries in labels.items():
         if set(entries) != expected or any(not value for value in entries.values()):
             raise ValueError('Missing website translation in ' + lang)
-        if set(entries['requirements']) != set(REQUIRED) or set(entries['refs']) != set(REFERENCES):
-            raise ValueError('Missing translated requirement/reference labels in ' + lang)
+        if set(entries['refs']) != set(REFERENCES):
+            raise ValueError('Missing translated reference labels in ' + lang)
         if len(entries['flow']) != 4 or len(entries['workflow']) != 5:
             raise ValueError('Missing translated diagram stages in ' + lang)
     return labels
@@ -95,13 +94,6 @@ def diagram(title: str, values: list[str], kind: str) -> str:
             ''.join(f'<li><span aria-hidden="true">{i+1:02d}</span><strong>{escape(value)}</strong></li>' for i, value in enumerate(values)) + '</ol></section>')
 
 
-def requirements(root: Path, ui: dict) -> str:
-    rows = []
-    for item in load_requirements(root):
-        key, state = item['id'], item['status']
-        rows.append('<tr><th scope="row">' + escape(ui['requirements'][key]) + '</th><td><span class="state ' + state + '">' + escape(ui[state]) + '</span></td></tr>')
-    return '<div class="release-notice">' + escape(ui['release_note']) + '</div><div class="table-scroll"><table><thead><tr><th>' + escape(ui['requirement']) + '</th><th>' + escape(ui['state']) + '</th></tr></thead><tbody>' + ''.join(rows) + '</tbody></table></div>'
-
 
 def page_html(root: Path, locale: str, page: str, labels: dict, version: str, output: str | None = None) -> str:
     output = output or f'{locale}/{page}.html'
@@ -117,23 +109,21 @@ def page_html(root: Path, locale: str, page: str, labels: dict, version: str, ou
               '<nav class="top-nav" aria-label="' + escape(ui['navigation']) + '">' + nav(locale, output, page, ui) + '</nav>' +
               '<details class="languages"><summary aria-label="' + escape(ui['language']) + '">' + NAMES[locale] + ' <span aria-hidden="true">⌄</span></summary><nav aria-label="' + escape(ui['language']) + '">' + language_links + '</nav></details>' +
               '<a class="source-link" href="' + REPO + '">' + escape(ui['source']) + ' ↗</a></div></header>')
-    preview = '<a class="preview-label" href="' + target('status') + '"><span aria-hidden="true">○</span> v' + version + ' · ' + escape(ui['preview']) + '</a>'
+    preview = '<span class="preview-label"><span aria-hidden="true">○</span> v' + version + ' · ' + escape(ui['preview']) + '</span>'
     title = '<div class="eyebrow">' + escape(ui['tagline']) + '</div><h1' + (' lang="en"' if technical else '') + '>' + escape(doc['title']) + '</h1>'
     lead = '<div class="lead"' + (' lang="en"' if technical else '') + '>' + doc['lead'] + '</div>'
     content = doc['body']
     if home:
         hero = '<section class="hero">' + preview + title + lead + '<div class="hero-actions"><a class="button primary" href="' + target('install') + '">' + escape(ui['start']) + ' <span aria-hidden="true">↗</span></a><a class="button" href="' + target('guide') + '">' + escape(ui['explore']) + ' →</a></div><div class="traits">' + ''.join('<span>' + escape(ui[key]) + '</span>' for key in ('local','device','reversible')) + '</div></section>'
-        body = '<main id="main" class="home" tabindex="-1">' + hero + '<div class="hero-screen">' + doc['hero'] + '</div>' + diagram(ui['flow_title'], ui['flow'], 'signal-flow') + '<article class="home-article">' + content + '</article>' + diagram(ui['workflow_title'], ui['workflow'], 'workflow') + '<section class="closing"><p>' + escape(ui['release_note']) + '</p><a class="button" href="' + target('status') + '">' + escape(ui['status']) + ' →</a></section></main>'
+        body = '<main id="main" class="home" tabindex="-1">' + hero + '<div class="hero-screen">' + doc['hero'] + '</div>' + diagram(ui['flow_title'], ui['flow'], 'signal-flow') + '<article class="home-article">' + content + '</article>' + diagram(ui['workflow_title'], ui['workflow'], 'workflow') + '</main>'
     else:
         reference_nav = '<nav aria-label="' + escape(ui['reference']) + '">' + nav(locale, output, page, ui, True) + '</nav>'
         sidebar = '<aside class="sidebar"><nav aria-label="' + escape(ui['navigation']) + '">' + nav(locale, output, page, ui) + '</nav><div class="desktop-reference"><div class="sidebar-label">' + escape(ui['reference']) + '</div>' + reference_nav + '</div><details class="mobile-reference"><summary>' + escape(ui['reference']) + ' <span class="language-badge">EN</span></summary>' + reference_nav + '</details></aside>'
         toc = '<aside class="toc"><div>' + escape(ui['on_page']) + '</div><nav aria-label="' + escape(ui['on_page']) + '">' + ''.join('<a href="#' + escape(anchor) + '"' + (' lang="en"' if technical else '') + '>' + escape(text) + '</a>' for anchor, text in doc['toc']) + '</nav></aside>'
         note = '<div class="reference-notice">' + escape(ui['reference_note']) + '</div>' if technical else ''
-        if page == 'status':
-            content = requirements(root, ui) + content
         article = '<main id="main" class="document" tabindex="-1"><div class="doc-heading">' + preview + title + lead + '</div>' + note + '<article' + (' lang="en"' if technical else '') + '>' + doc['hero'] + content + '</article><div class="document-end"><a href="' + REPO + '/blob/main/' + origin.relative_to(root).as_posix() + '">' + escape(ui['edit']) + ' ↗</a><a href="#main">' + escape(ui['top']) + ' ↑</a></div></main>'
         body = '<div class="docs-layout">' + sidebar + article + toc + '</div>'
-    footer = '<footer class="site-footer"><a class="brand" href="' + target('index') + '">MARIS</a><p>' + escape(ui['footer']) + '</p><a href="' + REPO + '">' + escape(ui['source']) + ' ↗</a><a href="' + target('status') + '">' + escape(ui['status']) + ' →</a></footer>'
+    footer = '<footer class="site-footer"><a class="brand" href="' + target('index') + '">MARIS</a><p>' + escape(ui['footer']) + '</p><a href="' + REPO + '">' + escape(ui['source']) + ' ↗</a></footer>'
     description = unescape(re.sub('<[^>]+>', '', doc['lead']))[:180]
     return ('<!doctype html>\n<html lang="' + locale + '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
             '<meta name="color-scheme" content="dark"><meta name="description" content="' + escape(description, quote=True) + '"><title>' + escape(doc['title']) + ' — Maris</title><link rel="canonical" href="' + ORIGIN + locale + '/' + page + '.html">' + alternates +

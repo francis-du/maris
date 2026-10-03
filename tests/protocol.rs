@@ -244,6 +244,7 @@ fn model_fetch_requires_write_permission_and_rejects_unreviewed_ids_without_netw
 
 #[test]
 fn live_routing_tools_require_write_permission_confirmation_and_active_native_session() {
+    let _clock = maris::analysis::DebugClock::freeze_at(maris::analysis::now_ms());
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path());
     store

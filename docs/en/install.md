@@ -45,7 +45,7 @@ Replace the example version with a published tag. Without a version, the install
 
 Unix installation uses Bash, curl, tar, gzip and a SHA-256 tool. Linux needs its native runtime libraries and `psmisc` for checking open executables during upgrades. Windows uses PowerShell 5.1+ and built-in .NET HTTP/ZIP support.
 
-All three system-audio paths are implemented: CoreAudio process tap on macOS, WASAPI process loopback on Windows and a local PulseAudio-compatible path (including PipeWire-Pulse) on Linux. Installation does not start any of them. Native CI, clean-system, real-device and long-running acceptance remain separate [release requirements](status.md).
+All three system-audio paths are implemented: CoreAudio process tap on macOS, WASAPI process loopback on Windows and a local PulseAudio-compatible path (including PipeWire-Pulse) on Linux. Installation does not start any of them.
 
 ## Open, upgrade or remove {#recovery}
 

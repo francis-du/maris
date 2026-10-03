@@ -46,6 +46,7 @@ fn picker_does_not_silently_retarget_after_device_or_configuration_changes() {
 
 #[test]
 fn delayed_pointer_or_key_cannot_edit_a_previous_output_or_an_offline_default() {
+    let _clock = maris::analysis::DebugClock::freeze_at(maris::analysis::now_ms());
     let dir = tempfile::tempdir().unwrap();
     let store = Store::at(dir.path());
     let displayed = runtime();
@@ -211,6 +212,7 @@ fn comparison_is_revisioned_without_erasing_listening_undo() {
 
 #[test]
 fn an_unconsumed_route_command_cannot_be_overwritten_but_stop_has_priority() {
+    let _clock = maris::analysis::DebugClock::freeze_at(maris::analysis::now_ms());
     let dir = tempfile::tempdir().unwrap();
     let store = Store::at(dir.path());
     store.write_json("runtime.json", &runtime()).unwrap();

@@ -76,4 +76,4 @@ Los kits locales completos usan `--from` / `-From`. Solo `--build` / `-Build` ex
 
 No publicado o error HTTP: no se instala ni compila. Objetivo o versión incorrectos: usa una etiqueta estable nativa válida. Error de hash o archivo: detén e investiga la procedencia, sin omitir controles. Instalación ocupada: revisa Maris o el bloqueo. No reduzcas la seguridad del sistema ante rechazos de firma o scripts.
 
-Consulta el [estado de publicación](status.md) y el procedimiento técnico en inglés de [compilación y publicación](../development/releasing.md).
+Consulta el procedimiento técnico en inglés de [compilación y publicación](../development/releasing.md).

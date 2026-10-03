@@ -37,7 +37,7 @@ class Documentation(unittest.TestCase):
         cls.output = build(ROOT)
 
     def test_one_source_tree_produces_all_languages_and_legacy_urls(self):
-        self.assertEqual(len(check_output(self.output)), 109)
+        self.assertEqual(len(check_output(self.output)), 103)
         for locale in LANGUAGES:
             for page in GUIDES:
                 data = self.output[f'{locale}/{page}.html'].decode()
@@ -47,6 +47,15 @@ class Documentation(unittest.TestCase):
             self.assertIn(old, self.output)
         self.assertEqual({p.name for p in ROOT.glob('*.md')}, {'README.md','AGENTS.md'})
         self.assertFalse(list((ROOT / 'docs').glob('*.html')))
+
+    def test_release_worklist_is_not_published_as_user_documentation(self):
+        for locale in LANGUAGES:
+            self.assertNotIn(f'{locale}/status.html', self.output)
+        generated = b'\n'.join(self.output.values()).decode('utf-8', errors='ignore')
+        self.assertNotIn('href="status.html"', generated)
+        self.assertNotIn('/status.html', generated)
+        self.assertNotIn('class="state ', generated)
+        self.assertNotIn('class="release-notice"', generated)
 
     def test_language_switch_preserves_current_page_and_all_images_have_alt(self):
         for locale in LANGUAGES:
@@ -71,7 +80,7 @@ class Documentation(unittest.TestCase):
             root = Path(temporary)
             shutil.copytree(ROOT / 'docs/locales', root / 'docs/locales')
             file = root / 'docs/locales/ja.json'
-            data = json.loads(file.read_text(encoding='utf-8')); del data['requirements']['brand-readme']; file.write_text(json.dumps(data))
+            data = json.loads(file.read_text(encoding='utf-8')); del data['refs']['architecture']; file.write_text(json.dumps(data))
             with self.assertRaises(ValueError): translations(root)
             path = root / 'docs/development/requirements.json'; path.parent.mkdir()
             records = [{'id': key, 'status':'pending'} for key in REQUIRED[:-1]]

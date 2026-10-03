@@ -76,4 +76,4 @@ Vollständige lokale Kits verwenden `--from` / `-From`. Nur explizites `--build`
 
 Nicht veröffentlicht oder HTTP-Fehler: keine Installation und kein Kompilieren. Falsche Version/Architektur: korrekten nativen Tag wählen. Hash- oder Archivfehler: stoppen und Herkunft untersuchen, nicht umgehen. Belegte Installation: Maris oder Sperre prüfen. Signatur-/Skriptrichtlinienfehler nicht durch Abschalten des OS-Schutzes beheben.
 
-Siehe [Freigabestatus](status.md) sowie die englischen [Build- und Veröffentlichungsschritte](../development/releasing.md).
+Siehe die englischen [Build- und Veröffentlichungsschritte](../development/releasing.md).

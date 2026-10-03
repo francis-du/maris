@@ -45,4 +45,4 @@ maris mcp
 maris mcp --allow-write
 ```
 
-MCP ist standardmäßig nur lesend; Schreibaktionen behalten gemeinsame Prüfung, Revisionen und Undo. Gerätenamen, CLI und JSON-Schlüssel bleiben unverändert. Siehe [Freigabestatus](status.md) und die englische [Befehlsreferenz](../reference/commands.md).
+MCP ist standardmäßig nur lesend; Schreibaktionen behalten gemeinsame Prüfung, Revisionen und Undo. Gerätenamen, CLI und JSON-Schlüssel bleiben unverändert. Siehe die englische [Befehlsreferenz](../reference/commands.md).

@@ -22,10 +22,10 @@ SPEC.loader.exec_module(site)
 class ReleaseTools(unittest.TestCase):
     def test_real_documentation_links_and_accessible_structure(self):
         files = site.check(ROOT / "docs")
-        self.assertEqual(len(files), 109)
-        self.assertEqual(sum(name.endswith('.html') for name in files), 83)
+        self.assertEqual(len(files), 103)
+        self.assertEqual(sum(name.endswith('.html') for name in files), 77)
         for language in ('en', 'zh-CN', 'zh-TW', 'ja', 'de', 'es'):
-            for page in ('index', 'guide', 'install', 'status'):
+            for page in ('index', 'guide', 'install'):
                 self.assertIn(f'{language}/{page}.html', files)
         self.assertIn('assets/mark.svg', files)
 

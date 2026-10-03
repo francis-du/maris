@@ -45,4 +45,4 @@ maris mcp
 maris mcp --allow-write
 ```
 
-MCP es de solo lectura por defecto; las escrituras mantienen validación, revisiones y deshacer. Nombres de dispositivos, CLI y claves JSON no se traducen. Consulta el [estado de publicación](status.md) y la [referencia de comandos](../reference/commands.md) en inglés.
+MCP es de solo lectura por defecto; las escrituras mantienen validación, revisiones y deshacer. Nombres de dispositivos, CLI y claves JSON no se traducen. Consulta la [referencia de comandos](../reference/commands.md) en inglés.

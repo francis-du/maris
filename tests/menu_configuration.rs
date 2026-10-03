@@ -61,6 +61,7 @@ fn mcp_requires_explicit_output_even_when_routing_is_confirmed() {
 
 #[test]
 fn global_bypass_is_not_misrepresented_as_an_audible_ab_comparison() {
+    let _clock = maris::analysis::DebugClock::freeze_at(maris::analysis::now_ms());
     let (_directory, store) = fixture();
     store
         .edit(Some(0), |profile| {

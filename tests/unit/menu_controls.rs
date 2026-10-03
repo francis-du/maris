@@ -125,6 +125,7 @@ fn native_output_items_enable_the_current_backend_and_check_only_the_pinned_devi
 
 #[test]
 fn selecting_from_an_outdated_menu_cannot_target_a_new_output() {
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     let (_dir, store) = fixture();
     heartbeat(&store);
     let state = audio::runtime_status(&store);
@@ -147,6 +148,7 @@ fn selecting_from_an_outdated_menu_cannot_target_a_new_output() {
 
 #[test]
 fn native_menu_rejects_index_selectors_and_mismatched_backend_ids() {
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     let (_dir, store) = fixture();
     for selector in [
         "output:0",
@@ -175,6 +177,7 @@ fn native_menu_rejects_index_selectors_and_mismatched_backend_ids() {
 
 #[test]
 fn selecting_and_cancelling_a_scene_never_changes_audio_or_preferences() {
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     let (_dir, store) = fixture();
     let mut controller = Controller::default();
     heartbeat(&store);
@@ -245,6 +248,7 @@ fn applied_scene_is_device_scoped_and_undo_survives_ab_comparison() {
 
 #[test]
 fn preview_is_rejected_after_any_route_identity_or_revision_change() {
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     for field in [
         "session_id",
         "profile_key",
@@ -296,6 +300,7 @@ fn preview_is_rejected_after_any_route_identity_or_revision_change() {
 
 #[test]
 fn previews_expire_and_do_not_accept_future_timestamps() {
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     for age in [PREVIEW_TTL_MS + 1, u64::MAX] {
         let (_dir, store) = fixture();
         let mut controller = Controller::default();
@@ -346,6 +351,7 @@ fn capability_and_eq_changes_invalidate_scene_selection() {
 
 #[test]
 fn output_selection_is_uid_bound_and_only_apply_queues_a_command() {
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     let (_dir, store) = fixture();
     let devices = inventory();
     let mut controller = Controller::default();
@@ -369,6 +375,7 @@ fn output_selection_is_uid_bound_and_only_apply_queues_a_command() {
 
 #[test]
 fn vanished_or_ambiguous_output_does_not_fall_back_or_leave_old_selection_armed() {
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     let (_dir, store) = fixture();
     let devices = inventory();
     let mut controller = Controller::default();
@@ -422,6 +429,7 @@ fn missing_stale_or_offline_runtime_cannot_edit_fallback_profile() {
 
 #[test]
 fn pending_device_limits_are_not_reported_applied_just_because_profile_revisions_match() {
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     let (_dir, store) = fixture();
     runtime(&store, |runtime| {
         runtime["settings_pending"] = json!(true);
@@ -503,6 +511,7 @@ fn summary_distinguishes_listening_scene_global_eq_and_callback_application() {
 
 #[test]
 fn current_device_undo_cannot_revert_another_devices_last_edit() {
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     let (_dir, store) = fixture();
     listening::preset(&store, Some(0), Some("Other speakers"), "focus").unwrap();
     let library = listening::load(&store).unwrap();
@@ -514,6 +523,7 @@ fn current_device_undo_cannot_revert_another_devices_last_edit() {
 
 #[test]
 fn immediate_menu_actions_reject_a_new_output_or_a_new_revision_since_rendering() {
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     let (_dir, store) = fixture();
     listening::preset(&store, Some(0), Some("Headphones"), "focus").unwrap();
     let mut controller = Controller::default();
@@ -550,6 +560,7 @@ fn immediate_menu_actions_reject_a_new_output_or_a_new_revision_since_rendering(
 
 #[test]
 fn an_unavailable_rendered_target_blocks_actions_until_a_fresh_summary_is_observed() {
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     for condition in ["stale", "stopped", "unsupported"] {
         let (_dir, store) = fixture();
         listening::preset(&store, Some(0), Some("Headphones"), "focus").unwrap();
