@@ -23,13 +23,17 @@ STATES = ('live', 'idle', 'stale', 'failed', 'stopping', 'restore-failed')
 CAPTURE_SPECS = (('live', 'light'), ('live', 'dark'),
                  ('idle', 'dark'), ('stale', 'dark'), ('failed', 'dark'),
                  ('stopping', 'dark'), ('restore-failed', 'dark'))
-SOURCES = ('Cargo.toml', 'Cargo.lock', 'src/ui/desktop/native.rs',
-           'src/ui/desktop/native/menu_review.rs', 'src/ui/desktop/native/native_loop.rs', 'src/ui/desktop/menu_header.rs',
-           'src/ui/desktop/native_mark.rs', 'src/ui/desktop/status_icon.rs',
-           'src/ui/desktop/menu_capture.rs', 'src/ui/desktop/monitor_state.rs',
-           'src/ui/desktop/controls.rs', 'src/ui/desktop/events.rs', 'src/ui/desktop/mod.rs',
-           'src/presets/scenes.rs', 'src/i18n/mod.rs', 'src/i18n/console.rs', 'src/i18n/surface.rs',
-           'src/i18n/messages.rs', 'tests/support/menu_probe.rs', 'scripts/capture_menu_docs.py')
+# Only files that can change the documented native menu's visible structure,
+# labels, icon, status presentation or preset contents belong in provenance.
+# Capture/test harnesses, event-loop plumbing, lockfiles and this exporter are
+# deliberately excluded: changing those must not make otherwise identical
+# documentation stale.
+SOURCES = ('Cargo.toml', 'src/ui/desktop/native.rs',
+           'src/ui/desktop/menu_header.rs', 'src/ui/desktop/native_mark.rs',
+           'src/ui/desktop/status_icon.rs', 'src/ui/desktop/monitor_state.rs',
+           'src/ui/desktop/controls.rs', 'src/presets/scenes.rs',
+           'src/i18n/mod.rs', 'src/i18n/console.rs', 'src/i18n/surface.rs',
+           'src/i18n/messages.rs')
 MANIFEST = 'menu-bar-review-manifest.json'
 LIMIT = 2_000_000
 LABELS = {
