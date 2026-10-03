@@ -371,9 +371,13 @@ impl Renderer {
         let frame_count = data.len() / channels;
         if !self.worker {
             if let Some((previous, frames)) = self.last_callback {
+                // Missing even one or two hardware deadlines can insert silence at the
+                // device while capture continues to queue valid PCM. Treat that as a
+                // discontinuity before replaying backlog. Allow half a callback period
+                // of jitter plus 2 ms scheduler slack instead of a fixed 50 ms floor.
+                let period = frames.max(1) as f64 / self.rate.max(1) as f64;
                 let tolerance =
-                    Duration::from_secs_f64(frames as f64 * 4.0 / self.rate.max(1) as f64)
-                        .max(Duration::from_millis(50));
+                    Duration::from_secs_f64(period * 1.5 + 0.002).max(Duration::from_millis(4));
                 if now.saturating_duration_since(previous) > tolerance {
                     // Hardware has already had a gap: an old held sample cannot
                     // retroactively fade it. Restart from silence and flush live backlog.
