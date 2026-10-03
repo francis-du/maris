@@ -118,6 +118,18 @@ fn eqmac_profile(raw: EqMacRawPreset, rate: u32) -> Result<Profile> {
     Ok(profile)
 }
 
+pub fn apply_tone_curve(current: &Profile, id: &str, rate: u32) -> Result<Profile> {
+    let mut next = profile(id, rate)?;
+    // A tone-curve preset owns its curve/headroom metadata, not independent
+    // playback/spatial policy. Preserve controls that the user may have set
+    // through Settings, Menu Bar, CLI or MCP.
+    next.crossfeed = current.crossfeed;
+    next.stereo_width = current.stereo_width;
+    next.bypass = current.bypass;
+    next.validate()?;
+    Ok(next)
+}
+
 pub fn profile(id: &str, rate: u32) -> Result<Profile> {
     if MARIS_PRESETS.contains(&id) {
         return Profile::preset(id);
