@@ -226,6 +226,32 @@ fn virtual_surround_keeps_mono_center_unchanged() {
 }
 
 #[test]
+fn virtual_surround_does_not_replay_stale_side_after_a_mono_passage() {
+    let profile = MusicProfile {
+        virtual_surround: 1.0,
+        level_match: false,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        ..MusicProfile::default()
+    };
+    let mut processor = maris::music::Processor::new(profile.compile(48000).unwrap());
+    for i in 0..2048 {
+        let x = 0.2 * (std::f64::consts::TAU * 3500.0 * i as f64 / 48000.0).sin();
+        let _ = processor.process([x, -x]);
+    }
+    for i in 0..4096 {
+        let x = 0.1 * (std::f64::consts::TAU * 440.0 * i as f64 / 48000.0).sin();
+        let y = processor.process([x, x]);
+        assert!(
+            (y[0] - y[1]).abs() < 1e-12,
+            "Virtual 360 leaked stale Side energy into mono content"
+        );
+    }
+}
+
+#[test]
 fn virtual_surround_decorrelates_side_but_preserves_center_sum() {
     let profile = MusicProfile {
         virtual_surround: 0.8,
