@@ -105,7 +105,7 @@ Runtime `continuity` telemetry identifies `stream-recovery-1` and reports observ
 
 Callbacks do not allocate, take application locks, read files, use the network, write logs or invoke models. Control threads validate complete profiles, compile coefficients and enqueue bounded updates. Sample processing uses preallocated filter, delay and envelope state. Blocking Linux transport, Windows process-loopback capture and RNNoise inference stay on worker threads, not native audio callbacks.
 
-The processor retains combined headroom calculation, bounded dynamic EQ, center-preserving stereo width, optional compression, Bass Assist and loudness-matched comparison. Correction and preference filters share the safety calculation. The final limiter bounds sample peaks; it is not a true-peak limiter or acoustic hearing protection. LUFS and true-peak measurements belong to analysis, not output normalization.
+The processor retains combined headroom calculation, bounded dynamic EQ, center-preserving stereo width, optional compression, Bass Assist, bounded Virtual 360 side decorrelation, Stereo Focus and loudness-matched comparison. Correction and preference filters share the safety calculation. The final limiter bounds sample peaks; it is not a true-peak limiter or acoustic hearing protection. LUFS and true-peak measurements belong to analysis, not output normalization.
 
 ## Device settings and persistence
 
