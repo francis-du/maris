@@ -36,6 +36,19 @@ fn fixture() -> (tempfile::TempDir, Store) {
     (temp, store)
 }
 
+fn refresh(controller: &mut Controller, store: &Store) -> serde_json::Value {
+    let runtime = live_telemetry::refresh(store);
+    let now = runtime["updated_at_ms"].as_u64().unwrap();
+    controller.set_test_now(now);
+    runtime
+}
+
+fn observe_live(controller: &mut Controller, store: &Store) {
+    let runtime = refresh(controller, store);
+    let now = runtime["updated_at_ms"].as_u64().unwrap();
+    controller.observe(&Summary::read(store, &runtime, now).unwrap());
+}
+
 #[test]
 fn motion_events_do_not_require_one_redraw_each_before_a_button_press() {
     let down = mouse(MouseEventKind::Down(MouseButton::Left));
@@ -94,18 +107,10 @@ fn enter_after_a_deliberate_adjustment_is_not_dropped_as_repeat() {
 fn successive_native_menu_actions_do_not_conflict_with_their_own_saved_revision() {
     let (_temp, store) = fixture();
     let mut controller = Controller::default();
-    live_telemetry::refresh(&store);
-    controller.observe(
-        &Summary::read(
-            &store,
-            &maris::audio::runtime_status(&store),
-            maris::analysis::now_ms(),
-        )
-        .unwrap(),
-    );
-    live_telemetry::refresh(&store);
+    observe_live(&mut controller, &store);
+    refresh(&mut controller, &store);
     controller.compare(&store).unwrap();
-    live_telemetry::refresh(&store);
+    refresh(&mut controller, &store);
     controller.compare(&store).unwrap();
     assert_eq!(listening::load(&store).unwrap().revision, 2);
     assert!(
@@ -114,9 +119,9 @@ fn successive_native_menu_actions_do_not_conflict_with_their_own_saved_revision(
             .effective("Headphones")
             .reference
     );
-    live_telemetry::refresh(&store);
+    refresh(&mut controller, &store);
     controller.toggle_processing(&store).unwrap();
-    live_telemetry::refresh(&store);
+    refresh(&mut controller, &store);
     controller.toggle_processing(&store).unwrap();
     assert_eq!(store.load().unwrap().revision, 2);
     assert!(!store.load().unwrap().profile.bypass);
@@ -127,21 +132,13 @@ fn confirmed_menu_scene_can_be_compared_immediately_without_a_refresh() {
     // Audio heartbeats advance; the controller labels are never re-observed.
     let (_temp, store) = fixture();
     let mut controller = Controller::default();
-    live_telemetry::refresh(&store);
-    controller.observe(
-        &Summary::read(
-            &store,
-            &maris::audio::runtime_status(&store),
-            maris::analysis::now_ms(),
-        )
-        .unwrap(),
-    );
-    live_telemetry::refresh(&store);
+    observe_live(&mut controller, &store);
+    refresh(&mut controller, &store);
     controller.select_preset(&store, "focus").unwrap();
-    live_telemetry::refresh(&store);
+    refresh(&mut controller, &store);
     controller.apply(&store, &[]).unwrap();
     assert_eq!(listening::load(&store).unwrap().revision, 1);
-    live_telemetry::refresh(&store);
+    refresh(&mut controller, &store);
     controller.compare(&store).unwrap();
     assert!(
         listening::load(&store)
@@ -149,7 +146,7 @@ fn confirmed_menu_scene_can_be_compared_immediately_without_a_refresh() {
             .effective("Headphones")
             .reference
     );
-    live_telemetry::refresh(&store);
+    refresh(&mut controller, &store);
     controller.undo(&store).unwrap();
     assert_eq!(
         listening::load(&store)
@@ -198,15 +195,7 @@ fn rapid_deliberate_plus_minus_clicks_are_not_throttled_as_keyboard_toggles() {
 fn removing_label_revision_guards_would_overwrite_an_external_edit() {
     let (_temp, store) = fixture();
     let mut controller = Controller::default();
-    live_telemetry::refresh(&store);
-    controller.observe(
-        &Summary::read(
-            &store,
-            &maris::audio::runtime_status(&store),
-            maris::analysis::now_ms(),
-        )
-        .unwrap(),
-    );
+    observe_live(&mut controller, &store);
     listening::edit(&store, Some(0), Some("Headphones"), |p| {
         p.bass_db = 1.0;
         Ok(())
