@@ -898,8 +898,7 @@ pub fn runtime_status(store: &Store) -> Value {
     runtime_status_at(store, now_ms())
 }
 
-#[doc(hidden)]
-pub fn runtime_status_at(store: &Store, now: u64) -> Value {
+pub(crate) fn runtime_status_at(store: &Store, now: u64) -> Value {
     let mut status = read_json::<Value>(&store.directory.join("runtime.json"))
         .unwrap_or_else(|_| json!({"active":false}));
     if !status.is_object() {
