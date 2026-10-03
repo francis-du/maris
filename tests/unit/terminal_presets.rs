@@ -41,6 +41,18 @@ fn highlighted_preset(process: &ConsoleProcess) -> Option<String> {
         .find_map(|row| row.strip_prefix('▶').map(|name| name.trim().to_owned()))
 }
 
+fn visible_preset_row(process: &ConsoleProcess, expected: &str) -> Option<u16> {
+    process
+        .terminal
+        .screen()
+        .rows(29, 70)
+        .enumerate()
+        .find_map(|(row, text)| {
+            text.contains(expected)
+                .then_some(u16::try_from(row).expect("PTY row fits u16"))
+        })
+}
+
 fn wait_for_preset(
     process: &mut ConsoleProcess,
     expected: Option<&str>,
@@ -253,10 +265,26 @@ fn real_terminal_clicking_a_visible_preset_then_enter_applies_that_row() {
     let _heartbeat = Heartbeat::start(store.clone());
     let mut process = spawn_console(dir.path());
     process.send("p");
-    idle(&mut process, Duration::from_millis(200));
-    // Independent fixed-size UI contract: at 140x40 the popup starts at (28,4),
-    // its header is y=5, and Dialogue is the third data row, y=8.
-    process.send(&click(Rect::new(35, 8, 1, 1)));
+    wait_for_preset(
+        &mut process,
+        None,
+        Instant::now() + Duration::from_secs(5),
+    );
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let dialogue_row = loop {
+        let mut output = String::new();
+        process.drain(&mut output);
+        if let Some(row) = visible_preset_row(&process, "Dialogue") {
+            break row;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Dialogue preset was not visible for pointer selection; screen: {}",
+            process.terminal.screen().contents()
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    process.send(&click(Rect::new(35, dialogue_row, 1, 1)));
     idle(&mut process, Duration::from_millis(100));
     assert_eq!(
         listening::load(&store).unwrap().revision,
