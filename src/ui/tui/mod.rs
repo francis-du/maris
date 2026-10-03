@@ -10,6 +10,7 @@ pub mod output_picker;
 pub mod preset_picker;
 pub mod presets;
 pub mod settings;
+mod session;
 pub mod studio;
 pub mod view;
 
@@ -30,8 +31,11 @@ mod actions;
 #[cfg(test)]
 use crate::ui::tui::input::EQ_ROW_START;
 use actions::{
-    adjust_sound, application_pids, application_state, captured_application_pids, source_args,
-    toggle_reference,
+    adjust_sound, application_pids, application_state, captured_application_pids, toggle_reference,
+};
+use session::{
+    apply_application_scope, apply_output_choice, discard_application_draft, navigate,
+    start_initial_audio, sync_application_scope,
 };
 use anyhow::{ensure, Result};
 use crossterm::{
@@ -913,124 +917,6 @@ pub fn run(
     Ok(())
 }
 
-fn sync_application_scope(runtime: &serde_json::Value, pending: &mut Vec<i32>, dirty: bool) {
-    if !dirty {
-        *pending = if runtime["active"] == true {
-            captured_application_pids(runtime)
-        } else {
-            Vec::new()
-        };
-    }
-}
-
-fn discard_application_draft(
-    current: Workspace,
-    destination: Workspace,
-    runtime: &serde_json::Value,
-    pending: &mut Vec<i32>,
-    dirty: &mut bool,
-) {
-    if current == Workspace::Apps && destination != Workspace::Apps && *dirty {
-        *pending = captured_application_pids(runtime);
-        *dirty = false;
-    }
-}
-
-fn navigate(workspace: &mut Workspace, row: &mut usize, cursors: &mut CursorMemory, to: Workspace) {
-    *row = cursors.visit(*workspace, to, *row);
-    *workspace = to;
-}
-
-fn start_initial_audio(
-    store: &Store,
-    play: Option<&PathBuf>,
-    input_name: Option<&String>,
-    input: Option<&DeviceInfo>,
-    output: Option<&DeviceInfo>,
-    notice: &mut Notice,
-) -> Result<()> {
-    if let Some(path) = play {
-        let mut args = vec![
-            "play".into(),
-            path.canonicalize()?.to_string_lossy().into_owned(),
-            "--repeat".into(),
-        ];
-        if let Some(output) = output {
-            args.extend(["--output".into(), output.id.clone()]);
-        }
-        desktop::launch_audio(store, &args)?;
-    } else if input_name.is_some() {
-        desktop::launch_audio(store, &source_args("run", input, output))?;
-    } else if control::is_stopped(store) {
-        launch_system(store, output)?;
-        *notice = "Starting native system audio.".into();
-    }
-    Ok(())
-}
-
-fn launch_system(store: &Store, output: Option<&DeviceInfo>) -> Result<()> {
-    let mut args = source_args("system", None, output);
-    args.push("--accept-routing".into());
-    desktop::launch_audio(store, &args).map(|_| ())
-}
-
-fn apply_output_choice(
-    store: &Store,
-    runtime: &serde_json::Value,
-    selected: Option<&DeviceInfo>,
-    pin_output: &mut bool,
-    output_index: &mut Option<usize>,
-    outputs: &[DeviceInfo],
-    notice: &mut Notice,
-) -> Result<()> {
-    if runtime["active"] == true && audio::native_controls(runtime) {
-        control::request_output(store, selected.map(|device| device.id.as_str()))?;
-        *notice = selected.map_or_else(
-            || "Output request queued: follow system default.".into(),
-            |device| Notice::new("Output request queued: {device}.").arg("device", &device.name),
-        );
-    } else if control::is_stopped(store) {
-        launch_system(store, selected)?;
-        *notice = selected.map_or_else(
-            || "Starting on the system default output.".into(),
-            |device| Notice::new("Starting on {device}.").arg("device", &device.name),
-        );
-    } else {
-        anyhow::bail!("Live output switching requires native system audio");
-    }
-    *pin_output = selected.is_some();
-    *output_index = selected
-        .and_then(|device| outputs.iter().position(|item| item.id == device.id))
-        .or_else(|| outputs.iter().position(|device| device.is_default));
-    Ok(())
-}
-
-fn apply_application_scope(
-    store: &Store,
-    runtime: &serde_json::Value,
-    pids: &[i32],
-    output: Option<&DeviceInfo>,
-) -> Result<()> {
-    if runtime["active"] == true && audio::native_controls(runtime) {
-        return control::request_applications(store, pids);
-    }
-    ensure!(
-        control::is_stopped(store),
-        "Application capture requires native system audio"
-    );
-    if pids.is_empty() {
-        return launch_system(store, output);
-    }
-    let mut args = vec!["application".to_owned()];
-    for pid in pids {
-        args.extend(["--pid".into(), pid.to_string()]);
-    }
-    if let Some(output) = output {
-        args.extend(["--output".into(), output.id.clone()]);
-    }
-    args.push("--accept-routing".into());
-    desktop::launch_audio(store, &args).map(|_| ())
-}
 
 #[cfg(test)]
 #[path = "../../../tests/unit/tui_actions.rs"]
