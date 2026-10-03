@@ -562,10 +562,13 @@ pub fn run(
                                         undo_target = UndoTarget::Listening;
                                     }
                                 } else {
-                                    let profile = crate::presets::profile(&preset.id, rate)?;
                                     let applied =
                                         store.edit(Some(snapshot.revision), |current| {
-                                            *current = profile;
+                                            *current = crate::presets::apply_tone_curve(
+                                                current,
+                                                &preset.id,
+                                                rate,
+                                            )?;
                                             Ok(())
                                         })?;
                                     if applied.revision != snapshot.revision {
