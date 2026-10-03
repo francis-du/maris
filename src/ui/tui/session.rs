@@ -75,7 +75,7 @@ pub(super) fn start_initial_audio(
     Ok(())
 }
 
-fn launch_system(store: &Store, output: Option<&DeviceInfo>) -> Result<()> {
+pub(super) fn launch_system(store: &Store, output: Option<&DeviceInfo>) -> Result<()> {
     let mut args = source_args("system", None, output);
     args.push("--accept-routing".into());
     desktop::launch_audio(store, &args).map(|_| ())
