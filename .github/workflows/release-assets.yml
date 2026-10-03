@@ -154,7 +154,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.publish.outputs.tag }}
+          # The public docs serve the current bootstrap scripts. Pin only the
+          # downloaded release via --version; keep package bytes tied to the tag.
           persist-credentials: false
       - name: Install from the public Release with install.sh
         if: runner.os != 'Windows'
