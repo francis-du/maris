@@ -4,12 +4,15 @@ use crate::{
     control,
     control::store::Store,
     i18n::Notice,
-    ui::{desktop, tui::input::{CursorMemory, Workspace}},
+    ui::{
+        desktop,
+        tui::input::{CursorMemory, Workspace},
+    },
 };
 use anyhow::{ensure, Result};
 use std::path::PathBuf;
 
-use super::{actions::source_args, actions::captured_application_pids};
+use super::{actions::captured_application_pids, actions::source_args};
 
 pub(super) fn sync_application_scope(
     runtime: &serde_json::Value,

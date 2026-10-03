@@ -129,11 +129,7 @@ pub fn run(store: &Store, expected: Option<u64>, action: Action) -> Result<Value
                     .find(|s| s.id == id)
                     .ok_or_else(|| anyhow::anyhow!("Unknown mixer strip"))?;
                 let current = strip.eq.clone().unwrap_or_default();
-                strip.eq = Some(crate::presets::apply_tone_curve(
-                    &current,
-                    &preset,
-                    48_000,
-                )?);
+                strip.eq = Some(crate::presets::apply_tone_curve(&current, &preset, 48_000)?);
                 Ok(())
             },
         )?)?),

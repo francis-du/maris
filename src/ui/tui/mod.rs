@@ -9,8 +9,8 @@ pub mod music;
 pub mod output_picker;
 pub mod preset_picker;
 pub mod presets;
-pub mod settings;
 mod session;
+pub mod settings;
 pub mod studio;
 pub mod view;
 
@@ -31,10 +31,6 @@ mod actions;
 #[cfg(test)]
 use crate::ui::tui::input::EQ_ROW_START;
 use actions::{adjust_sound, application_pids, application_state, toggle_reference};
-use session::{
-    apply_output_choice, discard_application_draft, launch_system, navigate, start_initial_audio,
-    sync_application_scope,
-};
 use anyhow::{ensure, Result};
 use crossterm::{
     cursor::Show,
@@ -46,6 +42,10 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
+use session::{
+    apply_output_choice, discard_application_draft, launch_system, navigate, start_initial_audio,
+    sync_application_scope,
+};
 use std::{
     io::{self, IsTerminal},
     path::PathBuf,
@@ -914,7 +914,6 @@ pub fn run(
 
     Ok(())
 }
-
 
 #[cfg(test)]
 #[path = "../../../tests/unit/tui_actions.rs"]

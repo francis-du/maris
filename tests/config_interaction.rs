@@ -149,7 +149,6 @@ fn adjusting_a_draft_never_implicitly_enables_processing_or_exits_reference() {
     assert!(updated.effective("Headphones").reference);
 }
 
-
 #[test]
 fn spatial_drafts_keep_processing_and_reference_policy_unchanged() {
     for (row, field) in [(26_usize, "surround"), (27, "focus")] {

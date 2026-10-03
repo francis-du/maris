@@ -21,8 +21,10 @@ impl CaptureMode<'_> {
             Self::None => false,
             Self::All => {
                 (state == "live" && matches!(appearance, "light" | "dark"))
-                    || (matches!(state, "idle" | "stale" | "failed" | "stopping" | "restore-failed")
-                        && appearance == "dark")
+                    || (matches!(
+                        state,
+                        "idle" | "stale" | "failed" | "stopping" | "restore-failed"
+                    ) && appearance == "dark")
             }
             Self::One {
                 state: requested_state,
@@ -368,8 +370,5 @@ pub(super) fn run_capture_one(locale: &str, state: &str, appearance: &str) -> Re
         matches!(appearance, "light" | "dark"),
         "Unsupported menu-capture appearance"
     );
-    run_impl(
-        Some(locale),
-        CaptureMode::One { state, appearance },
-    )
+    run_impl(Some(locale), CaptureMode::One { state, appearance })
 }

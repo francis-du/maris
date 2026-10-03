@@ -178,8 +178,7 @@ impl Metrics {
         #[cfg(target_os = "macos")]
         let value = {
             let mut value = value;
-            value["device_list_events"] =
-                json!(self.device_list_events.load(Ordering::Acquire));
+            value["device_list_events"] = json!(self.device_list_events.load(Ordering::Acquire));
             value
         };
         value
