@@ -56,10 +56,7 @@ fn runtime_status_uses_the_same_debug_clock_as_live_fixture_heartbeats() {
             .unwrap();
         let status = maris::audio::runtime_status(&store);
         assert_eq!(status["active"], active, "updated_at_ms={updated_at_ms}");
-        assert_eq!(
-            status["stale"], stale,
-            "updated_at_ms={updated_at_ms}"
-        );
+        assert_eq!(status["stale"], stale, "updated_at_ms={updated_at_ms}");
     }
 }
 
