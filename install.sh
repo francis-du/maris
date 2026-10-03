@@ -187,6 +187,14 @@ ACTUAL=$("${SHA[@]}" "$BINARY"); ACTUAL=${ACTUAL%% *}
 HELPER="$PAYLOAD/scripts/install_$SYSTEM.sh"
 [ "$INTERFACE" != cli ] || HELPER="$PAYLOAD/scripts/install_cli.sh"
 [ -f "$HELPER" ] || fail 'Verified package is missing its native installer'
+# macOS commonly places private temporary directories below /var/folders, while
+# /var itself is a system-owned compatibility symlink to /private/var. The
+# downloaded archive was already validated as regular files inside our private
+# mktemp directory, so resolve only this verified online CLI source to its
+# physical path before handing it to the stricter local installer.
+if [ "$INTERFACE" = cli ]; then
+    SOURCE=$(CDPATH= cd -- "$SOURCE" && pwd -P) || fail 'Cannot resolve verified CLI payload path'
+fi
 OPTIONS=(--from "$SOURCE" --prefix "$PREFIX" --yes)
 [ "$SYSTEM" != linux ] && [ "$INTERFACE" != cli ] || OPTIONS+=(--sha256 "$BINARY_HASH")
 # Execute only the installer from the hash-verified release kit; no arbitrary URL/code parameter.
