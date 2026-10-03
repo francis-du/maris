@@ -32,6 +32,8 @@ fn render(view: &Console<'_>, width: u16, height: u16) -> String {
 // One test owns locale mutation; independent locale tests use for_language instead.
 #[test]
 fn six_locales_cover_home_inspectors_overlays_notices_and_live_preference_changes() {
+    let now = maris::analysis::now_ms();
+    let _clock = maris::analysis::DebugClock::freeze_at(now);
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path());
     let snapshot = Snapshot::default();
