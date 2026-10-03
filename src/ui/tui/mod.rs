@@ -749,10 +749,14 @@ pub fn run(
                         snapshot.revision,
                         crate::analysis::now_ms(),
                     ));
-                    preset_choice = presets
-                        .iter()
-                        .position(|preset| preset.id == snapshot.profile.name)
-                        .unwrap_or(0);
+                    preset_choice = preset_picker::preferred_choice(
+                        &presets,
+                        preset_choice,
+                        &snapshot,
+                        music,
+                        &runtime,
+                    )
+                    .unwrap_or_else(|| preset_choice.min(presets.len().saturating_sub(1)));
                     overlay = Overlay::Preset;
                 }
                 KeyCode::Char('b') => {
