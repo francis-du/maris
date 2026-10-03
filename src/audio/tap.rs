@@ -24,6 +24,13 @@ struct Capture {
     next_sample: AtomicU64,
 }
 
+fn device_list_changed(object: u32, addresses: &[ca::Address]) -> bool {
+    object == ca::SYSTEM_OBJECT
+        && addresses
+            .iter()
+            .any(|address| address.selector == u32::from_be_bytes(*b"dev#"))
+}
+
 unsafe extern "C" fn configuration_event(
     object: u32,
     count: u32,
@@ -40,10 +47,7 @@ unsafe extern "C" fn configuration_event(
             .fetch_add(1, Ordering::Release);
         if object == ca::SYSTEM_OBJECT && !addresses.is_null() {
             let addresses = unsafe { std::slice::from_raw_parts(addresses, count as usize) };
-            if addresses
-                .iter()
-                .any(|address| address.selector == u32::from_be_bytes(*b"dev#"))
-            {
+            if device_list_changed(object, addresses) {
                 capture
                     .metrics
                     .device_list_events
@@ -536,3 +540,18 @@ unsafe extern "C" fn capture(
 #[cfg(test)]
 #[path = "../../tests/unit/native_tap.rs"]
 mod tests;
+
+#[cfg(test)]
+mod topology_tests {
+    use super::*;
+
+    #[test]
+    fn only_system_device_list_notifications_force_topology_rebuild() {
+        let devices = [ca::address(b"dev#")];
+        let output = [ca::address(b"nsrt")];
+        assert!(device_list_changed(ca::SYSTEM_OBJECT, &devices));
+        assert!(!device_list_changed(ca::SYSTEM_OBJECT, &output));
+        assert!(!device_list_changed(42, &devices));
+        assert!(!device_list_changed(ca::SYSTEM_OBJECT, &[]));
+    }
+}
