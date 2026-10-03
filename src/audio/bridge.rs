@@ -318,6 +318,7 @@ impl Renderer {
         updates: Arc<ArrayQueue<Update>>,
         metrics: Arc<Metrics>,
     ) -> Self {
+        let observed_discontinuities = metrics.callback_discontinuities.load(Ordering::Acquire);
         Self {
             render: RenderState::new(settings, rate),
             updates,
@@ -326,7 +327,7 @@ impl Renderer {
             initial: Some(settings),
             rate,
             last_callback: None,
-            observed_discontinuities: metrics.callback_discontinuities.load(Ordering::Acquire),
+            observed_discontinuities,
         }
     }
     #[cfg(unix)]
