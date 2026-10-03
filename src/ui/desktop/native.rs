@@ -25,7 +25,6 @@ struct Indicator {
     mark: super::native_mark::Mark,
     reduced_motion: bool,
     menu: Menu,
-    pending_rows_visible: bool,
     status: MenuItem,
     profile: MenuItem,
     toggle: MenuItem,
@@ -43,10 +42,6 @@ struct Indicator {
     follow: MenuItem,
     compare: MenuItem,
     undo: MenuItem,
-    apply_selection: MenuItem,
-    cancel_selection: MenuItem,
-    preview_menu: Submenu,
-    preview_rows: Vec<MenuItem>,
     notice: MenuItem,
     controller: Controller,
     language_menu: Submenu,
@@ -86,9 +81,6 @@ impl Indicator {
         output_menu.append(&follow)?;
         let compare = MenuItem::new(t("Compare reference / enhanced"), false, None);
         let undo = MenuItem::new(t("Undo listening change"), false, None);
-        let apply_selection = MenuItem::new(t("Apply selection"), false, None);
-        let cancel_selection = MenuItem::new(t("Cancel selection"), false, None);
-        let preview_menu = Submenu::new(t("Selection details"), false);
         let notice = MenuItem::new(t("Output and preset selections apply immediately"), false, None);
         menu.append_items(&[
             &status,
@@ -161,7 +153,6 @@ impl Indicator {
             mark,
             reduced_motion: reduce_motion(),
             menu,
-            pending_rows_visible: false,
             status,
             profile,
             toggle,
@@ -179,10 +170,6 @@ impl Indicator {
             follow,
             compare,
             undo,
-            apply_selection,
-            cancel_selection,
-            preview_menu,
-            preview_rows: Vec::new(),
             notice,
             controller: Controller::default(),
             language_menu,
@@ -244,11 +231,7 @@ impl Indicator {
             .set_text(desktop_controls::menu_text(&summary.eq));
         #[cfg(target_os = "macos")]
         self.header.update(
-            t(if self.controller.has_pending() {
-                "Selection ready; review then apply"
-            } else {
-                summary.status
-            }),
+            t(summary.status),
             &desktop_controls::menu_text(&summary.output),
         );
         self.compare.set_text(format!(
@@ -296,58 +279,6 @@ impl Indicator {
                 crate::i18n::preset_name(id, id)
             ));
             item.set_enabled(summary.controls_enabled);
-        }
-        if self.pending_rows_visible != self.controller.has_pending() {
-            if self.controller.has_pending() {
-                self.menu.insert_items(
-                    &[
-                        &self.apply_selection,
-                        &self.cancel_selection,
-                        &self.preview_menu,
-                    ],
-                    7,
-                )?;
-            } else {
-                self.menu.remove(&self.apply_selection)?;
-                self.menu.remove(&self.cancel_selection)?;
-                self.menu.remove(&self.preview_menu)?;
-            }
-            self.pending_rows_visible = self.controller.has_pending();
-        }
-        self.apply_selection
-            .set_text(desktop_controls::menu_text(&self.controller.apply_title()));
-        let inventory: Vec<_> = self
-            .outputs
-            .iter()
-            .map(|(_, device)| device.clone())
-            .collect();
-        let pending_valid = match self.controller.pending_valid(&self.store, &inventory) {
-            Ok(valid) => valid,
-            Err(error) => {
-                self.controller.notice = Some(Notice::error(format!("{error:#}")));
-                false
-            }
-        };
-        self.apply_selection.set_enabled(pending_valid);
-        self.cancel_selection.set_text(t("Cancel selection"));
-        self.cancel_selection
-            .set_enabled(self.controller.has_pending());
-        self.preview_menu.set_text(t("Selection details"));
-        self.preview_menu.set_enabled(self.controller.has_pending());
-        let lines = self.controller.preview_lines();
-        if self.preview_rows.len() != lines.len() {
-            for item in &self.preview_rows {
-                self.preview_menu.remove(item)?;
-            }
-            self.preview_rows.clear();
-            for _ in &lines {
-                let item = MenuItem::new("", false, None);
-                self.preview_menu.append(&item)?;
-                self.preview_rows.push(item);
-            }
-        }
-        for (item, line) in self.preview_rows.iter().zip(lines) {
-            item.set_text(desktop_controls::menu_text(&line));
         }
         self.language_menu.set_text(t("Language"));
         for (item, code) in &self.languages {
@@ -430,7 +361,6 @@ impl Indicator {
             && !passive
             && event.id != *self.stop.id()
             && event.id != *self.quit.id()
-            && event.id != *self.cancel_selection.id()
         {
             bail!("Stopping audio");
         }
@@ -442,11 +372,6 @@ impl Indicator {
         let result = (|| {
             if event.id == *self.open.id() {
                 events::open_console(&self.store)?;
-            } else if event.id == *self.apply_selection.id() {
-                self.controller
-                    .apply(&self.store, &audio::console_devices()?)?;
-            } else if event.id == *self.cancel_selection.id() {
-                self.controller.cancel();
             } else if event.id == *self.compare.id() {
                 self.controller.compare(&self.store)?;
             } else if event.id == *self.undo.id() {
