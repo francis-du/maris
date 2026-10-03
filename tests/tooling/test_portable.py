@@ -117,7 +117,10 @@ class PortablePackages(unittest.TestCase):
         for label in ['macos-15', 'macos-15-intel', 'ubuntu-24.04', 'ubuntu-24.04-arm', 'windows-2025', 'windows-11-arm']:
             self.assertIn(label, text)
         self.assertIn('scripts/package_smoke.py', text)
-        self.assertNotIn('  push:', text)
+        self.assertIn('  push:', text)
+        self.assertIn("      - 'release-validation/**'", text)
+        self.assertNotIn('      - main', text)
+        self.assertNotIn('  pull_request:', text)
 
 
 if __name__ == '__main__':

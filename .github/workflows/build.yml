@@ -1,6 +1,9 @@
 name: Build application artifacts
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 'release-validation/**'
 permissions:
   contents: read
 concurrency:
@@ -18,6 +21,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Require release validation pushes to match current main
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin main
+          current_main="$(git rev-parse FETCH_HEAD)"
+          if [ "$GITHUB_SHA" != "$current_main" ]; then
+            echo "release-validation branch must point exactly at current main" >&2
+            exit 1
+          fi
       - name: Install pinned RustSec audit tool
         run: rustup run stable cargo install cargo-audit --version 0.22.2 --locked
       - name: Audit the complete lockfile including unsound dependencies

@@ -196,6 +196,9 @@ fn selecting_and_cancelling_a_scene_never_changes_audio_or_preferences() {
 
 #[test]
 fn applied_scene_is_device_scoped_and_undo_survives_ab_comparison() {
+    // The fixture models a live audio session; CI scheduler delays must not age
+    // telemetry while this test is validating scene/undo semantics.
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     let (_dir, store) = fixture();
     let before = MusicProfile {
         correction_source: Some("fixture measurement".into()),
@@ -611,6 +614,8 @@ fn an_unavailable_rendered_target_blocks_actions_until_a_fresh_summary_is_observ
 
 #[test]
 fn menu_and_terminal_do_not_report_unapplied_mixer_changes_as_applied() {
+    // Application-state semantics are independent of runner wall-clock speed.
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     let (_dir, store) = fixture();
     let saved = crate::mixer::edit(&store, Some(0), |config| {
         config.buses[0].gain_db = -2.0;
