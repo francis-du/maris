@@ -6,6 +6,7 @@ pub mod input;
 pub mod inspector;
 pub mod monitor;
 pub mod music;
+pub mod output_picker;
 pub mod preset_picker;
 pub mod presets;
 pub mod settings;
@@ -135,7 +136,7 @@ pub fn run(
     let sound_scroll = 0_usize;
     let mut app_row = 0_usize;
     let mut pending_apps = Vec::<i32>::new();
-    let mut pending_initialized = false;
+    let mut pending_apps_dirty = false;
     let mut output_choice = if pin_output {
         output_index.map_or(0, |index| index + 1)
     } else {
@@ -208,7 +209,7 @@ pub fn run(
                 if runtime["last_control_result"]["action"] == "select_applications"
                     && runtime["last_control_result"]["ok"] == true
                 {
-                    pending_initialized = false;
+                    pending_apps_dirty = false;
                 }
                 notice = if runtime["last_control_result"]["ok"] == true {
                     Notice::new("Applied: {action}").label_arg(
@@ -229,10 +230,7 @@ pub fn run(
             }
         }
 
-        if !pending_initialized && runtime["active"] == true {
-            pending_apps = captured_application_pids(&runtime);
-            pending_initialized = true;
-        }
+        sync_application_scope(&runtime, &mut pending_apps, pending_apps_dirty);
 
         let frame_dt = last_frame.elapsed().as_secs_f64();
         motion.update(&runtime, frame_dt, crate::analysis::now_ms());
@@ -356,6 +354,19 @@ pub fn run(
                     }
                     continue;
                 }
+                if overlay == Overlay::Output {
+                    config_pointer.reset();
+                    if let Some(choice) = output_picker::pointer_choice(
+                        drawn_area,
+                        picker_outputs.len().saturating_add(1),
+                        output_choice,
+                        runtime["selection_invalidated"] == true,
+                        mouse,
+                    ) {
+                        output_choice = choice;
+                    }
+                    continue;
+                }
                 match config_pointer
                     .handle(drawn_area, &view, mouse)
                     .or_else(|| {
@@ -379,6 +390,13 @@ pub fn run(
                             notice = "Apply or cancel this draft before leaving".into();
                             continue;
                         }
+                        discard_application_draft(
+                            workspace,
+                            to,
+                            &runtime,
+                            &mut pending_apps,
+                            &mut pending_apps_dirty,
+                        );
                         navigate(&mut workspace, &mut sound_row, &mut cursors, to);
                         continue;
                     }
@@ -688,12 +706,20 @@ pub fn run(
             }
         });
         if let Some(destination) = destination {
+            discard_application_draft(
+                workspace,
+                destination,
+                &runtime,
+                &mut pending_apps,
+                &mut pending_apps_dirty,
+            );
             navigate(&mut workspace, &mut sound_row, &mut cursors, destination);
             continue;
         }
 
         let result: Result<()> = (|| {
             if workspace == Workspace::Apps {
+                let before = pending_apps.clone();
                 if let Some(message) = actions::application_key(
                     &store,
                     &runtime,
@@ -707,6 +733,9 @@ pub fn run(
                     },
                     key.code,
                 )? {
+                    if pending_apps != before {
+                        pending_apps_dirty = true;
+                    }
                     mixer_state = crate::mixer::load(&store).ok();
                     notice = message;
                     return Ok(());
@@ -724,6 +753,13 @@ pub fn run(
                     } else {
                         workspace.next()
                     };
+                    discard_application_draft(
+                        workspace,
+                        destination,
+                        &runtime,
+                        &mut pending_apps,
+                        &mut pending_apps_dirty,
+                    );
                     navigate(&mut workspace, &mut sound_row, &mut cursors, destination);
                 }
                 KeyCode::Char('?') => overlay = Overlay::Help,
@@ -749,10 +785,14 @@ pub fn run(
                         snapshot.revision,
                         crate::analysis::now_ms(),
                     ));
-                    preset_choice = presets
-                        .iter()
-                        .position(|preset| preset.id == snapshot.profile.name)
-                        .unwrap_or(0);
+                    preset_choice = preset_picker::preferred_choice(
+                        &presets,
+                        preset_choice,
+                        &snapshot,
+                        music,
+                        &runtime,
+                    )
+                    .unwrap_or_else(|| preset_choice.min(presets.len().saturating_sub(1)));
                     overlay = Overlay::Preset;
                 }
                 KeyCode::Char('b') => {
@@ -857,6 +897,29 @@ pub fn run(
     }
 
     Ok(())
+}
+
+fn sync_application_scope(runtime: &serde_json::Value, pending: &mut Vec<i32>, dirty: bool) {
+    if !dirty {
+        *pending = if runtime["active"] == true {
+            captured_application_pids(runtime)
+        } else {
+            Vec::new()
+        };
+    }
+}
+
+fn discard_application_draft(
+    current: Workspace,
+    destination: Workspace,
+    runtime: &serde_json::Value,
+    pending: &mut Vec<i32>,
+    dirty: &mut bool,
+) {
+    if current == Workspace::Apps && destination != Workspace::Apps && *dirty {
+        *pending = captured_application_pids(runtime);
+        *dirty = false;
+    }
 }
 
 fn navigate(workspace: &mut Workspace, row: &mut usize, cursors: &mut CursorMemory, to: Workspace) {
