@@ -121,3 +121,25 @@ fn representative_presets_remain_finite_and_peak_limited_on_full_scale_material(
         }
     }
 }
+
+
+#[test]
+fn applying_a_tone_curve_preserves_independent_global_controls() {
+    let current = maris::profile::Profile {
+        crossfeed: 0.12,
+        stereo_width: 1.35,
+        bypass: true,
+        ..maris::profile::Profile::default()
+    };
+    let applied = presets::apply_tone_curve(&current, "warm", 48_000).unwrap();
+    assert_eq!(applied.crossfeed, current.crossfeed);
+    assert_eq!(applied.stereo_width, current.stereo_width);
+    assert_eq!(applied.bypass, current.bypass);
+    assert_eq!(applied.name, "warm");
+    assert_ne!(applied.bands, current.bands);
+
+    let eqmac = presets::apply_tone_curve(&current, "eqmac:acoustic", 48_000).unwrap();
+    assert_eq!(eqmac.crossfeed, current.crossfeed);
+    assert_eq!(eqmac.stereo_width, current.stereo_width);
+    assert_eq!(eqmac.bypass, current.bypass);
+}
