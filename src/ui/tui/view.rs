@@ -212,11 +212,23 @@ fn draw_header(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
         .style(Style::default().fg(if settings { p.muted } else { p.secondary })),
         regions.compare,
     );
+    let current_preset = super::preset_picker::preferred_choice(
+        view.presets,
+        view.preset_choice,
+        view.snapshot,
+        view.music,
+        view.runtime,
+    )
+    .and_then(|index| view.presets.get(index))
+    .map(|preset| crate::i18n::preset_name(&preset.id, &preset.name))
+    .unwrap_or_else(|| {
+        crate::i18n::preset_name(&view.snapshot.profile.name, &view.snapshot.profile.name)
+    });
     let preset = format!(
         " {} · {} {}",
         t(view.workspace.title()),
         if pending { t("Tone curve") } else { "P" },
-        crate::i18n::preset_name(&view.snapshot.profile.name, &view.snapshot.profile.name)
+        current_preset
     );
     frame.render_widget(
         Paragraph::new(crate::ui::tui::studio::fit(&preset, regions.preset.width))
