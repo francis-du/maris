@@ -621,15 +621,18 @@ impl Processor {
         wet = self.bass_assist(dry, wet);
         let mid = (wet[0] + wet[1]) * 0.5;
         let mut side = (wet[0] - wet[1]) * 0.5;
-        if s.virtual_surround > 1e-9 && side.abs() > 1e-15 {
-            // Spatialize only the Side channel above the bass region. Mono/center
-            // content has Side=0 and therefore remains bit-for-bit centered.
+        if s.virtual_surround > 1e-9 {
+            // Always advance the spatial filter state so mono/silent passages
+            // drain previous Side history instead of freezing it for later.
             let high = self.surround_highpass.process(side, s.surround_highpass);
             let phased = self.surround_allpass_b.process(
                 self.surround_allpass_a.process(high, s.surround_allpass_a),
                 s.surround_allpass_b,
             );
-            side += (phased - high) * s.virtual_surround;
+            // Do not inject the filter's decaying history into a true mono center.
+            if side.abs() > 1e-15 {
+                side += (phased - high) * s.virtual_surround;
+            }
         }
         side *= (1.0 - 0.75 * s.stereo_focus) * s.width;
         // Preserve the Mid channel at unity while scaling/decorrelating Side.
