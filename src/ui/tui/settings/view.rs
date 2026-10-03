@@ -573,7 +573,7 @@ pub fn pointer_action(area: Rect, view: &Console<'_>, event: MouseEvent) -> Opti
             (
                 a.q_plus,
                 KeyCode::Char(']'),
-                enabled && view.sound_row >= 16,
+                enabled && (16..26).contains(&view.sound_row),
             ),
             (a.cancel, KeyCode::Esc, true),
         ] {
