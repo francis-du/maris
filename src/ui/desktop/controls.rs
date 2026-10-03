@@ -34,6 +34,10 @@ pub const PRESET_GROUPS: &[(&str, &[&str])] = &[
         ],
     ),
     ("Device listening", &["small-speakers"]),
+    (
+        "Spatial effects",
+        &["surround-360", "cinema-360", "stereo-focus"],
+    ),
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
