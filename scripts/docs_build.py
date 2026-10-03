@@ -14,7 +14,8 @@ GUIDES = ('index', 'guide', 'install')
 BRAND = ('mark.svg', 'mark-mono.svg', 'wordmark.svg')
 REFERENCES = {
     'architecture': 'reference/architecture.md', 'audio-quality': 'reference/audio-quality.md',
-    'commands': 'reference/commands.md', 'third-party': 'reference/third-party.md',
+    'commands': 'reference/commands.md', 'headphones': 'reference/headphones.md',
+    'third-party': 'reference/third-party.md',
     'ui-design': 'development/ui-design.md', 'models': 'development/models.md',
     'product-gates': 'development/product-gates.md', 'releasing': 'development/releasing.md',
     'dependency-security': 'development/dependency-security.md',
