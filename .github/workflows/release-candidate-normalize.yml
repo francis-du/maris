@@ -44,8 +44,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t changed < <(git diff --name-only)
-          for path in "${changed[@]}"; do
+          git diff --name-only | while IFS= read -r path; do
             case "$path" in
               *.rs|docs/assets/studio-*.svg|docs/assets/settings-*.svg|docs/assets/presets-*.svg|docs/assets/illustrations.json|docs/assets/menu-bar-*.svg|docs/assets/menu-bar-review-manifest.json) ;;
               *) echo "Unexpected normalize change: $path" >&2; exit 1 ;;
