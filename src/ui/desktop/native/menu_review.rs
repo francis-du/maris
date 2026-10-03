@@ -100,40 +100,7 @@ fn state_review(view: &mut Indicator, locale: &str, capture: bool) -> Result<Val
                 result.push(snapshot(view, locale, name, appearance)?);
             }
         }
-        if name == "live" {
-            let library = std::fs::read(store.directory.join("listening.json"))?;
-            let count = view.menu.items().len();
-            heartbeat(&store)?;
-            view.controller.select_preset(&store, "night-dialogue")?;
-            heartbeat(&store)?;
-            view.refresh_quick_controls()?;
-            ensure!(
-                view.menu.items().len() == count + 3
-                    && view.apply_selection.is_enabled()
-                    && view.cancel_selection.is_enabled(),
-                "Native selection omitted its live Apply/Cancel controls"
-            );
-            let metadata = crate::ui::desktop::menu_capture::image_metadata(&view.header.button)?;
-            ensure!(
-                metadata["accessibility_value"]
-                    .as_str()
-                    .is_some_and(|value| value.contains(t("Selection ready; review then apply"))),
-                "Native header reported a staged selection as already applied"
-            );
-            if capture && matches!(locale, "en" | "zh-CN") {
-                for appearance in ["light", "dark"] {
-                    result.push(snapshot(view, locale, "selection", appearance)?);
-                }
-            }
-            view.controller.cancel();
-            heartbeat(&store)?;
-            view.refresh_quick_controls()?;
-            ensure!(
-                std::fs::read(store.directory.join("listening.json"))? == library
-                    && view.menu.items().len() == count,
-                "Native selection capture changed settings or retained hidden controls"
-            );
-        }
+
     }
     // Hold only this fixture's session lease. Quit must render the real stopping
     // branch, while already queued mutations must not change the saved settings.
@@ -229,7 +196,7 @@ fn state_review(view: &mut Indicator, locale: &str, capture: bool) -> Result<Val
         "Successful journal recovery did not release the failed-restore status"
     );
     Ok(
-        json!({"states_checked":["live","selection","pending","bypass","idle","stale","failed","stopping","restore-failed"],
+        json!({"states_checked":["live","pending","bypass","idle","stale","failed","stopping","restore-failed"],
             "closing_dispatch_rejected":true,"restore_failure_before_route_access":true,"captures":result}),
     )
 }
@@ -255,39 +222,13 @@ pub(super) fn run(capture: bool) -> Result<Value> {
         heartbeat(&store)?;
         view.refresh_quick_controls()?;
         let normal_items = view.menu.items().len();
-        heartbeat(&store)?;
-        view.controller.select_preset(&store, "night-dialogue")?;
-        heartbeat(&store)?;
-        view.refresh_quick_controls()?;
-        let pending_items = view.menu.items().len();
-        ensure!(
-            pending_items == normal_items + 3,
-            "Pending menu controls were not inserted correctly"
-        );
-        ensure!(
-            view.apply_selection.is_enabled(),
-            "Native preview confirmation is disabled"
-        );
-        ensure!(
-            !store.directory.join("control.json").exists()
-                && !store.directory.join("listening.json").exists(),
-            "Menu preview mutated audio configuration"
-        );
-        locales.push(json!({"language":code,"normal_items":normal_items,"pending_items":pending_items,
+        locales.push(json!({"language":code,"normal_items":normal_items,
                 "output":view.output_caption.text(),"listening":view.profile.text(),"eq":view.tone_caption.text(),
-                "apply":view.apply_selection.text(),"cancel":view.cancel_selection.text(),
                 "presets":view.presets.iter().map(|(item,_)|item.text()).collect::<Vec<_>>(),
-                "preview":view.preview_rows.iter().map(MenuItem::text).collect::<Vec<_>>(),
-                "languages":view.languages.iter().map(|(item,_)|item.text()).collect::<Vec<_>>() }));
-        view.controller.cancel();
-        heartbeat(&store)?;
-        view.refresh_quick_controls()?;
-        ensure!(
-            view.menu.items().len() == normal_items,
-            "Cancelled preview left hidden menu actions behind"
-        );
-        // Dispatch real native item IDs through the production handler. Only the final
-        // modal response is injected; edits stay in this temporary state namespace.
+                "languages":view.languages.iter().map(|(item,_)|item.text()).collect::<Vec<_>>(),
+                "immediate_selection_apply":true }));
+        // Dispatch a real native item ID through the production handler. Selection
+        // must apply in this one event and must never invoke a second confirmation UI.
         let selected = view
             .presets
             .iter()
@@ -297,27 +238,14 @@ pub(super) fn run(capture: bool) -> Result<Value> {
             .id()
             .clone();
         heartbeat(&store)?;
-        view.menu_action(
-            MenuEvent {
-                id: selected.clone(),
-            },
-            |_, lines| {
-                ensure!(!lines.is_empty(), "No visible selection details");
-                Ok(Some(false))
-            },
-        )?;
-        ensure!(
-            !store.directory.join("listening.json").exists(),
-            "Cancel wrote settings"
-        );
-        heartbeat(&store)?;
         view.menu_action(MenuEvent { id: selected }, |_, _| {
-            heartbeat(&store)?;
-            Ok(Some(true))
+            bail!("Immediate native selection unexpectedly requested confirmation")
         })?;
         ensure!(
-            crate::tuning::preferences::load(&store)?.revision == 1,
-            "Native action did not apply"
+            crate::tuning::preferences::load(&store)?.revision == 1
+                && !view.controller.has_pending()
+                && view.menu.items().len() == normal_items,
+            "Native selection did not apply immediately or left pending controls"
         );
         for _ in 0..2 {
             heartbeat(&store)?;
@@ -353,7 +281,7 @@ pub(super) fn run(capture: bool) -> Result<Value> {
     }
     Ok(
         json!({"source":"isolated offline fixture","native_menu_construction":true,
-            "native_event_dispatch":true,"native_dialog_clicked":false,
+            "native_event_dispatch":true,"immediate_selection_apply":true,"native_dialog_clicked":false,
             "audio_started":false,"hardware_validated":false,"locales":locales}),
     )
 }
