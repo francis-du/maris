@@ -29,14 +29,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t changed < <(git diff --name-only)
-          for path in "${changed[@]}"; do
+          changed="$(git diff --name-only)"
+          count="$(printf '%s\n' "$changed" | sed '/^$/d' | wc -l | tr -d ' ')"
+          test "$count" -eq 3
+          while IFS= read -r path; do
+            test -n "$path" || continue
             case "$path" in
               docs/assets/menu-bar-en.svg|docs/assets/menu-bar-zh-CN.svg|docs/assets/menu-bar-review-manifest.json) ;;
               *) echo "Unexpected native-menu generated change: $path" >&2; exit 1 ;;
             esac
-          done
-          test "${#changed[@]}" -eq 3
+          done <<< "$changed"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/assets/menu-bar-en.svg docs/assets/menu-bar-zh-CN.svg docs/assets/menu-bar-review-manifest.json
