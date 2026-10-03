@@ -270,6 +270,23 @@ pub(super) fn run(capture: bool) -> Result<Value> {
             !store.directory.join("control.json").exists(),
             "Review queued audio control"
         );
+
+        heartbeat(&store)?;
+        view.menu_action(
+            MenuEvent {
+                id: view.follow.id().clone(),
+            },
+            |_, _| bail!("Immediate output selection unexpectedly requested confirmation"),
+        )?;
+        let control: Value = read_json(&store.directory.join("control.json"))?;
+        ensure!(
+            control["action"] == "select_output"
+                && control["output"].is_null()
+                && !view.controller.has_pending(),
+            "Native output selection did not queue an immediate follow-default request"
+        );
+        std::fs::remove_file(store.directory.join("control.json"))?;
+
         #[cfg(target_os = "macos")]
         {
             let states = state_review(&mut view, code, capture)?;
