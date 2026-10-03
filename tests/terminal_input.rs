@@ -250,13 +250,37 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
         std::thread::sleep(Duration::from_millis(20));
     }
     let areas = configuration::layout(studio_controls::shell(Rect::new(0, 0, 140, 40)).content);
+    let mut expected_gain = 0.0_f64;
     for step in 0..16 {
-        // Motion was previously rendered one event at a time, burying real button events.
+        // One physical click still sits behind 160 motion reports, crossing the
+        // 128-event bounded drain. Acknowledge that click on the real PTY screen
+        // before queueing the next physical action so the assertion measures
+        // Maris input delivery rather than host PTY scheduling/buffer depth.
+        let plus = step < 12;
+        expected_gain += if plus { 0.5 } else { -0.5 };
         process.send(&format!(
             "{}{}",
             "\x1b[<35;110;20M".repeat(160),
-            click(if step < 12 { areas.plus } else { areas.minus })
+            click(if plus { areas.plus } else { areas.minus })
         ));
+        let expected = format!("{expected_gain:+.1} dB Q1.0");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            process.drain(&mut output);
+            assert!(
+                process.child.try_wait().unwrap().is_none(),
+                "Console exited while acknowledging a physical click"
+            );
+            if process.terminal.screen().contents().contains(&expected) {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "Physical click did not reach the visible draft ({expected}); screen: {}",
+                process.terminal.screen().contents()
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
     }
     process.send(&click(areas.apply));
     let start = Instant::now();
