@@ -1,11 +1,7 @@
 //! One layout for rendered preset rows and read-only pointer selection.
 //! Selecting a row never applies it; Enter still uses the guarded transaction.
 use super::{input::Overlay, view::Console};
-use crate::{
-    control::store::Snapshot,
-    dsp::music::MusicProfile,
-    presets::PresetSummary,
-};
+use crate::{control::store::Snapshot, dsp::music::MusicProfile, presets::PresetSummary};
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::{Constraint, Layout, Rect};
 use serde_json::Value;
@@ -25,8 +21,8 @@ fn matches_current(
     runtime: &Value,
 ) -> bool {
     if preset.category == "scene" {
-        let capability = serde_json::from_value(runtime["device_capability"].clone())
-            .unwrap_or_default();
+        let capability =
+            serde_json::from_value(runtime["device_capability"].clone()).unwrap_or_default();
         return crate::presets::scenes::prepare(music, &capability, &preset.id)
             .is_ok_and(|preview| preview.profile == *music);
     }
@@ -34,8 +30,7 @@ fn matches_current(
         .as_u64()
         .filter(|rate| (44_100..=192_000).contains(rate))
         .unwrap_or(48_000) as u32;
-    crate::presets::profile(&preset.id, rate)
-        .is_ok_and(|profile| profile == snapshot.profile)
+    crate::presets::profile(&preset.id, rate).is_ok_and(|profile| profile == snapshot.profile)
 }
 
 /// Keep the last applied picker row when that layer still matches. If another
