@@ -119,15 +119,6 @@ fn eqmac_profile(raw: EqMacRawPreset, rate: u32) -> Result<Profile> {
 }
 
 pub fn tone_curve_matches(current: &Profile, id: &str, rate: u32) -> bool {
-    profile(id, rate).is_ok_and(|mut expected| {
-        expected.crossfeed = current.crossfeed;
-        expected.stereo_width = current.stereo_width;
-        expected.bypass = current.bypass;
-        expected == *current
-    })
-}
-
-pub fn tone_curve_matches(current: &Profile, id: &str, rate: u32) -> bool {
     profile(id, rate).is_ok_and(|target| {
         current.name == target.name
             && current.preamp_db == target.preamp_db
