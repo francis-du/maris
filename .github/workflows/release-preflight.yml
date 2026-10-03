@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  platform-code:
+  platform_code:
     strategy:
       fail-fast: false
       matrix:
@@ -82,7 +82,7 @@ jobs:
         run: python3 tests/support/pulse_smoke.py --binary target/debug/maris
 
   finalize-doc-assets:
-    needs: platform-code
+    needs: platform_code
     runs-on: macos-15
     timeout-minutes: 35
     steps:
