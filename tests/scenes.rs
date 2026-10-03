@@ -22,6 +22,8 @@ fn corrected() -> MusicProfile {
         correction_source: Some("Fixture measurement".into()),
         highpass_hz: Some(45.0),
         balance: -0.1,
+        enabled: false,
+        reference: true,
         level_match: false,
         ..MusicProfile::default()
     }
@@ -76,6 +78,8 @@ fn every_scene_preserves_correction_balance_highpass_and_comparison_policy() {
         );
         assert_eq!(preview.profile.highpass_hz, before.highpass_hz);
         assert_eq!(preview.profile.balance, before.balance);
+        assert_eq!(preview.profile.enabled, before.enabled);
+        assert_eq!(preview.profile.reference, before.reference);
         assert_eq!(preview.profile.level_match, before.level_match);
         assert!(preview.profile.bass_db <= 0.25);
         assert!(preview.profile.presence_db <= 0.25);
