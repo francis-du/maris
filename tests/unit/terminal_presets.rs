@@ -187,6 +187,49 @@ fn real_terminal_reopening_preset_allows_new_enter_but_not_held_confirmation() {
 }
 
 #[test]
+fn real_terminal_reopening_preset_starts_on_the_last_applied_matching_layer() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path());
+    let _lease = store.session_lock().unwrap();
+    let _heartbeat = Heartbeat::start(store.clone());
+    let mut process = spawn_console(dir.path());
+
+    select_preset(&mut process, "scene:dialogue");
+    process.send("\r");
+    wait_until(&mut process, "Dialogue scene did not apply", || {
+        listening::load(&store).unwrap().revision == 1
+    });
+    process.send("p");
+    wait_for_preset(
+        &mut process,
+        Some("Dialogue"),
+        Instant::now() + Duration::from_secs(5),
+    );
+    process.send("\x1b");
+    idle(&mut process, Duration::from_millis(150));
+
+    select_preset(&mut process, "warm");
+    process.send("\r");
+    wait_until(&mut process, "Warm EQ preset did not apply", || {
+        store.load().unwrap().revision == 1
+    });
+    assert_eq!(
+        listening::load(&store)
+            .unwrap()
+            .effective("OFFLINE PTY fixture")
+            .presence_db,
+        1.0,
+        "EQ preset must not erase the active listening scene"
+    );
+    process.send("p");
+    wait_for_preset(
+        &mut process,
+        Some("warm"),
+        Instant::now() + Duration::from_secs(5),
+    );
+}
+
+#[test]
 fn real_terminal_cancelled_preset_does_not_write_or_consume_undo() {
     let dir = tempfile::tempdir().unwrap();
     let store = Store::at(dir.path());
