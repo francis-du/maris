@@ -205,8 +205,26 @@ def main() -> None:
         return
     before = source_hashes(root)
     environment = dict(os.environ, CARGO_BUILD_JOBS='2')
-    subprocess.run(['cargo', 'run', '--locked', '--quiet', '--example', 'menu_probe', '--', '--capture'], cwd=root,
-                   env=environment, check=True, timeout=240, stdout=subprocess.DEVNULL)
+    # Keep compilation time separate from the actual native-capture deadline.
+    # A cold GitHub macOS runner can spend several minutes compiling AppKit and
+    # the full crate; that must not be misreported as a hung menu interaction.
+    subprocess.run(
+        ['cargo', 'build', '--locked', '--quiet', '--example', 'menu_probe'],
+        cwd=root,
+        env=environment,
+        check=True,
+        timeout=480,
+        stdout=subprocess.DEVNULL,
+    )
+    binary = root / 'target' / 'debug' / 'examples' / ('menu_probe.exe' if os.name == 'nt' else 'menu_probe')
+    subprocess.run(
+        [str(binary), '--capture'],
+        cwd=root,
+        env=environment,
+        check=True,
+        timeout=120,
+        stdout=subprocess.DEVNULL,
+    )
     if source_hashes(root) != before:
         raise ValueError('Native render sources changed during the probe; rerun after source ownership is settled')
     source = root / '.maris-review/menu-review.json'
