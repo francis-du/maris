@@ -341,20 +341,20 @@ fn preset_picker_prefers_the_last_applied_layer_when_both_scene_and_eq_match() {
 fn preset_picker_prioritizes_the_layer_changed_by_an_external_surface() {
     let presets = crate::presets::console_catalog();
     let capability = crate::device_profile::Capability::default();
-    let scene_index = presets
+    let listening_index = presets
         .iter()
-        .position(|preset| preset.id == "scene:dialogue")
+        .position(|preset| preset.id == "listening:warm")
         .unwrap();
     let eq_index = presets
         .iter()
-        .position(|preset| preset.id == "warm")
+        .position(|preset| preset.id == "warm" && preset.category == "maris")
         .unwrap();
     let mut snapshot = crate::store::Snapshot::default();
     snapshot.profile = crate::presets::apply_tone_curve(&snapshot.profile, "warm", 48_000).unwrap();
     let music = crate::scenes::prepare(
         &crate::music::MusicProfile::default(),
         &capability,
-        "dialogue",
+        "warm",
     )
     .unwrap()
     .profile;
@@ -365,15 +365,21 @@ fn preset_picker_prioritizes_the_layer_changed_by_an_external_surface() {
 
     assert_eq!(
         preset_picker::preferred_choice(
-            &presets, eq_index, &snapshot, &music, &runtime, false, true,
+            &presets,
+            eq_index,
+            &snapshot,
+            &music,
+            &runtime,
+            false,
+            true,
         ),
-        Some(scene_index),
-        "a Menu Bar/listening edit must become the visible TUI selection"
+        Some(listening_index),
+        "a Menu Bar Listening/Warm edit must select the Listening row, not EQ/Warm"
     );
     assert_eq!(
         preset_picker::preferred_choice(
             &presets,
-            scene_index,
+            listening_index,
             &snapshot,
             &music,
             &runtime,
@@ -381,7 +387,7 @@ fn preset_picker_prioritizes_the_layer_changed_by_an_external_surface() {
             false,
         ),
         Some(eq_index),
-        "a CLI/MCP/global EQ edit must become the visible TUI selection"
+        "a CLI/MCP Global EQ/Warm edit must select the Tone curve row"
     );
 }
 
