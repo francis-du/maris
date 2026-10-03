@@ -507,8 +507,7 @@ pub fn ensure_displayed_output(
     ensure_displayed_output_at(store, displayed, crate::analysis::now_ms())
 }
 
-#[doc(hidden)]
-pub fn ensure_displayed_output_at(
+pub(crate) fn ensure_displayed_output_at(
     store: &crate::control::store::Store,
     displayed: &Value,
     now: u64,
