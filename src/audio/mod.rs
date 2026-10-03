@@ -148,6 +148,8 @@ pub(super) struct Metrics {
     stream_resets: AtomicU64,
     configuration_events: AtomicU64,
     checked_configuration_events: AtomicU64,
+    #[cfg(target_os = "macos")]
+    device_list_events: AtomicU64,
     errors: AtomicU64,
     revision: AtomicU64,
     music_revision: AtomicU64,
@@ -170,6 +172,8 @@ impl Metrics {
             "stream_resets":self.stream_resets.load(Ordering::Relaxed),
             "configuration_events":self.configuration_events.load(Ordering::Acquire),
             "checked_configuration_events":self.checked_configuration_events.load(Ordering::Acquire),
+            #[cfg(target_os = "macos")]
+            "device_list_events":self.device_list_events.load(Ordering::Acquire),
             "scope":"current_pipeline",
             "power_state_measured":false
         })
