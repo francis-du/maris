@@ -46,7 +46,7 @@ maris sound schema
 maris sound apply ./music-profile.json --dry-run --json
 ```
 
-The original music presets `natural`, `warm`, `vocal`, `detail`, `soft`, and `night` remain available. Ten additional listening scenes provide practical starting points without a model download. They change device-specific preferences, not the original ten-band EQ or measured correction. All scenes preserve correction filters/provenance/preamp, correction high-pass, channel balance and the user's comparison level-matching policy, then apply the current device capability limits.
+The original music presets `natural`, `warm`, `vocal`, `detail`, `soft`, and `night` remain available. Ten additional listening scenes provide practical starting points without a model download. They change device-specific preferences, not the original ten-band EQ or measured correction. All scenes preserve correction filters/provenance/preamp, correction high-pass, channel balance, processing enable, Reference A/B state and the user's comparison level-matching policy, then apply the current device capability limits. The TUI preset picker reopens on the last applied layer while it still matches the current state; if another surface changed that layer, it falls back to an exact current scene or EQ match rather than resetting to the first row.
 
 | Scene ID | Intended use and parameter direction |
 | --- | --- |
@@ -161,6 +161,9 @@ maris language
 | P | Open the flat preset picker; Enter applies; Esc cancels |
 | Mixer Matrix Up/Down, Space, Enter | Choose apps, mark a pending scope, then apply it once |
 | A in Mixer Matrix | Mark all system playback; Enter confirms the new scope |
+
+When there is no local Apps draft, the TUI follows the active runtime capture scope, including changes made through CLI, MCP or the native menu. Local marks stay stable while editing. Leaving Apps before Enter discards those unapplied marks and restores the active runtime scope.
+
 | Assist goal buttons | Click Balanced/Warm/Clear/Soft to generate a preview; no change is applied yet |
 | G / J / Enter | Choose a listening goal / preview / explicitly apply the preview |
 | B | Compare reference/enhanced through the same level-matching path |
