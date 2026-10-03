@@ -165,18 +165,22 @@ pub(super) struct Metrics {
 }
 impl Metrics {
     fn continuity(&self) -> Value {
-        json!({
+        let mut value = json!({
             "revision":"stream-recovery-1",
             "capture_discontinuities":self.capture_discontinuities.load(Ordering::Acquire),
             "callback_discontinuities":self.callback_discontinuities.load(Ordering::Acquire),
             "stream_resets":self.stream_resets.load(Ordering::Relaxed),
             "configuration_events":self.configuration_events.load(Ordering::Acquire),
             "checked_configuration_events":self.checked_configuration_events.load(Ordering::Acquire),
-            #[cfg(target_os = "macos")]
-            "device_list_events":self.device_list_events.load(Ordering::Acquire),
             "scope":"current_pipeline",
             "power_state_measured":false
-        })
+        });
+        #[cfg(target_os = "macos")]
+        {
+            value["device_list_events"] =
+                json!(self.device_list_events.load(Ordering::Acquire));
+        }
+        value
     }
 }
 #[derive(Clone, Copy)]
