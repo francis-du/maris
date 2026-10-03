@@ -79,6 +79,12 @@ pub(super) fn preserve_mixer_row(
         .unwrap_or(after.config.strips.len())
 }
 
+#[derive(Clone, Copy)]
+pub(super) struct ApplicationInput {
+    pub key: crossterm::event::KeyCode,
+    pub now: u64,
+}
+
 /// The Apps page controls the active mixer by strip ID, not an application-list index.
 /// Changing inputs or output assignments remains an explicit separate operation.
 pub(super) fn application_key(
@@ -97,8 +103,10 @@ pub(super) fn application_key(
         row,
         pending,
         output,
-        key,
-        crate::analysis::now_ms(),
+        ApplicationInput {
+            key,
+            now: crate::analysis::now_ms(),
+        },
     )
 }
 
@@ -110,11 +118,11 @@ pub(super) fn application_key_at(
     row: &mut usize,
     pending: &mut Vec<i32>,
     output: Option<&crate::audio::DeviceInfo>,
-    key: crossterm::event::KeyCode,
-    now: u64,
+    input: ApplicationInput,
 ) -> Result<Option<crate::i18n::Notice>> {
     use crate::i18n::Notice;
     use crossterm::event::KeyCode;
+    let ApplicationInput { key, now } = input;
     let mixing = mixer_mode(runtime);
     let count = if mixing {
         mixer_rows(runtime).len()
