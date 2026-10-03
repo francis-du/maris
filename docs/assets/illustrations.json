@@ -2,7 +2,7 @@
   "scope": "actual_offline_ratatui",
   "hardware_validation": false,
   "source_sha256": {
-    "src/ui/tui/view.rs": "3a8af997a579143dc713088e3d91581097beb54578d3e45c7db59e14acff2c68",
+    "src/ui/tui/view.rs": "632ed41af5b3ba666d29ba432a02d4b20fa141f51f92893e16fa01367b84b55a",
     "src/ui/tui/studio/mod.rs": "d04c1fe848125f3909a84ee94b0bd33cc7fc38dcc9e48a8073bdee08b5bc88f6",
     "src/ui/tui/studio/analyzer.rs": "a7147fc511ec2af7245c16d6cf58e740b94c6d84602c67c45b62a448c94fe089",
     "src/ui/tui/studio/appearance.rs": "59bd945beae348ae6d2ccfd43bdfb4dfbcbdd22dad11f9248aaad88cfc1b7ae7",
