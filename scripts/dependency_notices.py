@@ -3,6 +3,7 @@
 from __future__ import annotations
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -16,6 +17,68 @@ def sha(path: Path) -> str:
 def target(system: str, arch: str) -> str:
     machine = 'aarch64' if arch == 'arm64' else 'x86_64'
     return machine + {'macos': '-apple-darwin', 'linux': '-unknown-linux-gnu', 'windows': '-pc-windows-msvc'}[system]
+
+
+def collect_standard_library(root: Path, output: Path) -> dict:
+    """Preserve the selected toolchain's own standard-library notices byte for byte."""
+    compiler = os.environ.get('RUSTC', 'rustc')
+    version = subprocess.run([compiler, '--version', '--verbose'], cwd=root, check=True,
+                             capture_output=True, text=True, encoding='utf-8', timeout=30).stdout
+    fields = dict(line.split(': ', 1) for line in version.splitlines() if ': ' in line)
+    if (not re.fullmatch(r'[a-f0-9]{40}', fields.get('commit-hash', ''))
+            or not fields.get('release') or not fields.get('host')):
+        raise ValueError('Rust compiler identity is incomplete')
+    sysroot = Path(subprocess.run([compiler, '--print', 'sysroot'], cwd=root, check=True,
+                                 capture_output=True, text=True, encoding='utf-8', timeout=30).stdout.strip())
+    documents = sysroot / 'share/doc/rust'
+    copyright_file = documents / 'COPYRIGHT-library.html'
+    licenses = documents / 'licenses'
+    if not licenses.is_dir() or licenses.is_symlink():
+        raise ValueError('Rust standard-library license directory is missing or linked')
+    files = [copyright_file, *sorted(licenses.iterdir())]
+    if not {'MIT.txt', 'Apache-2.0.txt'} <= {path.name for path in files}:
+        raise ValueError('Rust standard-library license texts are incomplete')
+    entries = []
+    for path in files:
+        if (path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= 16_777_216
+                or not re.fullmatch(r'[A-Za-z0-9_.-]+', path.name)):
+            raise ValueError('Missing, linked or oversized Rust standard-library notice')
+        path.read_text(encoding='utf-8')
+        name = 'rust-stdlib/' + path.relative_to(documents).as_posix()
+        destination = output / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, destination)
+        entries.append({'path': name, 'sha256': sha(destination)})
+    return {'release': fields['release'], 'commit_hash': fields['commit-hash'], 'host': fields['host'],
+            'provenance': 'Selected rustc sysroot: share/doc/rust/COPYRIGHT-library.html and licenses/',
+            'files': entries}
+
+
+def notice_entries(record: dict, native: str) -> list[dict]:
+    """One inventory contract for both staged files and the final release archive."""
+    if record.get('schema_version') != 1 or record.get('target') != native or not record.get('runtime_dependencies'):
+        raise ValueError('Incomplete native dependency notice index')
+    if any(not package.get('license') or not package.get('files') for package in record['runtime_dependencies']):
+        raise ValueError('Dependency has no license expression or actual notice text')
+    library = record.get('rust_standard_library', {})
+    if (not library.get('release') or not library.get('host')
+            or not re.fullmatch(r'[a-f0-9]{40}', library.get('commit_hash', ''))
+            or not library.get('files')):
+        raise ValueError('Rust standard-library notices or compiler identity are missing')
+    if not {'rust-stdlib/COPYRIGHT-library.html', 'rust-stdlib/licenses/MIT.txt',
+            'rust-stdlib/licenses/Apache-2.0.txt'} <= {entry['path'] for entry in library['files']}:
+        raise ValueError('Rust standard-library notice inventory is incomplete')
+    entries = [entry for package in record['runtime_dependencies'] for entry in package['files']]
+    entries += record['bundled_assets'] + library['files']
+    paths = set()
+    for entry in entries:
+        name = entry.get('path', '')
+        if (not re.fullmatch(r'[A-Za-z0-9_./-]+', name)
+                or any(part in ('', '.', '..') for part in name.split('/'))
+                or name.lower() in paths or not re.fullmatch(r'[a-f0-9]{64}', entry.get('sha256', ''))):
+            raise ValueError('Unsafe, duplicate or invalid dependency notice entry')
+        paths.add(name.lower())
+    return entries
 
 
 def collect(root: Path, output: Path, system: str, arch: str) -> dict:
@@ -68,7 +131,10 @@ def collect(root: Path, output: Path, system: str, arch: str) -> dict:
             if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= 1_048_576:
                 raise ValueError('Missing, linked or oversized license text: ' + key)
             path.read_text(encoding='utf-8')
-            name = f'rust/{package["name"]}-{package["version"]}/{index:02d}-{path.name}'
+            # SemVer permits + build metadata but not _, keeping this mapping
+            # unambiguous while preserving the original identity in the index.
+            version_path = package['version'].replace('+', '_')
+            name = f'rust/{package["name"]}-{version_path}/{index:02d}-{path.name}'
             destination = output / name
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(path, destination)
@@ -94,7 +160,8 @@ def collect(root: Path, output: Path, system: str, arch: str) -> dict:
                 shutil.copyfile(path, destination)
                 assets.append({'path': name, 'sha256': sha(destination)})
     result = {'schema_version': 1, 'target': native, 'runtime_dependencies': records, 'bundled_assets': assets,
-              'scope': 'Locked native runtime dependency and bundled asset notices; no publisher signature or hardware claim.'}
+              'rust_standard_library': collect_standard_library(root, output),
+              'scope': 'Locked native runtime dependency, selected Rust standard library and bundled asset notices; no publisher signature or hardware claim.'}
     (output / 'index.json').write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8', newline='\n')
     validate(output, native)
     return result
@@ -103,12 +170,7 @@ def collect(root: Path, output: Path, system: str, arch: str) -> dict:
 def validate(directory: Path, native: str) -> str:
     index = directory / 'index.json'
     record = json.loads(index.read_text(encoding='utf-8'))
-    if record.get('schema_version') != 1 or record.get('target') != native or not record.get('runtime_dependencies'):
-        raise ValueError('Incomplete native dependency notice index')
-    entries = [entry for package in record['runtime_dependencies'] for entry in package['files']] + record['bundled_assets']
-    if any(not package.get('license') or not package.get('files') for package in record['runtime_dependencies']):
-        raise ValueError('Dependency has no license expression or actual notice text')
-    for entry in entries:
+    for entry in notice_entries(record, native):
         path = directory / entry['path']
         if (not path.resolve().is_relative_to(directory.resolve()) or path.is_symlink() or not path.is_file()
                 or sha(path) != entry['sha256']):

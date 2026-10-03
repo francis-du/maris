@@ -34,6 +34,21 @@ fn measured_levels_drive_the_mark_but_unavailable_and_reduced_motion_do_not() {
 }
 
 #[test]
+fn installed_idle_frame_does_not_issue_a_redundant_native_update() {
+    let idle = Frame {
+        mode: Mode::Idle,
+        level: 0,
+    };
+    let mut animation = Animation::seeded(idle);
+    assert!(animation
+        .update(&json!({"active":false}), 20_000, false)
+        .is_none());
+
+    let live = json!({"active":true,"updated_at_ms":20_000,"peak_dbfs":-6.0});
+    assert!(animation.update(&live, 20_000, false).is_some());
+}
+
+#[test]
 fn updates_are_bounded_and_static_states_allocate_no_more_frames() {
     let mut animation = Animation::default();
     let mut runtime = json!({"active":true,"updated_at_ms":20_000,"peak_dbfs":-48.0});

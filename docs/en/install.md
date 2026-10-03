@@ -11,18 +11,18 @@ The installer downloads a native package built by GitHub CI. You do not need a s
 **macOS / Linux**
 
 ```sh
-curl -fsSL https://francis-du.github.io/maris/install.sh | bash
+curl -fsSL https://maris.francis.run/install.sh | bash
 ```
 
 **Windows PowerShell**
 
 ```powershell
-irm https://francis-du.github.io/maris/install.ps1 | iex
+irm https://maris.francis.run/install.ps1 | iex
 ```
 
 The Unix command runs the downloaded script directly and asks for confirmation through the terminal before any package download. PowerShell also asks before replacing the current installation. No administrator privileges are needed. The installer does not start audio, change PATH, install drivers or modify system volume/default output.
 
-To inspect the script first, download [install.sh](https://francis-du.github.io/maris/install.sh) or [install.ps1](https://francis-du.github.io/maris/install.ps1), then run `bash install.sh` or `.\install.ps1`. A script-policy or signature rejection should be investigated, not bypassed.
+To inspect the script first, download [install.sh](https://maris.francis.run/install.sh) or [install.ps1](https://maris.francis.run/install.ps1), then run `bash install.sh` or `.\install.ps1`. A script-policy or signature rejection should be investigated, not bypassed.
 
 ## Options {#options}
 

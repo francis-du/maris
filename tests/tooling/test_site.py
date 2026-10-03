@@ -154,14 +154,14 @@ class Documentation(unittest.TestCase):
     def test_every_install_language_documents_download_before_developer_build(self):
         for locale in LANGUAGES:
             text = (ROOT / f'docs/{locale}/install.md').read_text(encoding='utf-8')
-            self.assertIn('curl -fsSL https://francis-du.github.io/maris/install.sh | bash', text)
-            self.assertIn('irm https://francis-du.github.io/maris/install.ps1 | iex', text)
+            self.assertIn('curl -fsSL https://maris.francis.run/install.sh | bash', text)
+            self.assertIn('irm https://maris.francis.run/install.ps1 | iex', text)
             self.assertLess(text.index('{#online}'), text.index('{#development}'))
             for option in ('--dry-run', '--version', '-Version', 'SHA-256'):
                 self.assertIn(option, text)
         readme = (ROOT / 'README.md').read_text(encoding='utf-8')
-        self.assertIn('curl -fsSL https://francis-du.github.io/maris/install.sh | bash', readme)
-        self.assertIn('irm https://francis-du.github.io/maris/install.ps1 | iex', readme)
+        self.assertIn('curl -fsSL https://maris.francis.run/install.sh | bash', readme)
+        self.assertIn('irm https://maris.francis.run/install.ps1 | iex', readme)
 
 
 if __name__ == '__main__':

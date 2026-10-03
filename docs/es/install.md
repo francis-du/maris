@@ -11,13 +11,13 @@ El instalador descarga el programa ya compilado para tu equipo. No necesitas el 
 macOS y Linux:
 
 ```sh
-curl -fsSL https://francis-du.github.io/maris/install.sh | bash
+curl -fsSL https://maris.francis.run/install.sh | bash
 ```
 
 Windows: usa PowerShell con permisos normales.
 
 ```powershell
-irm https://francis-du.github.io/maris/install.ps1 | iex
+irm https://maris.francis.run/install.ps1 | iex
 ```
 
 Revisa el script y confía solo en la fuente del proyecto y el editor aprobado. No desactives las políticas de scripts, firma o cuarentena del sistema. El instalador no añade compiladores, controladores, servicios, inicio automático ni modelos.

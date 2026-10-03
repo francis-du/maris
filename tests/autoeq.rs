@@ -47,6 +47,19 @@ fn pinned_parenthesized_models_keep_the_full_profile_destination() {
 }
 
 #[test]
+fn pinned_case_mismatch_uses_the_actual_upstream_profile_path() {
+    let entry = autoeq::catalog()
+        .unwrap()
+        .into_iter()
+        .find(|entry| entry.name == "Samsung Galaxy Buds2 Pro (passive mode)")
+        .unwrap();
+    assert_eq!(
+        entry.path,
+        "./crinacle/711%20in-ear/Samsung%20Galaxy%20Buds2%20Pro%20(Passive%20mode)"
+    );
+}
+
+#[test]
 fn exact_unique_device_name_can_auto_match() {
     let entries = autoeq::parse_index(INDEX);
     let matched = autoeq::match_device("Sennheiser HD 650", &entries);
@@ -108,6 +121,12 @@ fn bundled_profile_pack_contains_known_profile() {
         .unwrap();
     let corrected = autoeq::bundled_profile(&parenthesized).unwrap();
     assert!(corrected.correction.len() >= 5);
+    let passive = autoeq::catalog()
+        .unwrap()
+        .into_iter()
+        .find(|entry| entry.name == "Samsung Galaxy Buds2 Pro (passive mode)")
+        .unwrap();
+    assert!(autoeq::bundled_profile(&passive).unwrap().correction.len() >= 5);
 }
 
 #[test]

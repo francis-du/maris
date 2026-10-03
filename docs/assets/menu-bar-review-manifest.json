@@ -4,14 +4,14 @@
   "audio_started": false,
   "whole_desktop_captured": false,
   "source_sha256": {
-    "Cargo.toml": "a6f6c2a25af90bb50621bf0e37c03de7a6bd16b4db98193577a5684875a8e3ff",
-    "Cargo.lock": "f024ac4ebb8dea9e41084c0e5a7b8ba122f48e65231dfe9f067f54e7d1f7f4fb",
+    "Cargo.toml": "490a59fb6bce2e4000d483a717b31d0f9e13306dea4effe3da9a1ecbea3368ea",
+    "Cargo.lock": "30105e8e55ef425d9a46d091b925fc7944ed7ecd06a22f1f1e3b8c1c4942c8a2",
     "src/ui/desktop/native.rs": "1d98a2c0f002949b7679afbc8c20b4fe69ed66f1ffd60b2a0ee2ed2b3e7c5eaf",
     "src/ui/desktop/native/menu_review.rs": "9f3b1e237244f1ad8b706cfdac3ab7ca6baf9a72e3341c1b56b2a1f69fdb7c33",
-    "src/ui/desktop/native/native_loop.rs": "f853ab83941c53fb543d0c27e67402355a192415cd1db00ad2ef8d637af0d49f",
+    "src/ui/desktop/native/native_loop.rs": "10de7ca5568c67abe9502f3f982f09d223102268919dea242b8e4b0803dd1a97",
     "src/ui/desktop/menu_header.rs": "e76197797c5b66ae0acb5ffe451769a2074172dc27baedc4abcae612f3bca57d",
-    "src/ui/desktop/native_mark.rs": "11691c4e724219bbf9368e0c7d5cd7e1ba83325a65223abe716c7dda48d21c90",
-    "src/ui/desktop/status_icon.rs": "7b09396d0968e31a03a5a16e573176e27af4718399c1666c2e58c3445d55e6c5",
+    "src/ui/desktop/native_mark.rs": "1b721a31705f5690188151921a729b0bd692cb0f90c144ca9482c815e64e91d2",
+    "src/ui/desktop/status_icon.rs": "48221387a92932f34eda3b6e9f3edf223655a4c0a209787a47e696bbeeeaae45",
     "src/ui/desktop/menu_capture.rs": "07632dfe0e2f495c1c5f1c0e70fa10173dd5fb723b7eb1cb961fb0a81ae231b6",
     "src/ui/desktop/monitor_state.rs": "d14a26186e7d5a42bea00ffbfde302f64c73c4a9d2faab07eeca091c0cd1edbb",
     "src/ui/desktop/controls.rs": "adc63e92c217d34033502510bc8e3b55d5e48542944f706192fb86d4cc82d297",
@@ -38,8 +38,8 @@
           "pixel_height": 44,
           "capture": {
             "appearance": "light",
-            "logical_height": 22.0,
-            "logical_width": 26.0,
+            "logical_height": 22,
+            "logical_width": 26,
             "pixel_height": 44,
             "pixel_width": 52,
             "png_bytes": 3960,
@@ -55,8 +55,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "Processing. Output: OFFLINE fixture output",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -73,8 +73,8 @@
           "capture": {
             "appearance": "light",
             "capture_attempts": 1,
-            "logical_height": 500.0,
-            "logical_width": 383.0,
+            "logical_height": 500,
+            "logical_width": 383,
             "pixel_height": 1000,
             "pixel_width": 766,
             "png_bytes": 103621,
@@ -90,8 +90,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "Processing. Output: OFFLINE fixture output",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -107,8 +107,8 @@
           "pixel_height": 44,
           "capture": {
             "appearance": "dark",
-            "logical_height": 22.0,
-            "logical_width": 26.0,
+            "logical_height": 22,
+            "logical_width": 26,
             "pixel_height": 44,
             "pixel_width": 52,
             "png_bytes": 3987,
@@ -124,8 +124,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "Selection ready; review then apply. Output: OFFLINE fixture output",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -142,8 +142,8 @@
           "capture": {
             "appearance": "dark",
             "capture_attempts": 1,
-            "logical_height": 572.0,
-            "logical_width": 383.0,
+            "logical_height": 572,
+            "logical_width": 383,
             "pixel_height": 1144,
             "pixel_width": 766,
             "png_bytes": 123809,
@@ -159,8 +159,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "Selection ready; review then apply. Output: OFFLINE fixture output",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -176,8 +176,8 @@
           "pixel_height": 44,
           "capture": {
             "appearance": "dark",
-            "logical_height": 22.0,
-            "logical_width": 26.0,
+            "logical_height": 22,
+            "logical_width": 26,
             "pixel_height": 44,
             "pixel_width": 52,
             "png_bytes": 3987,
@@ -193,8 +193,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "Processing. Output: OFFLINE fixture output",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -210,8 +210,8 @@
           "pixel_height": 172,
           "capture": {
             "appearance": "dark",
-            "logical_height": 86.0,
-            "logical_width": 320.0,
+            "logical_height": 86,
+            "logical_width": 320,
             "pixel_height": 172,
             "pixel_width": 640,
             "png_bytes": 11873,
@@ -227,8 +227,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "Processing. Output: OFFLINE fixture output",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -244,8 +244,8 @@
           "pixel_height": 44,
           "capture": {
             "appearance": "dark",
-            "logical_height": 22.0,
-            "logical_width": 26.0,
+            "logical_height": 22,
+            "logical_width": 26,
             "pixel_height": 44,
             "pixel_width": 52,
             "png_bytes": 4011,
@@ -261,8 +261,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "Standby. Output: Unavailable",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -278,8 +278,8 @@
           "pixel_height": 172,
           "capture": {
             "appearance": "dark",
-            "logical_height": 86.0,
-            "logical_width": 320.0,
+            "logical_height": 86,
+            "logical_width": 320,
             "pixel_height": 172,
             "pixel_width": 640,
             "png_bytes": 10506,
@@ -295,8 +295,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "Standby. Output: Unavailable",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -312,8 +312,8 @@
           "pixel_height": 44,
           "capture": {
             "appearance": "dark",
-            "logical_height": 22.0,
-            "logical_width": 26.0,
+            "logical_height": 22,
+            "logical_width": 26,
             "pixel_height": 44,
             "pixel_width": 52,
             "png_bytes": 4057,
@@ -329,8 +329,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "Waiting for audio status. Output: Unavailable",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -346,8 +346,8 @@
           "pixel_height": 172,
           "capture": {
             "appearance": "dark",
-            "logical_height": 86.0,
-            "logical_width": 320.0,
+            "logical_height": 86,
+            "logical_width": 320,
             "pixel_height": 172,
             "pixel_width": 640,
             "png_bytes": 12269,
@@ -363,8 +363,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "Waiting for audio status. Output: Unavailable",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -380,8 +380,8 @@
           "pixel_height": 44,
           "capture": {
             "appearance": "dark",
-            "logical_height": 22.0,
-            "logical_width": 26.0,
+            "logical_height": 22,
+            "logical_width": 26,
             "pixel_height": 44,
             "pixel_width": 52,
             "png_bytes": 4011,
@@ -397,8 +397,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "Audio unavailable. Output: Unavailable",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -414,8 +414,8 @@
           "pixel_height": 172,
           "capture": {
             "appearance": "dark",
-            "logical_height": 86.0,
-            "logical_width": 320.0,
+            "logical_height": 86,
+            "logical_width": 320,
             "pixel_height": 172,
             "pixel_width": 640,
             "png_bytes": 11619,
@@ -431,8 +431,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "Audio unavailable. Output: Unavailable",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -448,8 +448,8 @@
           "pixel_height": 44,
           "capture": {
             "appearance": "dark",
-            "logical_height": 22.0,
-            "logical_width": 26.0,
+            "logical_height": 22,
+            "logical_width": 26,
             "pixel_height": 44,
             "pixel_width": 52,
             "png_bytes": 4011,
@@ -465,8 +465,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "Stopping audio. Output: OFFLINE fixture output",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -482,8 +482,8 @@
           "pixel_height": 172,
           "capture": {
             "appearance": "dark",
-            "logical_height": 86.0,
-            "logical_width": 320.0,
+            "logical_height": 86,
+            "logical_width": 320,
             "pixel_height": 172,
             "pixel_width": 640,
             "png_bytes": 12465,
@@ -499,8 +499,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "Stopping audio. Output: OFFLINE fixture output",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -516,8 +516,8 @@
           "pixel_height": 44,
           "capture": {
             "appearance": "dark",
-            "logical_height": 22.0,
-            "logical_width": 26.0,
+            "logical_height": 22,
+            "logical_width": 26,
             "pixel_height": 44,
             "pixel_width": 52,
             "png_bytes": 4011,
@@ -533,8 +533,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "Restore failed: EOF while parsing an object at line 1 column 1. Output: Unavailable",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -550,8 +550,8 @@
           "pixel_height": 172,
           "capture": {
             "appearance": "dark",
-            "logical_height": 86.0,
-            "logical_width": 320.0,
+            "logical_height": 86,
+            "logical_width": 320,
             "pixel_height": 172,
             "pixel_width": 640,
             "png_bytes": 15875,
@@ -567,8 +567,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "Restore failed: EOF while parsing an object at line 1 column 1. Output: Unavailable",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -592,8 +592,8 @@
           "pixel_height": 44,
           "capture": {
             "appearance": "light",
-            "logical_height": 22.0,
-            "logical_width": 26.0,
+            "logical_height": 22,
+            "logical_width": 26,
             "pixel_height": 44,
             "pixel_width": 52,
             "png_bytes": 3960,
@@ -609,8 +609,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "处理中. 输出: OFFLINE fixture output",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -627,8 +627,8 @@
           "capture": {
             "appearance": "light",
             "capture_attempts": 1,
-            "logical_height": 500.0,
-            "logical_width": 320.0,
+            "logical_height": 500,
+            "logical_width": 320,
             "pixel_height": 1000,
             "pixel_width": 640,
             "png_bytes": 92996,
@@ -644,8 +644,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "处理中. 输出: OFFLINE fixture output",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -661,8 +661,8 @@
           "pixel_height": 44,
           "capture": {
             "appearance": "dark",
-            "logical_height": 22.0,
-            "logical_width": 26.0,
+            "logical_height": 22,
+            "logical_width": 26,
             "pixel_height": 44,
             "pixel_width": 52,
             "png_bytes": 3987,
@@ -678,8 +678,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "已生成预览，请检查后应用. 输出: OFFLINE fixture output",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -696,8 +696,8 @@
           "capture": {
             "appearance": "dark",
             "capture_attempts": 1,
-            "logical_height": 572.0,
-            "logical_width": 320.0,
+            "logical_height": 572,
+            "logical_width": 320,
             "pixel_height": 1144,
             "pixel_width": 640,
             "png_bytes": 113757,
@@ -713,8 +713,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "已生成预览，请检查后应用. 输出: OFFLINE fixture output",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -730,8 +730,8 @@
           "pixel_height": 44,
           "capture": {
             "appearance": "dark",
-            "logical_height": 22.0,
-            "logical_width": 26.0,
+            "logical_height": 22,
+            "logical_width": 26,
             "pixel_height": 44,
             "pixel_width": 52,
             "png_bytes": 3987,
@@ -747,8 +747,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "处理中. 输出: OFFLINE fixture output",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -764,8 +764,8 @@
           "pixel_height": 172,
           "capture": {
             "appearance": "dark",
-            "logical_height": 86.0,
-            "logical_width": 320.0,
+            "logical_height": 86,
+            "logical_width": 320,
             "pixel_height": 172,
             "pixel_width": 640,
             "png_bytes": 11323,
@@ -781,8 +781,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "处理中. 输出: OFFLINE fixture output",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -798,8 +798,8 @@
           "pixel_height": 44,
           "capture": {
             "appearance": "dark",
-            "logical_height": 22.0,
-            "logical_width": 26.0,
+            "logical_height": 22,
+            "logical_width": 26,
             "pixel_height": 44,
             "pixel_width": 52,
             "png_bytes": 4011,
@@ -815,8 +815,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "待机. 输出: 不可用",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -832,8 +832,8 @@
           "pixel_height": 172,
           "capture": {
             "appearance": "dark",
-            "logical_height": 86.0,
-            "logical_width": 320.0,
+            "logical_height": 86,
+            "logical_width": 320,
             "pixel_height": 172,
             "pixel_width": 640,
             "png_bytes": 8657,
@@ -849,8 +849,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "待机. 输出: 不可用",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -866,8 +866,8 @@
           "pixel_height": 44,
           "capture": {
             "appearance": "dark",
-            "logical_height": 22.0,
-            "logical_width": 26.0,
+            "logical_height": 22,
+            "logical_width": 26,
             "pixel_height": 44,
             "pixel_width": 52,
             "png_bytes": 4057,
@@ -883,8 +883,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "等待实时状态. 输出: 不可用",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -900,8 +900,8 @@
           "pixel_height": 172,
           "capture": {
             "appearance": "dark",
-            "logical_height": 86.0,
-            "logical_width": 320.0,
+            "logical_height": 86,
+            "logical_width": 320,
             "pixel_height": 172,
             "pixel_width": 640,
             "png_bytes": 10898,
@@ -917,8 +917,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "等待实时状态. 输出: 不可用",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -934,8 +934,8 @@
           "pixel_height": 44,
           "capture": {
             "appearance": "dark",
-            "logical_height": 22.0,
-            "logical_width": 26.0,
+            "logical_height": 22,
+            "logical_width": 26,
             "pixel_height": 44,
             "pixel_width": 52,
             "png_bytes": 4011,
@@ -951,8 +951,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "音频不可用. 输出: 不可用",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -968,8 +968,8 @@
           "pixel_height": 172,
           "capture": {
             "appearance": "dark",
-            "logical_height": 86.0,
-            "logical_width": 320.0,
+            "logical_height": 86,
+            "logical_width": 320,
             "pixel_height": 172,
             "pixel_width": 640,
             "png_bytes": 9725,
@@ -985,8 +985,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "音频不可用. 输出: 不可用",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -1002,8 +1002,8 @@
           "pixel_height": 44,
           "capture": {
             "appearance": "dark",
-            "logical_height": 22.0,
-            "logical_width": 26.0,
+            "logical_height": 22,
+            "logical_width": 26,
             "pixel_height": 44,
             "pixel_width": 52,
             "png_bytes": 4011,
@@ -1019,8 +1019,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "正在停止音频. 输出: OFFLINE fixture output",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -1036,8 +1036,8 @@
           "pixel_height": 172,
           "capture": {
             "appearance": "dark",
-            "logical_height": 86.0,
-            "logical_width": 320.0,
+            "logical_height": 86,
+            "logical_width": 320,
             "pixel_height": 172,
             "pixel_width": 640,
             "png_bytes": 12337,
@@ -1053,8 +1053,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "正在停止音频. 输出: OFFLINE fixture output",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -1070,8 +1070,8 @@
           "pixel_height": 44,
           "capture": {
             "appearance": "dark",
-            "logical_height": 22.0,
-            "logical_width": 26.0,
+            "logical_height": 22,
+            "logical_width": 26,
             "pixel_height": 44,
             "pixel_width": 52,
             "png_bytes": 4011,
@@ -1087,8 +1087,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "恢复失败: 技术详情: EOF while parsing an object at line 1 column 1. 输出: 不可用",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,
@@ -1104,8 +1104,8 @@
           "pixel_height": 172,
           "capture": {
             "appearance": "dark",
-            "logical_height": 86.0,
-            "logical_width": 320.0,
+            "logical_height": 86,
+            "logical_width": 320,
             "pixel_height": 172,
             "pixel_width": 640,
             "png_bytes": 16972,
@@ -1121,8 +1121,8 @@
           "image": {
             "accessibility_label": "Maris",
             "accessibility_value": "恢复失败: 技术详情: EOF while parsing an object at line 1 column 1. 输出: 不可用",
-            "logical_height": 18.0,
-            "logical_width": 18.0,
+            "logical_height": 18,
+            "logical_width": 18,
             "representations": [
               {
                 "height": 64,

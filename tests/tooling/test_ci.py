@@ -41,6 +41,25 @@ def minimum_rust():
 
 
 class ToolchainRequirements(unittest.TestCase):
+    @unittest.skipUnless(BASH, 'Git Bash bundle gate execution required')
+    def test_bundle_gate_stops_before_autoeq_when_the_model_command_fails(self):
+        text = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')
+        step = re.search(r'      - name: Verify bundled semantic model and AutoEq profile pack\n'
+                         r'((?:        .*\n)+)', text)
+        self.assertIsNotNone(step)
+        self.assertIn('        shell: bash\n', step[1])
+        block = re.search(r'        run: \|\n((?:          .*\n)+)', step[1])
+        self.assertIsNotNone(block)
+        script = '''cargo() {
+    case "$*" in *models::musicnn::*) return 37 ;; esac
+    printf 'later AutoEq check ran\\n'
+}
+''' + '\n'.join(line[10:] for line in block[1].splitlines())
+        result = subprocess.run([BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script],
+                                capture_output=True, text=True, encoding='utf-8', timeout=10)
+        self.assertEqual(result.returncode, 37, result.stdout + result.stderr)
+        self.assertNotIn('later AutoEq check ran', result.stdout)
+
     def test_windows_dependency_gate_uses_git_bash_instead_of_a_wsl_launcher(self):
         with tempfile.TemporaryDirectory() as directory:
             programs = Path(directory)

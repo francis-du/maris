@@ -82,6 +82,13 @@ pub struct Animation {
 }
 
 impl Animation {
+    pub fn seeded(frame: Frame) -> Self {
+        Self {
+            previous: Some(frame),
+            updated_at_ms: None,
+        }
+    }
+
     pub fn update(&mut self, runtime: &Value, now: u64, reduced_motion: bool) -> Option<Frame> {
         let frame = Frame::read(runtime, now, reduced_motion);
         if self.previous == Some(frame)

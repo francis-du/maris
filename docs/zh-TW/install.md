@@ -11,13 +11,13 @@
 macOS 與 Linux：
 
 ```sh
-curl -fsSL https://francis-du.github.io/maris/install.sh | bash
+curl -fsSL https://maris.francis.run/install.sh | bash
 ```
 
 Windows 使用一般權限 PowerShell：
 
 ```powershell
-irm https://francis-du.github.io/maris/install.ps1 | iex
+irm https://maris.francis.run/install.ps1 | iex
 ```
 
 執行前檢查腳本，只信任專案來源及已核准的發行者。不要關閉系統腳本、簽章政策或移除隔離標記。安裝器不會安裝編譯器、驅動、服務、登入項目或模型。

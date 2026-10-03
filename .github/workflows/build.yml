@@ -67,6 +67,7 @@ jobs:
           cargo test --locked --all-targets --no-default-features
           cargo clippy --locked --all-targets -- -D warnings
       - name: Verify bundled semantic model and AutoEq profile pack
+        shell: bash
         env:
           MARIS_BUNDLE_SMALL_MODELS: '1'
           MARIS_BUNDLE_AUTOEQ_PROFILES: '1'

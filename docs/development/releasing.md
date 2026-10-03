@@ -1,7 +1,7 @@
 # Build, verification and release
 
 Repository: https://github.com/francis-du/maris
-Planned project documentation URL: https://francis-du.github.io/maris/
+Public documentation URL: https://maris.francis.run/
 A workflow file or expected URL is not evidence that a remote workflow has run or a site is live.
 
 ## Separate workflows
@@ -68,7 +68,7 @@ python3 scripts/site.py
 python3 -m http.server 8000 --directory _site
 ```
 
-Review the generated site locally. A successful Pages deployment, not simply pushing the YAML, establishes availability. Its expected project path is `/maris/`. The deployment has its own `github-pages` environment and least-privilege token.
+Review the generated site locally. A successful Pages deployment, not simply pushing the YAML, establishes availability. The configured custom domain serves the site from `/`; public links use `https://maris.francis.run/` directly so installers do not depend on an HTTP redirect from the legacy GitHub Pages hostname. The deployment has its own `github-pages` environment and least-privilege token.
 
 ## CLI/TUI first-release contract
 

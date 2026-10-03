@@ -17,6 +17,7 @@ from release_bundle import inspect_kit
 from test_online import fixture
 import test_online
 from test_portable import fixture as binary_fixture
+from test_dependency_notices import standard_library_fixture
 
 
 class CliContracts(unittest.TestCase):
@@ -68,7 +69,8 @@ class CliContracts(unittest.TestCase):
             notice.write_bytes(b'Actual fixture license text; not a legal approval.\n')
             entry = {'path': notice.name, 'sha256': hashlib.sha256(notice.read_bytes()).hexdigest()}
             record = {'schema_version': 1, 'target': 'fixture-native-target', 'runtime_dependencies':
-                      [{'name': 'fixture', 'license': 'MIT', 'files': [entry]}], 'bundled_assets': []}
+                      [{'name': 'fixture', 'license': 'MIT', 'files': [entry]}], 'bundled_assets': [],
+                      'rust_standard_library': standard_library_fixture(directory)}
             index = directory / 'index.json'
             index.write_text(json.dumps(record), encoding='utf-8')
             validate_notices(directory, 'fixture-native-target')
