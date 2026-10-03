@@ -247,7 +247,6 @@ pub fn run(
                 expected,
                 device.as_deref(),
                 |p| {
-                    let before = p.clone();
                     if let Some(v) = bass {
                         p.bass_db = v;
                     }
@@ -292,10 +291,6 @@ pub fn run(
                     }
                     if let Some(v) = compressor {
                         p.compressor.enabled = v;
-                    }
-                    if *p != before {
-                        p.reference = false;
-                        p.enabled = true;
                     }
                     Ok(())
                 },
