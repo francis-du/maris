@@ -240,7 +240,7 @@ fn sgr_mouse(text: &str) -> Option<crossterm::event::MouseEvent> {
 mod fragment_tests;
 
 pub const DASHBOARD_SOUND_ROWS: usize = 10;
-pub const SOUND_ROWS: usize = 26;
+pub const SOUND_ROWS: usize = 28;
 
 pub fn compact_layout(width: u16, height: u16) -> bool {
     width < 90 || height < 26
@@ -254,7 +254,7 @@ pub enum UndoTarget {
 }
 
 pub fn edit_target(row: usize) -> UndoTarget {
-    if row < 10 || row == 14 || row == 15 {
+    if row < 10 || row == 14 || row == 15 || row == 26 || row == 27 {
         UndoTarget::Listening
     } else {
         UndoTarget::Profile
