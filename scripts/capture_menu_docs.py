@@ -25,7 +25,7 @@ SOURCES = ('Cargo.toml', 'Cargo.lock', 'src/ui/desktop/native.rs',
            'src/ui/desktop/native_mark.rs', 'src/ui/desktop/status_icon.rs',
            'src/ui/desktop/menu_capture.rs', 'src/ui/desktop/monitor_state.rs',
            'src/ui/desktop/controls.rs', 'src/ui/desktop/events.rs', 'src/ui/desktop/mod.rs',
-           'src/i18n/mod.rs', 'src/i18n/console.rs', 'src/i18n/surface.rs',
+           'src/presets/scenes.rs', 'src/i18n/mod.rs', 'src/i18n/console.rs', 'src/i18n/surface.rs',
            'src/i18n/messages.rs', 'tests/support/menu_probe.rs', 'scripts/capture_menu_docs.py')
 MANIFEST = 'menu-bar-review-manifest.json'
 LIMIT = 2_000_000
