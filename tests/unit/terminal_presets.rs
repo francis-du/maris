@@ -265,11 +265,7 @@ fn real_terminal_clicking_a_visible_preset_then_enter_applies_that_row() {
     let _heartbeat = Heartbeat::start(store.clone());
     let mut process = spawn_console(dir.path());
     process.send("p");
-    wait_for_preset(
-        &mut process,
-        None,
-        Instant::now() + Duration::from_secs(5),
-    );
+    wait_for_preset(&mut process, None, Instant::now() + Duration::from_secs(5));
     let deadline = Instant::now() + Duration::from_secs(5);
     let dialogue_row = loop {
         let mut output = String::new();
