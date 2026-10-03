@@ -116,6 +116,15 @@ fn spatial_effect_scenes_change_only_spatial_fields_and_regular_scenes_preserve_
         );
     }
 
+    let restrictive = Capability {
+        max_preference_boost_db: 0.1,
+        ..Capability::default()
+    };
+    let spatial = scenes::prepare(&before, &restrictive, "surround-360").unwrap();
+    assert_eq!(spatial.profile.bass_db, before.bass_db);
+    assert_eq!(spatial.profile.presence_db, before.presence_db);
+    assert_eq!(spatial.profile.air_db, before.air_db);
+
     let dialogue = scenes::prepare(&before, &capability, "dialogue").unwrap();
     assert_eq!(dialogue.profile.virtual_surround, before.virtual_surround);
     assert_eq!(dialogue.profile.stereo_focus, before.stereo_focus);
