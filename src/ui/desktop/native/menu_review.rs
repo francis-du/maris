@@ -142,7 +142,7 @@ fn state_review(view: &mut Indicator, locale: &str, capture: &CaptureMode) -> Re
     view.refresh_quick_controls()?;
     let library = std::fs::read(store.directory.join("listening.json"))?;
     let lease = store.session_lock()?;
-    view._menu_action(
+    view.menu_action(
         MenuEvent {
             id: view.quit.id().clone(),
         },
@@ -158,7 +158,7 @@ fn state_review(view: &mut Indicator, locale: &str, capture: &CaptureMode) -> Re
     ] {
         heartbeat(&store)?;
         ensure!(
-            view._menu_action(MenuEvent { id }, |_, _| Ok(None))
+            view.menu_action(MenuEvent { id }, |_, _| Ok(None))
                 .is_err_and(|error| error.to_string() == "Stopping audio"),
             "Queued native action bypassed the stopping guard"
         );
@@ -273,7 +273,7 @@ fn run_impl(locale_filter: Option<&str>, capture: CaptureMode) -> Result<Value> 
             .id()
             .clone();
         heartbeat(&store)?;
-        view._menu_action(MenuEvent { id: selected }, |_, _| {
+        view.menu_action(MenuEvent { id: selected }, |_, _| {
             bail!("Immediate native selection unexpectedly requested confirmation")
         })?;
         ensure!(
@@ -284,7 +284,7 @@ fn run_impl(locale_filter: Option<&str>, capture: CaptureMode) -> Result<Value> 
         );
         for _ in 0..2 {
             heartbeat(&store)?;
-            view._menu_action(
+            view.menu_action(
                 MenuEvent {
                     id: view.compare.id().clone(),
                 },
@@ -292,7 +292,7 @@ fn run_impl(locale_filter: Option<&str>, capture: CaptureMode) -> Result<Value> 
             )?;
         }
         heartbeat(&store)?;
-        view._menu_action(
+        view.menu_action(
             MenuEvent {
                 id: view.undo.id().clone(),
             },
@@ -309,7 +309,7 @@ fn run_impl(locale_filter: Option<&str>, capture: CaptureMode) -> Result<Value> 
         );
 
         heartbeat(&store)?;
-        view._menu_action(
+        view.menu_action(
             MenuEvent {
                 id: view.follow.id().clone(),
             },
