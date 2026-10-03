@@ -12,10 +12,10 @@
     {"id":"dsp-regression","status":"verified"},
     {"id":"feature-ablation","status":"verified"},
     {"id":"mixer-data-plane","status":"in_progress"},
-    {"id":"model-acquisition","status":"in_progress"},
+    {"id":"model-acquisition","status":"verified"},
     {"id":"output-harshness","status":"in_progress"},
     {"id":"power-transition-noise","status":"in_progress"},
-    {"id":"semantic-inference","status":"in_progress"},
+    {"id":"semantic-inference","status":"verified"},
     {"id":"tui-completion","status":"verified"},
     {"id":"verification-delivery","status":"in_progress"},
     {"id":"windows-linux","status":"in_progress"}
