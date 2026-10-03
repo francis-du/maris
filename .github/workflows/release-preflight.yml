@@ -1,0 +1,90 @@
+name: Release 0.1.0 preflight
+
+on:
+  push:
+    branches:
+      - release/0.1.0-final
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-0.1.0-preflight
+  cancel-in-progress: true
+
+jobs:
+  linux-code:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+          check-latest: false
+      - name: Install Rust and Linux build dependencies
+        run: |
+          rustup toolchain install 1.94.0 --profile minimal --component rustfmt --component clippy
+          rustup override set 1.94.0
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev pkg-config psmisc pulseaudio pulseaudio-utils
+      - name: Source audit before platform CI
+        run: |
+          python scripts/source_audit.py
+          bash -n install.sh
+          bash -n scripts/install_linux.sh
+          bash -n scripts/install_macos.sh
+      - name: Formatting
+        run: cargo fmt --all --check
+      - name: Default feature regression
+        run: cargo test --all-targets --locked
+      - name: Minimal feature regression
+        run: cargo test --all-targets --no-default-features --locked
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Target release blockers explicitly
+        run: |
+          cargo test --locked --test music --test scenes --test presets --test menu_configuration --test terminal_input --test tui --test config_layout --test studio_controls
+
+  finalize-doc-assets:
+    needs: linux-code
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: release/0.1.0-final
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+          check-latest: false
+      - name: Install declared Rust toolchain
+        run: |
+          rustup toolchain install 1.94.0 --profile minimal --component rustfmt --component clippy
+          rustup override set 1.94.0
+      - name: Generate final TUI and native Menu Bar documentation assets
+        run: |
+          python scripts/docs_assets.py --refresh
+          python scripts/capture_menu_docs.py --refresh
+          python scripts/docs_assets.py
+          python scripts/capture_menu_docs.py
+          python scripts/site.py --check
+          python -m unittest discover -s tests/tooling -v
+      - name: Commit only generated documentation assets and remove preflight workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t changed < <(git diff --name-only)
+          for path in "${changed[@]}"; do
+            case "$path" in
+              docs/assets/studio-*.svg|docs/assets/settings-*.svg|docs/assets/presets-*.svg|docs/assets/illustrations.json|docs/assets/menu-bar-en.svg|docs/assets/menu-bar-zh-CN.svg|docs/assets/menu-bar-review-manifest.json) ;;
+              *) echo "Unexpected generated change: $path" >&2; exit 1 ;;
+            esac
+          done
+          test "${#changed[@]}" -ge 1
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/assets/studio-*.svg docs/assets/settings-*.svg docs/assets/presets-*.svg docs/assets/illustrations.json docs/assets/menu-bar-en.svg docs/assets/menu-bar-zh-CN.svg docs/assets/menu-bar-review-manifest.json
+          git rm .github/workflows/release-preflight.yml
+          git commit -m "docs: refresh final 0.1.0 UI assets"
+          git push origin HEAD:release/0.1.0-final
