@@ -385,9 +385,7 @@ mod session {
             };
             let healthy = native.healthy();
             native.graph_changed |= native.events.changed()?;
-            if healthy
-                && !native.graph_changed
-                && native.checked.elapsed() < Duration::from_secs(5)
+            if healthy && !native.graph_changed && native.checked.elapsed() < Duration::from_secs(5)
             {
                 return Ok(());
             }

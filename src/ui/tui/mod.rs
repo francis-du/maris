@@ -557,10 +557,7 @@ pub fn run(
                                         &store,
                                         Some(listening.revision),
                                         profile_key.as_deref(),
-                                        preset
-                                            .id
-                                            .strip_prefix("listening:")
-                                            .unwrap_or(&preset.id),
+                                        preset.id.strip_prefix("listening:").unwrap_or(&preset.id),
                                     )?;
                                     if applied.revision != listening.revision {
                                         undo_target = UndoTarget::Listening;

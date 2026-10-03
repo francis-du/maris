@@ -207,16 +207,18 @@ pub fn console_catalog() -> Vec<PresetSummary> {
             description: "Device listening preset; measured correction stays unchanged.".into(),
         })
         .collect();
-    catalog.extend(crate::presets::scenes::SCENES
-        .iter()
-        .map(|scene| PresetSummary {
-            id: format!("scene:{}", scene.id),
-            category: "scene",
-            name: scene.name.into(),
-            source: "Maris",
-            description: scene.description.into(),
-        })
-        .collect::<Vec<_>>());
+    catalog.extend(
+        crate::presets::scenes::SCENES
+            .iter()
+            .map(|scene| PresetSummary {
+                id: format!("scene:{}", scene.id),
+                category: "scene",
+                name: scene.name.into(),
+                source: "Maris",
+                description: scene.description.into(),
+            })
+            .collect::<Vec<_>>(),
+    );
     catalog.extend(list());
     catalog
 }

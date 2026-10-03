@@ -336,9 +336,9 @@ impl TapCapture {
         if let Some((device, expected)) = &self.output_configuration {
             changed |= OutputConfiguration::read(*device)? != *expected;
         }
-        changed |= self
-            .expected_default_output
-            .is_some_and(|expected| default_output_changed(Some(expected), ca::default_output().ok()));
+        changed |= self.expected_default_output.is_some_and(|expected| {
+            default_output_changed(Some(expected), ca::default_output().ok())
+        });
         if !changed {
             metrics
                 .checked_configuration_events

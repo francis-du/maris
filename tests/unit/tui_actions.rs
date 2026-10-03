@@ -351,13 +351,9 @@ fn preset_picker_prioritizes_the_layer_changed_by_an_external_surface() {
         .unwrap();
     let mut snapshot = crate::store::Snapshot::default();
     snapshot.profile = crate::presets::apply_tone_curve(&snapshot.profile, "warm", 48_000).unwrap();
-    let music = crate::scenes::prepare(
-        &crate::music::MusicProfile::default(),
-        &capability,
-        "warm",
-    )
-    .unwrap()
-    .profile;
+    let music = crate::scenes::prepare(&crate::music::MusicProfile::default(), &capability, "warm")
+        .unwrap()
+        .profile;
     let runtime = serde_json::json!({
         "sample_rate": 48_000,
         "device_capability": capability
@@ -365,13 +361,7 @@ fn preset_picker_prioritizes_the_layer_changed_by_an_external_surface() {
 
     assert_eq!(
         preset_picker::preferred_choice(
-            &presets,
-            eq_index,
-            &snapshot,
-            &music,
-            &runtime,
-            false,
-            true,
+            &presets, eq_index, &snapshot, &music, &runtime, false, true,
         ),
         Some(listening_index),
         "a Menu Bar Listening/Warm edit must select the Listening row, not EQ/Warm"
