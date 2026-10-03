@@ -30,12 +30,10 @@ use crate::{
 mod actions;
 #[cfg(test)]
 use crate::ui::tui::input::EQ_ROW_START;
-use actions::{
-    adjust_sound, application_pids, application_state, captured_application_pids, toggle_reference,
-};
+use actions::{adjust_sound, application_pids, application_state, toggle_reference};
 use session::{
-    apply_application_scope, apply_output_choice, discard_application_draft, navigate,
-    start_initial_audio, sync_application_scope,
+    apply_output_choice, discard_application_draft, launch_system, navigate, start_initial_audio,
+    sync_application_scope,
 };
 use anyhow::{ensure, Result};
 use crossterm::{
