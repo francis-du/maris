@@ -271,7 +271,8 @@ fn context_tuning_never_changes_measurement_correction() {
 fn apply_rejects_tampering_and_accepts_matching_live_state() {
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path());
-    let evidence = analysis::measure(&tone(1000.0), 48_000).unwrap();
+    let mut evidence = analysis::measure(&tone(1000.0), 48_000).unwrap();
+    evidence.updated_at_ms = analysis::now_ms();
     let context = MusicContext::signal_only(&evidence);
     live_runtime(&store, "Unknown Output", &evidence, &context);
     live_telemetry::refresh(&store);
@@ -292,7 +293,8 @@ fn apply_rejects_tampering_and_accepts_matching_live_state() {
 fn live_apply_rejects_session_and_device_rebind_but_accepts_fresh_analysis() {
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path());
-    let evidence = analysis::measure(&tone(1000.0), 48_000).unwrap();
+    let mut evidence = analysis::measure(&tone(1000.0), 48_000).unwrap();
+    evidence.updated_at_ms = analysis::now_ms();
     let context = MusicContext::signal_only(&evidence);
     live_runtime(&store, "Headphones", &evidence, &context);
     live_telemetry::refresh(&store);
@@ -330,7 +332,8 @@ fn live_apply_rejects_session_and_device_rebind_but_accepts_fresh_analysis() {
 fn apply_rejects_output_change_after_preview() {
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path());
-    let evidence = analysis::measure(&tone(1000.0), 48_000).unwrap();
+    let mut evidence = analysis::measure(&tone(1000.0), 48_000).unwrap();
+    evidence.updated_at_ms = analysis::now_ms();
     let context = MusicContext::signal_only(&evidence);
     live_runtime(&store, "Headphones", &evidence, &context);
     live_telemetry::refresh(&store);
@@ -478,7 +481,8 @@ fn no_op_preview_preserves_revision_and_the_previous_undo_snapshot() {
         Ok(())
     })
     .unwrap();
-    let evidence = analysis::measure(&tone(1000.0), 48_000).unwrap();
+    let mut evidence = analysis::measure(&tone(1000.0), 48_000).unwrap();
+    evidence.updated_at_ms = analysis::now_ms();
     let context = MusicContext::signal_only(&evidence);
     let before = library.effective("Fixture");
     live_runtime(&store, "Fixture", &evidence, &context);
