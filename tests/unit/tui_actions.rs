@@ -290,3 +290,98 @@ fn invalid_row_and_stale_revision_leave_both_libraries_unchanged() {
     assert_eq!(store.load().unwrap().revision, 0);
     assert_eq!(crate::listening::load(&store).unwrap().revision, 0);
 }
+
+
+#[test]
+fn preset_picker_prefers_the_last_applied_layer_when_both_scene_and_eq_match() {
+    let presets = crate::presets::console_catalog();
+    let snapshot = crate::store::Snapshot::default();
+    let capability = crate::device_profile::Capability::default();
+    let scene_index = presets
+        .iter()
+        .position(|preset| preset.id == "scene:dialogue")
+        .unwrap();
+    let eq_index = presets
+        .iter()
+        .position(|preset| preset.id == "flat")
+        .unwrap();
+    let music = crate::scenes::prepare(
+        &crate::music::MusicProfile::default(),
+        &capability,
+        "scene:dialogue",
+    )
+    .unwrap()
+    .profile;
+    let runtime = serde_json::json!({
+        "sample_rate": 48_000,
+        "device_capability": capability
+    });
+
+    assert_eq!(
+        preset_picker::preferred_choice(&presets, scene_index, &snapshot, &music, &runtime),
+        Some(scene_index)
+    );
+    assert_eq!(
+        preset_picker::preferred_choice(&presets, eq_index, &snapshot, &music, &runtime),
+        Some(eq_index),
+        "the picker should remember whether the user last applied the scene or EQ layer"
+    );
+}
+
+#[test]
+fn preset_picker_drops_a_preferred_row_after_that_layer_is_manually_changed() {
+    let presets = crate::presets::console_catalog();
+    let mut snapshot = crate::store::Snapshot::default();
+    let music = crate::music::MusicProfile::default();
+    let warm_index = presets
+        .iter()
+        .position(|preset| preset.id == "warm")
+        .unwrap();
+    snapshot.profile = crate::presets::profile("warm", 48_000).unwrap();
+    let runtime = serde_json::json!({
+        "sample_rate": 48_000,
+        "device_capability": crate::device_profile::Capability::default()
+    });
+    assert_eq!(
+        preset_picker::preferred_choice(&presets, warm_index, &snapshot, &music, &runtime),
+        Some(warm_index)
+    );
+
+    snapshot.profile.bands[0].gain_db += 0.5;
+    snapshot.profile.name = "custom".into();
+    assert_ne!(
+        preset_picker::preferred_choice(&presets, warm_index, &snapshot, &music, &runtime),
+        Some(warm_index)
+    );
+}
+
+#[test]
+fn leaving_apps_discards_an_unapplied_scope_and_restores_the_live_capture() {
+    let runtime = serde_json::json!({
+        "active": true,
+        "captured_application_pids": [111, 222]
+    });
+    let mut pending = vec![333];
+    let mut dirty = true;
+    discard_application_draft(
+        Workspace::Apps,
+        Workspace::Now,
+        &runtime,
+        &mut pending,
+        &mut dirty,
+    );
+    assert_eq!(pending, vec![111, 222]);
+    assert!(!dirty);
+
+    pending = vec![333];
+    dirty = true;
+    discard_application_draft(
+        Workspace::Apps,
+        Workspace::Apps,
+        &runtime,
+        &mut pending,
+        &mut dirty,
+    );
+    assert_eq!(pending, vec![333]);
+    assert!(dirty, "staying on Apps must not discard the pending selection");
+}
