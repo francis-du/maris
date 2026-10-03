@@ -46,6 +46,7 @@ fn live_runtime(
     device: &str,
     evidence: &analysis::Analysis,
     context: &MusicContext,
+    now: u64,
 ) {
     store
         .write_json(
@@ -56,7 +57,7 @@ fn live_runtime(
                 "output":device,
                 "profile_key":device,
                 "sample_rate":evidence.sample_rate,
-                "updated_at_ms":analysis::now_ms(),
+                "updated_at_ms":now,
                 "effective_preamp_db":-3.0,
                 "device_identity":{"stable_id":"tuning-device-A"},
                 "device_binding_revision":1,
@@ -272,11 +273,11 @@ fn apply_rejects_tampering_and_accepts_matching_live_state() {
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path());
     let mut evidence = analysis::measure(&tone(1000.0), 48_000).unwrap();
-    evidence.updated_at_ms = analysis::now_ms();
+    let now = analysis::now_ms();
+    evidence.updated_at_ms = now;
     let context = MusicContext::signal_only(&evidence);
-    live_runtime(&store, "Unknown Output", &evidence, &context);
-    live_telemetry::refresh(&store);
-    let proposal = music_tuning::from_live(&store, "soft").unwrap();
+    live_runtime(&store, "Unknown Output", &evidence, &context, now);
+    let proposal = music_tuning::from_live_at(&store, "soft", now).unwrap();
 
     let mut tampered = proposal.clone();
     tampered.profile.bass_db = 6.0;
@@ -294,11 +295,11 @@ fn live_apply_rejects_session_and_device_rebind_but_accepts_fresh_analysis() {
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path());
     let mut evidence = analysis::measure(&tone(1000.0), 48_000).unwrap();
-    evidence.updated_at_ms = analysis::now_ms();
+    let now = analysis::now_ms();
+    evidence.updated_at_ms = now;
     let context = MusicContext::signal_only(&evidence);
-    live_runtime(&store, "Headphones", &evidence, &context);
-    live_telemetry::refresh(&store);
-    let proposal = music_tuning::from_live(&store, "soft").unwrap();
+    live_runtime(&store, "Headphones", &evidence, &context, now);
+    let proposal = music_tuning::from_live_at(&store, "soft", now).unwrap();
     let original: serde_json::Value =
         maris::store::read_json(&store.directory.join("runtime.json")).unwrap();
 
@@ -333,11 +334,11 @@ fn apply_rejects_output_change_after_preview() {
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path());
     let mut evidence = analysis::measure(&tone(1000.0), 48_000).unwrap();
-    evidence.updated_at_ms = analysis::now_ms();
+    let now = analysis::now_ms();
+    evidence.updated_at_ms = now;
     let context = MusicContext::signal_only(&evidence);
-    live_runtime(&store, "Headphones", &evidence, &context);
-    live_telemetry::refresh(&store);
-    let proposal = music_tuning::from_live(&store, "balanced").unwrap();
+    live_runtime(&store, "Headphones", &evidence, &context, now);
+    let proposal = music_tuning::from_live_at(&store, "balanced", now).unwrap();
     let mut runtime: serde_json::Value =
         maris::store::read_json(&store.directory.join("runtime.json")).unwrap();
     runtime["output"] = serde_json::json!("MacBook Pro Speakers");
@@ -482,12 +483,12 @@ fn no_op_preview_preserves_revision_and_the_previous_undo_snapshot() {
     })
     .unwrap();
     let mut evidence = analysis::measure(&tone(1000.0), 48_000).unwrap();
-    evidence.updated_at_ms = analysis::now_ms();
+    let now = analysis::now_ms();
+    evidence.updated_at_ms = now;
     let context = MusicContext::signal_only(&evidence);
     let before = library.effective("Fixture");
-    live_runtime(&store, "Fixture", &evidence, &context);
-    live_telemetry::refresh(&store);
-    let proposal = music_tuning::from_live(&store, "balanced").unwrap();
+    live_runtime(&store, "Fixture", &evidence, &context, now);
+    let proposal = music_tuning::from_live_at(&store, "balanced", now).unwrap();
     assert_eq!(&proposal.profile, before);
     assert!(proposal.changes.is_empty());
     let mut tampered = proposal.clone();
