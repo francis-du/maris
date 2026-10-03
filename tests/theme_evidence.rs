@@ -29,6 +29,33 @@ fn semantic_theme_needs_explicit_mode_confidence_freshness_and_active_audio() {
 }
 
 #[test]
+fn semantic_timestamp_validation_keeps_exact_age_and_integer_boundaries() {
+    let mut runtime = semantic();
+    assert_eq!(theme::semantic_label(&runtime, 30_000), Some("electronic"));
+    assert!(theme::semantic_label(&runtime, 30_001).is_none());
+    for timestamp in [
+        Value::Null,
+        json!(-1),
+        json!(20_000.5),
+        json!("20000"),
+        json!(u64::MAX),
+    ] {
+        runtime["music_context"]["updated_at_ms"] = timestamp;
+        assert!(theme::semantic_label(&runtime, 30_000).is_none());
+    }
+    runtime["music_context"]["updated_at_ms"] = json!(u64::MAX - 10_000);
+    assert_eq!(
+        theme::semantic_label(&runtime, u64::MAX),
+        Some("electronic")
+    );
+    runtime["music_context"]
+        .as_object_mut()
+        .unwrap()
+        .remove("updated_at_ms");
+    assert!(theme::semantic_label(&runtime, 30_000).is_none());
+}
+
+#[test]
 fn inactive_signal_metrics_do_not_select_a_fake_live_theme() {
     let runtime = json!({"active":false,"analysis":{
         "band_energy_share":[0.8,0.1,0.1,0,0,0,0,0,0,0],
