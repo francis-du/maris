@@ -184,7 +184,11 @@ pub fn prepare(before: &MusicProfile, capability: &Capability, id: &str) -> Resu
     requested.enabled = before.enabled;
     requested.reference = before.reference;
     requested.level_match = before.level_match;
-    let mut profile = crate::devices::capability::apply_constraints(&requested, capability);
+    let mut profile = if effect_only(scene_id) {
+        requested.clone()
+    } else {
+        crate::devices::capability::apply_constraints(&requested, capability)
+    };
     if find(id).is_some() && profile.bass_assist.enabled {
         profile.bass_assist.enabled = capability.virtual_bass_allowed
             && capability.device_class.contains("speaker")
