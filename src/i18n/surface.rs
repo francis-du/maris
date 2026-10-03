@@ -79,6 +79,7 @@ pub const TRANSLATIONS: &[(&str, [&str; 5])] = &[
     ("Spatial effects", ["空间音效", "空間音效", "空間エフェクト", "Raumklang-Effekte", "Efectos espaciales"]),
     ("Listening presets", ["聆听预设", "聆聽預設", "リスニング設定", "Hörpresets", "Preajustes de escucha"]),
     ("Listening preset", ["聆听预设", "聆聽預設", "リスニング設定", "Hörpreset", "Preajuste de escucha"]),
+    ("Device listening preset; measured correction stays unchanged.", ["当前设备的聆听预设；测量校正保持不变。", "目前裝置的聆聽預設；測量校正維持不變。", "この出力のリスニング設定。測定補正は変更しません。", "Hörpreset für dieses Gerät; Messkorrektur bleibt unverändert.", "Preajuste de escucha del dispositivo; la corrección medida no cambia."]),
     ("Select an output or preset to preview", ["选择输出或预设可预览，确认后才应用", "選擇輸出或預設可預覽，確認後才套用", "出力・設定を選んで確認後に適用", "Ausgang oder Preset erst wählen, dann anwenden", "Elige salida o preajuste y confirma para aplicar"]),
     ("Output and preset selections apply immediately", ["选择输出或预设后立即生效", "選擇輸出或預設後立即生效", "出力・プリセットは選択するとすぐ適用されます", "Ausgangs- und Preset-Auswahl wird sofort angewendet", "La salida y los preajustes se aplican al seleccionarlos"]),
     ("Apply selection", ["应用所选项", "套用所選項", "選択を適用", "Auswahl anwenden", "Aplicar selección"]),
@@ -348,6 +349,7 @@ pub fn label(value: &str) -> &str {
 }
 
 pub fn preset_key<'a>(id: &str, original: &'a str) -> &'a str {
+    let id = id.strip_prefix("listening:").unwrap_or(id);
     if let Some(scene) = crate::presets::scenes::find(id) {
         return scene.name;
     }
@@ -366,7 +368,8 @@ pub fn preset_key<'a>(id: &str, original: &'a str) -> &'a str {
     }
 }
 pub fn preset_name<'a>(id: &str, original: &'a str) -> &'a str {
-    if crate::presets::scenes::find(id).is_some()
+    if id.starts_with("listening:")
+        || crate::presets::scenes::find(id).is_some()
         || id.starts_with("eqmac:")
         || crate::dsp::profile::PRESETS.contains(&id)
         || crate::dsp::music::PRESETS.contains(&id)
