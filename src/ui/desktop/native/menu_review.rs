@@ -8,17 +8,17 @@ fn heartbeat(store: &Store) -> Result<()> {
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-#[derive(Clone, Copy)]
-enum CaptureMode<'a> {
+#[derive(Clone)]
+enum CaptureMode {
     None,
     #[cfg(target_os = "macos")]
     All,
     #[cfg(target_os = "macos")]
-    One { state: &'a str, appearance: &'a str },
+    One { state: String, appearance: String },
 }
 #[cfg(target_os = "macos")]
-impl CaptureMode<'_> {
-    fn wants(self, state: &str, appearance: &str) -> bool {
+impl CaptureMode {
+    fn wants(&self, state: &str, appearance: &str) -> bool {
         match self {
             Self::None => false,
             Self::All => {
@@ -60,7 +60,7 @@ fn snapshot(view: &Indicator, locale: &str, state: &str, appearance: &str) -> Re
 }
 
 #[cfg(target_os = "macos")]
-fn state_review(view: &mut Indicator, locale: &str, capture: CaptureMode<'_>) -> Result<Value> {
+fn state_review(view: &mut Indicator, locale: &str, capture: &CaptureMode) -> Result<Value> {
     let store = view.store.clone();
     let original: Value = read_json(&store.directory.join("runtime.json"))?;
     let mut result = Vec::new();
@@ -139,7 +139,7 @@ fn state_review(view: &mut Indicator, locale: &str, capture: CaptureMode<'_>) ->
     view.refresh_quick_controls()?;
     let library = std::fs::read(store.directory.join("listening.json"))?;
     let lease = store.session_lock()?;
-    view.menu_action(
+    view._menu_action(
         MenuEvent {
             id: view.quit.id().clone(),
         },
@@ -155,7 +155,7 @@ fn state_review(view: &mut Indicator, locale: &str, capture: CaptureMode<'_>) ->
     ] {
         heartbeat(&store)?;
         ensure!(
-            view.menu_action(MenuEvent { id }, |_, _| Ok(None))
+            view._menu_action(MenuEvent { id }, |_, _| Ok(None))
                 .is_err_and(|error| error.to_string() == "Stopping audio"),
             "Queued native action bypassed the stopping guard"
         );
@@ -231,7 +231,7 @@ fn state_review(view: &mut Indicator, locale: &str, capture: CaptureMode<'_>) ->
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn run_impl(locale_filter: Option<&str>, capture: CaptureMode<'_>) -> Result<Value> {
+fn run_impl(locale_filter: Option<&str>, capture: CaptureMode) -> Result<Value> {
     #[cfg(not(target_os = "macos"))]
     let _ = capture;
     let _events = winit::event_loop::EventLoop::new()?;
@@ -253,7 +253,7 @@ fn run_impl(locale_filter: Option<&str>, capture: CaptureMode<'_>) -> Result<Val
         // The review never polls the menu event receiver or starts the application loop.
         heartbeat(&store)?;
         view.refresh_quick_controls()?;
-        let normal_items = view.menu.items().len();
+        let normal_items = view._menu.items().len();
         locales.push(json!({"language":code,"normal_items":normal_items,
                 "output":view.output_caption.text(),"listening":view.profile.text(),"eq":view.tone_caption.text(),
                 "presets":view.presets.iter().map(|(item,_)|item.text()).collect::<Vec<_>>(),
@@ -270,18 +270,18 @@ fn run_impl(locale_filter: Option<&str>, capture: CaptureMode<'_>) -> Result<Val
             .id()
             .clone();
         heartbeat(&store)?;
-        view.menu_action(MenuEvent { id: selected }, |_, _| {
+        view._menu_action(MenuEvent { id: selected }, |_, _| {
             bail!("Immediate native selection unexpectedly requested confirmation")
         })?;
         ensure!(
             crate::tuning::preferences::load(&store)?.revision == 1
                 && !view.controller.has_pending()
-                && view.menu.items().len() == normal_items,
+                && view._menu.items().len() == normal_items,
             "Native selection did not apply immediately or left pending controls"
         );
         for _ in 0..2 {
             heartbeat(&store)?;
-            view.menu_action(
+            view._menu_action(
                 MenuEvent {
                     id: view.compare.id().clone(),
                 },
@@ -289,7 +289,7 @@ fn run_impl(locale_filter: Option<&str>, capture: CaptureMode<'_>) -> Result<Val
             )?;
         }
         heartbeat(&store)?;
-        view.menu_action(
+        view._menu_action(
             MenuEvent {
                 id: view.undo.id().clone(),
             },
@@ -306,7 +306,7 @@ fn run_impl(locale_filter: Option<&str>, capture: CaptureMode<'_>) -> Result<Val
         );
 
         heartbeat(&store)?;
-        view.menu_action(
+        view._menu_action(
             MenuEvent {
                 id: view.follow.id().clone(),
             },
@@ -323,7 +323,7 @@ fn run_impl(locale_filter: Option<&str>, capture: CaptureMode<'_>) -> Result<Val
 
         #[cfg(target_os = "macos")]
         {
-            let states = state_review(&mut view, code, capture)?;
+            let states = state_review(&mut view, code, &capture)?;
             let record = locales.last_mut().context("Missing locale review")?;
             record["native_states"] = states;
         }
@@ -372,5 +372,11 @@ pub(super) fn run_capture_one(locale: &str, state: &str, appearance: &str) -> Re
         matches!(appearance, "light" | "dark"),
         "Unsupported menu-capture appearance"
     );
-    run_impl(Some(locale), CaptureMode::One { state, appearance })
+    run_impl(
+        Some(locale),
+        CaptureMode::One {
+            state: state.to_owned(),
+            appearance: appearance.to_owned(),
+        },
+    )
 }
