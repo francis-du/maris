@@ -241,7 +241,7 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
     process.send("e");
     output.clear();
     let start = Instant::now();
-    while !output.contains("Current") {
+    while !output.contains("Global EQ · all outputs") {
         process.drain(&mut output);
         assert!(
             start.elapsed() < Duration::from_secs(5),
