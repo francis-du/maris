@@ -321,7 +321,10 @@ fn scene_tools_preview_without_writes_and_apply_with_exact_listening_revision() 
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path());
     let catalog = mcp::invoke(&store, "maris_scenes", json!({}), false).unwrap();
-    assert_eq!(catalog["count"], 10);
+    assert_eq!(
+        catalog["count"].as_u64(),
+        Some(maris::scenes::SCENES.len() as u64)
+    );
     let args = json!({"name":"focus","device":"Headphones"});
     let preview = mcp::invoke(&store, "maris_scene_preview", args.clone(), false).unwrap();
     assert_eq!(preview["applied"], false);
