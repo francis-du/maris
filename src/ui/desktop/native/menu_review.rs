@@ -8,6 +8,31 @@ fn heartbeat(store: &Store) -> Result<()> {
 }
 
 #[cfg(target_os = "macos")]
+#[derive(Clone, Copy)]
+enum CaptureMode<'a> {
+    None,
+    All,
+    One { state: &'a str, appearance: &'a str },
+}
+#[cfg(target_os = "macos")]
+impl CaptureMode<'_> {
+    fn wants(self, state: &str, appearance: &str) -> bool {
+        match self {
+            Self::None => false,
+            Self::All => {
+                (state == "live" && matches!(appearance, "light" | "dark"))
+                    || (matches!(state, "idle" | "stale" | "failed" | "stopping" | "restore-failed")
+                        && appearance == "dark")
+            }
+            Self::One {
+                state: requested_state,
+                appearance: requested_appearance,
+            } => requested_state == state && requested_appearance == appearance,
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
 fn snapshot(view: &Indicator, locale: &str, state: &str, appearance: &str) -> Result<Value> {
     use crate::ui::desktop::menu_capture;
     let directory = std::path::Path::new(".maris-review/native-menu");
@@ -31,7 +56,7 @@ fn snapshot(view: &Indicator, locale: &str, state: &str, appearance: &str) -> Re
 }
 
 #[cfg(target_os = "macos")]
-fn state_review(view: &mut Indicator, locale: &str, capture: bool) -> Result<Value> {
+fn state_review(view: &mut Indicator, locale: &str, capture: CaptureMode<'_>) -> Result<Value> {
     let store = view.store.clone();
     let original: Value = read_json(&store.directory.join("runtime.json"))?;
     let mut result = Vec::new();
@@ -95,13 +120,11 @@ fn state_review(view: &mut Indicator, locale: &str, capture: bool) -> Result<Val
                 .is_some_and(|value| value.contains(t(expected))),
             "Native header did not expose the actual {name} state"
         );
-        if capture && matches!(locale, "en" | "zh-CN") {
-            if name == "live" {
-                for appearance in ["light", "dark"] {
+        if matches!(locale, "en" | "zh-CN") {
+            for appearance in ["light", "dark"] {
+                if capture.wants(name, appearance) {
                     result.push(snapshot(view, locale, name, appearance)?);
                 }
-            } else if matches!(name, "idle" | "stale" | "failed") {
-                result.push(snapshot(view, locale, name, "dark")?);
             }
         }
     }
@@ -183,7 +206,7 @@ fn state_review(view: &mut Indicator, locale: &str, capture: bool) -> Result<Val
                 .is_some_and(|value| value.contains(text)),
             "Native header lost {name} status"
         );
-        if capture && matches!(locale, "en" | "zh-CN") {
+        if matches!(locale, "en" | "zh-CN") && capture.wants(name, "dark") {
             result.push(snapshot(view, locale, name, "dark")?);
         }
     }
@@ -204,12 +227,15 @@ fn state_review(view: &mut Indicator, locale: &str, capture: bool) -> Result<Val
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-pub(super) fn run(capture: bool) -> Result<Value> {
+fn run_impl(locale_filter: Option<&str>, capture: CaptureMode<'_>) -> Result<Value> {
     #[cfg(not(target_os = "macos"))]
     let _ = capture;
     let _events = winit::event_loop::EventLoop::new()?;
     let mut locales = Vec::new();
     for code in crate::i18n::LANGUAGES {
+        if locale_filter.is_some_and(|requested| requested != code) {
+            continue;
+        }
         let directory = tempfile::tempdir()?;
         let store = Store::at(directory.path());
         crate::i18n::configure(&store, Some(code))?;
@@ -302,5 +328,48 @@ pub(super) fn run(capture: bool) -> Result<Value> {
         json!({"source":"isolated offline fixture","native_menu_construction":true,
             "native_event_dispatch":true,"immediate_selection_apply":true,"native_dialog_clicked":false,
             "audio_started":false,"hardware_validated":false,"locales":locales}),
+    )
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub(super) fn run(capture: bool) -> Result<Value> {
+    #[cfg(target_os = "macos")]
+    {
+        run_impl(
+            None,
+            if capture {
+                CaptureMode::All
+            } else {
+                CaptureMode::None
+            },
+        )
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = capture;
+        run_impl(None, CaptureMode::None)
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn run_capture_one(locale: &str, state: &str, appearance: &str) -> Result<Value> {
+    ensure!(
+        crate::i18n::LANGUAGES.contains(&locale),
+        "Unsupported menu-capture locale"
+    );
+    ensure!(
+        matches!(
+            state,
+            "live" | "idle" | "stale" | "failed" | "stopping" | "restore-failed"
+        ),
+        "Unsupported menu-capture state"
+    );
+    ensure!(
+        matches!(appearance, "light" | "dark"),
+        "Unsupported menu-capture appearance"
+    );
+    run_impl(
+        Some(locale),
+        CaptureMode::One { state, appearance },
     )
 }
