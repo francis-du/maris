@@ -105,6 +105,7 @@ fn configuration_warning_text_is_available_in_every_supported_language() {
 
 #[test]
 fn adjusting_a_draft_never_implicitly_enables_processing_or_exits_reference() {
+    let _clock = maris::analysis::DebugClock::freeze_at(maris::analysis::now_ms());
     let dir = tempfile::tempdir().unwrap();
     let store = Store::at(dir.path());
     let library = listening::edit(&store, Some(0), Some("Headphones"), |p| {
