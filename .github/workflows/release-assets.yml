@@ -13,6 +13,9 @@ jobs:
     if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    outputs:
+      publish: ${{ steps.release.outputs.publish }}
+      tag: ${{ steps.release.outputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -56,7 +59,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
         run: gh run download "$SOURCE_RUN_ID" --pattern 'maris-cli-*' --dir .release-download
-      - name: Verify manifest and prepare public assets
+      - name: Verify installer contract and prepare public assets
         if: steps.release.outputs.publish == 'true'
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
@@ -75,24 +78,42 @@ jobs:
           lines = manifest.read_text(encoding='ascii').splitlines()
           values = {}
           assets = []
+          seen_targets = set()
           for line in lines:
               fields = line.split('\t')
               if fields[0] == 'asset':
                   if len(fields) != 7:
                       raise SystemExit('invalid asset row in release manifest')
-                  assets.append(fields[1:])
+                  system, arch, name, archive_hash, archive_bytes, binary_hash = fields[1:]
+                  expected_name = f"Maris-{values.get('version', '')}-{system}-{arch}" + ('.zip' if system == 'windows' else '.tar.gz')
+                  if name != expected_name:
+                      raise SystemExit(f'installer-visible asset name mismatch: {name} != {expected_name}')
+                  if (system, arch) in seen_targets:
+                      raise SystemExit(f'duplicate installer target: {system}/{arch}')
+                  seen_targets.add((system, arch))
+                  assets.append((system, arch, name, archive_hash, archive_bytes, binary_hash))
               elif len(fields) == 2:
                   values[fields[0]] = fields[1]
+
           version = os.environ['RELEASE_TAG'].removeprefix('v')
+          expected_targets = {
+              ('macos', 'x86_64'), ('macos', 'arm64'),
+              ('linux', 'x86_64'), ('linux', 'arm64'),
+              ('windows', 'x86_64'), ('windows', 'arm64'),
+          }
+          if lines[0] != 'maris-release-v2':
+              raise SystemExit('installers require the v2 CLI release manifest')
           if values.get('version') != version or values.get('channel') != 'stable' or values.get('interface') != 'cli':
               raise SystemExit('assembled manifest is not the stable CLI release for this tag')
-          if len(assets) != 6:
-              raise SystemExit(f'expected six native assets, found {len(assets)}')
+          if seen_targets != expected_targets or len(lines) != 11:
+              raise SystemExit('manifest must contain exactly the six installer-supported native targets')
 
           out = Path('.release-upload')
           out.mkdir()
           copied = []
           for system, arch, name, expected_hash, expected_bytes, binary_hash in assets:
+              if len(expected_hash) != 64 or len(binary_hash) != 64:
+                  raise SystemExit(f'invalid checksum field for {name}')
               matches = [p for p in root.rglob(name) if p.is_file()]
               if len(matches) != 1:
                   raise SystemExit(f'expected one {name}, found {len(matches)}')
@@ -113,10 +134,51 @@ jobs:
               sums.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}")
           (out / 'SHA256SUMS').write_text('\n'.join(sums) + '\n', encoding='ascii', newline='\n')
           PY
-      - name: Upload verified assets to GitHub Release
+      - name: Upload installer-consumable assets to GitHub Release
         if: steps.release.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: gh release upload "$RELEASE_TAG" .release-upload/* --clobber
+
+  public-install-smoke:
+    needs: publish
+    if: needs.publish.outputs.publish == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel, ubuntu-24.04, ubuntu-24.04-arm, windows-2025, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.publish.outputs.tag }}
+          persist-credentials: false
+      - name: Install from the public Release with install.sh
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.publish.outputs.tag }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          prefix="$HOME/maris-public-release-smoke"
+          rm -rf "$prefix"
+          bash install.sh --version "$version" --prefix "$prefix" --yes
+          "$prefix/bin/maris" --version
+          rm -rf "$prefix"
+      - name: Install from the public Release with install.ps1
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ needs.publish.outputs.tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = $env:RELEASE_TAG -replace '^v', ''
+          $prefix = Join-Path $env:USERPROFILE 'maris-public-release-smoke'
+          if (Test-Path -LiteralPath $prefix) { Remove-Item -LiteralPath $prefix -Recurse -Force }
+          & ./install.ps1 -Version $version -Prefix $prefix -Yes
+          & (Join-Path $prefix 'Maris\bin\maris.exe') --version
+          Remove-Item -LiteralPath $prefix -Recurse -Force
