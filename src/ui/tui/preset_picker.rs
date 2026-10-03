@@ -20,10 +20,11 @@ fn matches_current(
     music: &MusicProfile,
     runtime: &Value,
 ) -> bool {
-    if preset.category == "scene" {
+    if matches!(preset.category, "scene" | "listening") {
         let capability =
             serde_json::from_value(runtime["device_capability"].clone()).unwrap_or_default();
-        return crate::presets::scenes::prepare(music, &capability, &preset.id)
+        let id = preset.id.strip_prefix("listening:").unwrap_or(&preset.id);
+        return crate::presets::scenes::prepare(music, &capability, id)
             .is_ok_and(|preview| preview.profile == *music);
     }
     let rate = runtime["sample_rate"]
@@ -54,7 +55,7 @@ pub fn preferred_choice(
     };
     if let Some(scene_layer) = changed_layer {
         if let Some(index) = presets.iter().position(|preset| {
-            (preset.category == "scene") == scene_layer
+            matches!(preset.category, "scene" | "listening") == scene_layer
                 && matches_current(preset, snapshot, music, runtime)
         }) {
             return Some(index);
