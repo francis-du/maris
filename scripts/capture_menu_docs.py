@@ -217,12 +217,24 @@ def main() -> None:
         stdout=subprocess.DEVNULL,
     )
     binary = root / 'target' / 'debug' / 'examples' / ('menu_probe.exe' if os.name == 'nt' else 'menu_probe')
+    # First prove the production native-menu event path terminates without any
+    # screenshot work. A hang here is a control bug, not a slow AppKit capture.
+    subprocess.run(
+        [str(binary)],
+        cwd=root,
+        env=environment,
+        check=True,
+        timeout=45,
+        stdout=subprocess.DEVNULL,
+    )
+    # Capturing many six-language AppKit states can be materially slower on
+    # shared macOS runners. The control path above already proved bounded.
     subprocess.run(
         [str(binary), '--capture'],
         cwd=root,
         env=environment,
         check=True,
-        timeout=120,
+        timeout=240,
         stdout=subprocess.DEVNULL,
     )
     if source_hashes(root) != before:
