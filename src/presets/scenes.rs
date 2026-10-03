@@ -212,7 +212,7 @@ pub fn prepare(before: &MusicProfile, capability: &Capability, id: &str) -> Resu
     Ok(Preview {
         id: id.to_owned(),
         changes: crate::tuning::planner::describe_changes(before, &profile),
-        device_constraints_applied: profile != requested,
+        device_constraints_applied: !effect_only(scene_id) && profile != requested,
         compression_enabled: profile.compressor.enabled,
         correction_preserved: true,
         profile,
