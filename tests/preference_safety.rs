@@ -244,6 +244,30 @@ fn implicit_cli_writes_never_fall_back_to_default_when_current_output_is_unknown
 }
 
 #[test]
+fn cli_sound_set_preserves_processing_and_reference_policy() {
+    let (_dir, store) = store();
+    listening::edit(&store, Some(0), Some("Headphones"), |p| {
+        p.enabled = false;
+        p.reference = true;
+        Ok(())
+    })
+    .unwrap();
+
+    sound_cli::run(
+        &store,
+        Some("Headphones".into()),
+        Some(1),
+        set_bass(Some(1.0)),
+    )
+    .unwrap();
+    let state = listening::load(&store).unwrap();
+    let profile = state.effective("Headphones");
+    assert_eq!(profile.bass_db, 1.0);
+    assert!(!profile.enabled);
+    assert!(profile.reference);
+}
+
+#[test]
 fn explicit_cli_defaults_and_named_offline_profiles_still_work() {
     let (_dir, store) = store();
     sound_cli::run(&store, Some("default".into()), Some(0), set_bass(Some(0.5))).unwrap();
