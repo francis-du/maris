@@ -26,4 +26,4 @@ Maris begrenzt digitale Signalspitzen. Das ist kein Gehörschutz; höre auch bei
 
 Audioanalyse und MusicNN-Musikerkennung laufen lokal, ohne die ursprünglichen Audiodaten hochzuladen. Erkennungsergebnisse können Klangvorschläge unterstützen; Änderungen brauchen weiterhin deine Bestätigung. Sprach-Entrauschung ist separat und bei normaler Musik nicht eingeschaltet.
 
-Der Quellcode enthält Systemaudio-Verarbeitung für macOS, Windows und Linux sowie einen Mixer mit mehreren Eingängen und zwei Ausgängen. Apps können eigene Kanäle für Lautstärke, EQ und Kompression verwenden. Ausstehende OS- und Gerätetests stehen im [Freigabestatus](status.md). Die Bilder wurden von der App mit Testaudio erzeugt und sind keine Hörtest-Protokolle.
+Der Quellcode enthält Systemaudio-Verarbeitung für macOS, Windows und Linux sowie einen Mixer mit mehreren Eingängen und zwei Ausgängen. Apps können eigene Kanäle für Lautstärke, EQ und Kompression verwenden. Die Bilder wurden von der App mit Testaudio erzeugt und sind keine Hörtest-Protokolle.
