@@ -12,6 +12,8 @@ use serde_json::json;
 
 #[test]
 fn six_languages_cover_pending_current_draft_apply_cancel_and_compact_notice() {
+    let now = maris::analysis::now_ms();
+    let _clock = maris::analysis::DebugClock::freeze_at(now);
     for locale in i18n::LANGUAGES {
         let directory = tempfile::tempdir().unwrap();
         let store = Store::at(directory.path());
