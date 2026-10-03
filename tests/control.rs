@@ -21,6 +21,7 @@ fn active_native(store: &Store) {
 
 #[test]
 fn output_switch_command_pins_and_releases_native_output() {
+    let _clock = maris::analysis::DebugClock::freeze_at(maris::analysis::now_ms());
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path());
     active_native(&store);
@@ -46,6 +47,7 @@ fn output_switch_command_pins_and_releases_native_output() {
 
 #[test]
 fn application_switch_command_is_session_bound_and_supports_system_scope() {
+    let _clock = maris::analysis::DebugClock::freeze_at(maris::analysis::now_ms());
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path());
     active_native(&store);
@@ -68,6 +70,7 @@ fn application_switch_command_is_session_bound_and_supports_system_scope() {
 
 #[test]
 fn application_switch_rejects_invalid_or_duplicate_pids() {
+    let _clock = maris::analysis::DebugClock::freeze_at(maris::analysis::now_ms());
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path());
     active_native(&store);
