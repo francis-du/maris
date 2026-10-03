@@ -264,6 +264,73 @@ fn prepared_replacement_proves_callback_readiness_without_consuming_or_publishin
 }
 
 #[test]
+fn a_short_missed_native_deadline_restarts_before_replaying_old_pcm() {
+    let metrics = Arc::new(Metrics::default());
+    let mut renderer = Renderer::new(
+        settings(),
+        48_000,
+        Arc::new(ArrayQueue::new(8)),
+        metrics.clone(),
+    );
+    let now = Instant::now();
+    let mut data = [0.0_f32; 512]; // 256 stereo frames ~= 5.33 ms.
+    let period = Duration::from_secs_f64(256.0 / 48_000.0);
+    for index in 0..12_u32 {
+        renderer.render_at(
+            &mut data,
+            2,
+            || ([0.5, -0.5], true),
+            now + period.mul_f64(f64::from(index)),
+        );
+    }
+    assert!((data[0] - 0.5).abs() < 1e-5);
+
+    let previous = now + period.mul_f64(11.0);
+    renderer.render_at(
+        &mut data,
+        2,
+        || ([-0.5, 0.5], true),
+        previous + Duration::from_millis(11),
+    );
+    assert!(
+        data[0].abs() < 0.001,
+        "a short missed hardware deadline replayed queued PCM at full amplitude"
+    );
+    assert_eq!(metrics.callback_discontinuities.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+fn native_callback_jitter_inside_the_deadline_budget_does_not_reset_audio() {
+    let metrics = Arc::new(Metrics::default());
+    let mut renderer = Renderer::new(
+        settings(),
+        48_000,
+        Arc::new(ArrayQueue::new(8)),
+        metrics.clone(),
+    );
+    let now = Instant::now();
+    let mut data = [0.0_f32; 512];
+    let period = Duration::from_secs_f64(256.0 / 48_000.0);
+    for index in 0..12_u32 {
+        renderer.render_at(
+            &mut data,
+            2,
+            || ([0.25, -0.25], true),
+            now + period.mul_f64(f64::from(index)),
+        );
+    }
+    let previous = now + period.mul_f64(11.0);
+    renderer.render_at(
+        &mut data,
+        2,
+        || ([0.25, -0.25], true),
+        previous + Duration::from_millis(8),
+    );
+    assert_eq!(metrics.callback_discontinuities.load(Ordering::Relaxed), 0);
+    assert!((data[0] - 0.25).abs() < 1e-5);
+}
+
+#[test]
 fn a_late_native_callback_restarts_from_silence_without_replaying_old_pcm() {
     let metrics = Arc::new(Metrics::default());
     let mut renderer = Renderer::new(
