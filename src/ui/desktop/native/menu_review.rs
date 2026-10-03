@@ -100,7 +100,6 @@ fn state_review(view: &mut Indicator, locale: &str, capture: bool) -> Result<Val
                 result.push(snapshot(view, locale, name, appearance)?);
             }
         }
-
     }
     // Hold only this fixture's session lease. Quit must render the real stopping
     // branch, while already queued mutations must not change the saved settings.

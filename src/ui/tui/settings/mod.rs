@@ -20,7 +20,8 @@ pub use view::{browser_rows, draw, group_rects, layout, pointer_action, Areas};
 
 /// Existing row IDs are stable. Sections separate tone, shared EQ and playback policy.
 pub const ROW_ORDER: [usize; 28] = [
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 26, 27, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 10, 12, 13, 14, 15, 11,
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 26, 27, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 10, 12, 13, 14,
+    15, 11,
 ];
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Group {

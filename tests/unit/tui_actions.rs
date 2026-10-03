@@ -317,11 +317,21 @@ fn preset_picker_prefers_the_last_applied_layer_when_both_scene_and_eq_match() {
     });
 
     assert_eq!(
-        preset_picker::preferred_choice(&presets, scene_index, &snapshot, &music, &runtime, false, false),
+        preset_picker::preferred_choice(
+            &presets,
+            scene_index,
+            &snapshot,
+            &music,
+            &runtime,
+            false,
+            false
+        ),
         Some(scene_index)
     );
     assert_eq!(
-        preset_picker::preferred_choice(&presets, eq_index, &snapshot, &music, &runtime, false, false),
+        preset_picker::preferred_choice(
+            &presets, eq_index, &snapshot, &music, &runtime, false, false
+        ),
         Some(eq_index),
         "the picker should remember whether the user last applied the scene or EQ layer"
     );
@@ -335,7 +345,10 @@ fn preset_picker_prioritizes_the_layer_changed_by_an_external_surface() {
         .iter()
         .position(|preset| preset.id == "scene:dialogue")
         .unwrap();
-    let eq_index = presets.iter().position(|preset| preset.id == "warm").unwrap();
+    let eq_index = presets
+        .iter()
+        .position(|preset| preset.id == "warm")
+        .unwrap();
     let mut snapshot = crate::store::Snapshot::default();
     snapshot.profile = crate::presets::apply_tone_curve(&snapshot.profile, "warm", 48_000).unwrap();
     let music = crate::scenes::prepare(
@@ -352,13 +365,7 @@ fn preset_picker_prioritizes_the_layer_changed_by_an_external_surface() {
 
     assert_eq!(
         preset_picker::preferred_choice(
-            &presets,
-            eq_index,
-            &snapshot,
-            &music,
-            &runtime,
-            false,
-            true,
+            &presets, eq_index, &snapshot, &music, &runtime, false, true,
         ),
         Some(scene_index),
         "a Menu Bar/listening edit must become the visible TUI selection"
@@ -393,14 +400,18 @@ fn preset_picker_drops_a_preferred_row_after_that_layer_is_manually_changed() {
         "device_capability": crate::device_profile::Capability::default()
     });
     assert_eq!(
-        preset_picker::preferred_choice(&presets, warm_index, &snapshot, &music, &runtime, false, false),
+        preset_picker::preferred_choice(
+            &presets, warm_index, &snapshot, &music, &runtime, false, false
+        ),
         Some(warm_index)
     );
 
     snapshot.profile.bands[0].gain_db += 0.5;
     snapshot.profile.name = "custom".into();
     assert_ne!(
-        preset_picker::preferred_choice(&presets, warm_index, &snapshot, &music, &runtime, false, false),
+        preset_picker::preferred_choice(
+            &presets, warm_index, &snapshot, &music, &runtime, false, false
+        ),
         Some(warm_index)
     );
 }

@@ -624,16 +624,11 @@ impl Processor {
         if s.virtual_surround > 1e-9 && side.abs() > 1e-15 {
             // Spatialize only the Side channel above the bass region. Mono/center
             // content has Side=0 and therefore remains bit-for-bit centered.
-            let high = self
-                .surround_highpass
-                .process(side, s.surround_highpass);
-            let phased = self
-                .surround_allpass_b
-                .process(
-                    self.surround_allpass_a
-                        .process(high, s.surround_allpass_a),
-                    s.surround_allpass_b,
-                );
+            let high = self.surround_highpass.process(side, s.surround_highpass);
+            let phased = self.surround_allpass_b.process(
+                self.surround_allpass_a.process(high, s.surround_allpass_a),
+                s.surround_allpass_b,
+            );
             side += (phased - high) * s.virtual_surround;
         }
         side *= (1.0 - 0.75 * s.stereo_focus) * s.width;

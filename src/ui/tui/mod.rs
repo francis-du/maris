@@ -566,9 +566,7 @@ pub fn run(
                                     let applied =
                                         store.edit(Some(snapshot.revision), |current| {
                                             *current = crate::presets::apply_tone_curve(
-                                                current,
-                                                &preset.id,
-                                                rate,
+                                                current, &preset.id, rate,
                                             )?;
                                             Ok(())
                                         })?;

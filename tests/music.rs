@@ -275,7 +275,10 @@ fn stereo_focus_reduces_side_without_moving_mid() {
             wet += fb[0] * fb[0];
         }
     }
-    assert!(wet < dry * 0.08, "Stereo Focus did not sufficiently reduce Side energy");
+    assert!(
+        wet < dry * 0.08,
+        "Stereo Focus did not sufficiently reduce Side energy"
+    );
 }
 
 fn harmonic_amplitude(profile: &MusicProfile, input_hz: f64, measure_hz: f64) -> f64 {

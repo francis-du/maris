@@ -457,7 +457,8 @@ fn draw_output_picker(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
             Style::default().fg(view.palette.text)
         })
     }));
-    let areas = super::output_picker::layout(area, outputs.len().saturating_add(1), view.output_choice);
+    let areas =
+        super::output_picker::layout(area, outputs.len().saturating_add(1), view.output_choice);
     let rect = areas.modal;
     frame.render_widget(Clear, rect);
     let mut state = TableState::default()
@@ -647,4 +648,3 @@ fn modal_block(title: &str, palette: Palette) -> Block<'static> {
         .border_style(Style::default().fg(palette.accent))
         .style(Style::default().bg(palette.panel).fg(palette.text))
 }
-

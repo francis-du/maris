@@ -122,7 +122,6 @@ fn representative_presets_remain_finite_and_peak_limited_on_full_scale_material(
     }
 }
 
-
 #[test]
 fn applying_a_tone_curve_preserves_independent_global_controls() {
     let current = maris::profile::Profile {

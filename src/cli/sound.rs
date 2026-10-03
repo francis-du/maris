@@ -277,7 +277,10 @@ pub fn run(
                         p.width = v;
                     }
                     if let Some(v) = virtual_surround {
-                        ensure!((0.0..=1.0).contains(&v), "virtual-surround must be in [0, 1]");
+                        ensure!(
+                            (0.0..=1.0).contains(&v),
+                            "virtual-surround must be in [0, 1]"
+                        );
                         p.virtual_surround = v;
                     }
                     if let Some(v) = stereo_focus {

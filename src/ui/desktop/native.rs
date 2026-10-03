@@ -81,7 +81,11 @@ impl Indicator {
         output_menu.append(&follow)?;
         let compare = MenuItem::new(t("Compare reference / enhanced"), false, None);
         let undo = MenuItem::new(t("Undo listening change"), false, None);
-        let notice = MenuItem::new(t("Output and preset selections apply immediately"), false, None);
+        let notice = MenuItem::new(
+            t("Output and preset selections apply immediately"),
+            false,
+            None,
+        );
         menu.append_items(&[
             &status,
             &output_caption,
@@ -357,11 +361,7 @@ impl Indicator {
                 .any(|(item, _)| event.id == *item.id());
         #[cfg(target_os = "macos")]
         let passive = passive || event.id == *self.mini.id();
-        if self.closing
-            && !passive
-            && event.id != *self.stop.id()
-            && event.id != *self.quit.id()
-        {
+        if self.closing && !passive && event.id != *self.stop.id() && event.id != *self.quit.id() {
             bail!("Stopping audio");
         }
         #[cfg(target_os = "macos")]

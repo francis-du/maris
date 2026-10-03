@@ -277,13 +277,8 @@ pub fn adjusted_profile(
         7 => target.width = (before.width + direction * 0.05).clamp(0.0, 1.5),
         8 => target.balance = (before.balance + direction * 0.05).clamp(-1.0, 1.0),
         9 => target.compressor.enabled = direction > 0.0,
-        10 => {
-            target.virtual_surround =
-                (before.virtual_surround + direction * 0.1).clamp(0.0, 1.0)
-        }
-        11 => {
-            target.stereo_focus = (before.stereo_focus + direction * 0.1).clamp(0.0, 1.0)
-        }
+        10 => target.virtual_surround = (before.virtual_surround + direction * 0.1).clamp(0.0, 1.0),
+        11 => target.stereo_focus = (before.stereo_focus + direction * 0.1).clamp(0.0, 1.0),
         _ => unreachable!("validated sound row"),
     }
     // A no-op must not activate processing, exit A/B, materialize a device entry or
