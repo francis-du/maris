@@ -44,6 +44,8 @@ fn correction_and_enhancements_remain_finite_and_limited() {
             presence_db: 3.0,
             air_db: 3.0,
             width: 1.5,
+            virtual_surround: 1.0,
+            stereo_focus: 0.5,
             ..MusicProfile::default()
         };
         let mut dsp = Processor::new(
@@ -145,6 +147,8 @@ fn output_switch_baseline_preserves_correction_but_neutralizes_subjective_contro
     assert_eq!(baseline.air_db, 0.0);
     assert_eq!(baseline.width, 1.0);
     assert_eq!(baseline.balance, 0.0);
+    assert_eq!(baseline.virtual_surround, 0.0);
+    assert_eq!(baseline.stereo_focus, 0.0);
     assert!(!baseline.compressor.enabled);
     assert!(!baseline.adaptive.enabled);
     assert!(!baseline.bass_assist.enabled);
@@ -163,6 +167,12 @@ fn invalid_music_settings_are_rejected() {
     p.width = 10.0;
     assert!(p.validate().is_err());
     p.width = 1.0;
+    p.virtual_surround = 1.1;
+    assert!(p.validate().is_err());
+    p.virtual_surround = 0.0;
+    p.stereo_focus = -0.1;
+    assert!(p.validate().is_err());
+    p.stereo_focus = 0.0;
     p.highpass_hz = Some(15000.0);
     assert!(p.validate().is_err());
 }
@@ -193,6 +203,79 @@ fn stereo_width_preserves_center_level() {
         gain_db.abs() < 0.02,
         "Stereo width attenuated centered content by {gain_db:.3} dB"
     );
+}
+
+#[test]
+fn virtual_surround_keeps_mono_center_unchanged() {
+    let profile = MusicProfile {
+        virtual_surround: 1.0,
+        level_match: false,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        ..MusicProfile::default()
+    };
+    let mut processor = maris::music::Processor::new(profile.compile(48000).unwrap());
+    for i in 0..48000 {
+        let x = 0.15 * (std::f64::consts::TAU * 440.0 * i as f64 / 48000.0).sin();
+        let y = processor.process([x, x]);
+        assert!((y[0] - x).abs() < 1e-10);
+        assert!((y[1] - x).abs() < 1e-10);
+    }
+}
+
+#[test]
+fn virtual_surround_decorrelates_side_but_preserves_center_sum() {
+    let profile = MusicProfile {
+        virtual_surround: 0.8,
+        level_match: false,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        ..MusicProfile::default()
+    };
+    let mut processor = maris::music::Processor::new(profile.compile(48000).unwrap());
+    let mut changed = 0.0;
+    for i in 0..96000 {
+        let x = 0.12 * (std::f64::consts::TAU * 4000.0 * i as f64 / 48000.0).sin();
+        let y = processor.process([x, -x]);
+        assert!((y[0] + y[1]).abs() < 1e-10);
+        if i > 48000 {
+            changed += (y[0] - x).abs();
+        }
+    }
+    assert!(changed > 10.0, "Virtual 360 did not alter the Side phase");
+}
+
+#[test]
+fn stereo_focus_reduces_side_without_moving_mid() {
+    let base = MusicProfile {
+        level_match: false,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        ..MusicProfile::default()
+    };
+    let mut focused = base.clone();
+    focused.stereo_focus = 1.0;
+    let mut a = maris::music::Processor::new(base.compile(48000).unwrap());
+    let mut b = maris::music::Processor::new(focused.compile(48000).unwrap());
+    let mut dry = 0.0;
+    let mut wet = 0.0;
+    for i in 0..96000 {
+        let x = 0.1 * (std::f64::consts::TAU * 1000.0 * i as f64 / 48000.0).sin();
+        let da = a.process([x, -x]);
+        let fb = b.process([x, -x]);
+        assert!((fb[0] + fb[1]).abs() < 1e-10);
+        if i > 48000 {
+            dry += da[0] * da[0];
+            wet += fb[0] * fb[0];
+        }
+    }
+    assert!(wet < dry * 0.08, "Stereo Focus did not sufficiently reduce Side energy");
 }
 
 fn harmonic_amplitude(profile: &MusicProfile, input_hz: f64, measure_hz: f64) -> f64 {
