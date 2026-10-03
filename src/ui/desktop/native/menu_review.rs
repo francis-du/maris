@@ -14,7 +14,10 @@ enum CaptureMode {
     #[cfg(target_os = "macos")]
     All,
     #[cfg(target_os = "macos")]
-    One { state: String, appearance: String },
+    One {
+        state: String,
+        appearance: String,
+    },
 }
 #[cfg(target_os = "macos")]
 impl CaptureMode {
