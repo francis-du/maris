@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   normalize:
-    runs-on: ubuntu-24.04
+    runs-on: macos-15
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -19,18 +19,19 @@ jobs:
           python-version: '3.12'
       - name: Install declared Rust toolchain
         run: rustup toolchain install 1.94.0 --profile minimal --component rustfmt
-      - name: Install Linux audio build headers
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config psmisc pulseaudio pulseaudio-utils
       - name: Normalize Rust formatting
         run: cargo fmt --all
       - name: Verify actual TUI probe before generating docs
         run: cargo run --locked --example ui_probe -- --locales
       - name: Regenerate final TUI documentation assets
         run: python scripts/docs_assets.py --refresh
+      - name: Regenerate actual offline AppKit Menu Bar documentation
+        run: python scripts/capture_menu_docs.py --refresh
       - name: Validate source/docs and formatting
         run: |
           cargo fmt --all --check
           python scripts/docs_assets.py
+          python scripts/capture_menu_docs.py
           python scripts/source_audit.py
           python scripts/site.py --check
           python -m unittest discover -s tests/tooling -v
@@ -42,13 +43,13 @@ jobs:
           mapfile -t changed < <(git diff --name-only)
           for path in "${changed[@]}"; do
             case "$path" in
-              *.rs|docs/assets/studio-*.svg|docs/assets/settings-*.svg|docs/assets/presets-*.svg|docs/assets/illustrations.json) ;;
+              *.rs|docs/assets/studio-*.svg|docs/assets/settings-*.svg|docs/assets/presets-*.svg|docs/assets/illustrations.json|docs/assets/menu-bar-*.svg|docs/assets/menu-bar-review-manifest.json) ;;
               *) echo "Unexpected normalize change: $path" >&2; exit 1 ;;
             esac
           done
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- '*.rs' docs/assets/studio-*.svg docs/assets/settings-*.svg docs/assets/presets-*.svg docs/assets/illustrations.json
+          git add -- '*.rs' docs/assets/studio-*.svg docs/assets/settings-*.svg docs/assets/presets-*.svg docs/assets/illustrations.json docs/assets/menu-bar-*.svg docs/assets/menu-bar-review-manifest.json
           git rm .github/workflows/release-candidate-normalize.yml
           if git diff --cached --quiet; then
             echo "No normalization changes to commit" >&2
