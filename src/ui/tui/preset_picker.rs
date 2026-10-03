@@ -42,7 +42,24 @@ pub fn preferred_choice(
     snapshot: &Snapshot,
     music: &MusicProfile,
     runtime: &Value,
+    eq_changed: bool,
+    listening_changed: bool,
 ) -> Option<usize> {
+    let changed_layer = if listening_changed && !eq_changed {
+        Some(true)
+    } else if eq_changed && !listening_changed {
+        Some(false)
+    } else {
+        None
+    };
+    if let Some(scene_layer) = changed_layer {
+        if let Some(index) = presets.iter().position(|preset| {
+            (preset.category == "scene") == scene_layer
+                && matches_current(preset, snapshot, music, runtime)
+        }) {
+            return Some(index);
+        }
+    }
     presets
         .get(preferred)
         .filter(|preset| matches_current(preset, snapshot, music, runtime))
