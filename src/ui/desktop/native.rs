@@ -417,7 +417,7 @@ impl Indicator {
     fn menu_action(
         &mut self,
         event: MenuEvent,
-        confirm: impl FnOnce(&str, &[String]) -> Result<Option<bool>>,
+        _confirm: impl FnOnce(&str, &[String]) -> Result<Option<bool>>,
     ) -> Result<()> {
         let passive = event.id == *self.open.id()
             || self
@@ -439,9 +439,6 @@ impl Indicator {
             self.hud.toggle();
             return Ok(());
         }
-        let preview = event.id == *self.follow.id()
-            || self.outputs.iter().any(|(item, _)| event.id == *item.id())
-            || self.presets.iter().any(|(item, _)| event.id == *item.id());
         let result = (|| {
             if event.id == *self.open.id() {
                 events::open_console(&self.store)?;
@@ -456,14 +453,15 @@ impl Indicator {
                 self.controller.undo(&self.store)?;
             } else if event.id == *self.follow.id() {
                 self.controller.select_output(&self.store, None, &[])?;
+                self.controller
+                    .apply(&self.store, &audio::console_devices()?)?;
             } else if let Some((_, device)) =
                 self.outputs.iter().find(|(item, _)| event.id == *item.id())
             {
-                self.controller.select_output(
-                    &self.store,
-                    Some(&device.id),
-                    &audio::console_devices()?,
-                )?;
+                let inventory = audio::console_devices()?;
+                self.controller
+                    .select_output(&self.store, Some(&device.id), &inventory)?;
+                self.controller.apply(&self.store, &inventory)?;
             } else if let Some((_, code)) = self
                 .languages
                 .iter()
@@ -483,20 +481,7 @@ impl Indicator {
                 self.presets.iter().find(|(item, _)| event.id == *item.id())
             {
                 self.controller.select_preset(&self.store, name)?;
-            }
-            if preview && self.controller.has_pending() {
-                // Native menus close on selection. Present the review immediately instead
-                // of requiring users to discover newly inserted rows by opening it again.
-                match confirm(
-                    &self.controller.apply_title(),
-                    &self.controller.preview_lines(),
-                )? {
-                    Some(true) => self
-                        .controller
-                        .apply(&self.store, &audio::console_devices()?)?,
-                    Some(false) => self.controller.cancel(),
-                    None => {} // Linux retains the explicit in-menu Apply/Cancel fallback.
-                }
+                self.controller.apply(&self.store, &[])?;
             }
             Ok(())
         })();
