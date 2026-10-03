@@ -1,5 +1,5 @@
 //! Menu Bar quick controls. No callback, platform-device mutation or model code lives here.
-//! A selection is an in-memory preview; explicit apply uses the shared validated control paths.
+//! Native selection builds a guarded transaction that the Menu Bar applies in the same event.
 use crate::{
     audio::{self, DeviceInfo},
     control::store::{Snapshot, Store},
