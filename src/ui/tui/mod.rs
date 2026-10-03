@@ -143,6 +143,7 @@ pub fn run(
         0
     };
     let mut preset_choice = 0_usize;
+    let mut preset_revisions: Option<(u64, u64)> = None;
     let mut goal_index = 0_usize;
     let mut proposal: Option<Proposal> = None;
     let mut motion = crate::analysis::spectrum::Motion::default();
@@ -788,14 +789,26 @@ pub fn run(
                         snapshot.revision,
                         crate::analysis::now_ms(),
                     ));
+                    let (eq_changed, listening_changed) = preset_revisions.map_or(
+                        (false, false),
+                        |(eq, listening)| {
+                            (
+                                eq != snapshot.revision,
+                                listening != listening.revision,
+                            )
+                        },
+                    );
                     preset_choice = preset_picker::preferred_choice(
                         &presets,
                         preset_choice,
                         &snapshot,
                         music,
                         &runtime,
+                        eq_changed,
+                        listening_changed,
                     )
                     .unwrap_or_else(|| preset_choice.min(presets.len().saturating_sub(1)));
+                    preset_revisions = Some((snapshot.revision, listening.revision));
                     overlay = Overlay::Preset;
                 }
                 KeyCode::Char('b') => {
