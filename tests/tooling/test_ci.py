@@ -146,6 +146,8 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn("Reuse exact existing installer assets without clobbering", publish)
         self.assertIn('gh release download "$RELEASE_TAG"', publish)
         self.assertIn("cmp -s", publish)
+        self.assertIn("mode=resume", publish)
+        self.assertIn(".release-publish/*", publish)
         self.assertIn("cleanup: ${{ steps.assets.outputs.cleanup }}", publish)
         self.assertIn("needs.publish.outputs.cleanup == 'true'", publish)
         self.assertIn("maris-release.tsv", publish)
@@ -153,7 +155,7 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn("bash install.sh --version", publish)
         self.assertIn("& ./install.ps1 -Version", publish)
         public_smoke = publish.split('  public-install-smoke:', 1)[1].split('  remove-uninstallable-assets:', 1)[0]
-        self.assertIn("if: needs.publish.outputs.mode == 'fresh'", public_smoke)
+        self.assertIn("if: needs.publish.outputs.mode != 'reuse'", public_smoke)
         self.assertIn('ref: ${{ github.event.workflow_run.head_sha }}', public_smoke)
         self.assertIn("if: needs.publish.outputs.mode == 'reuse'", public_smoke)
         self.assertIn('ref: ${{ github.event.repository.default_branch }}', public_smoke)
@@ -167,7 +169,7 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn("remove-uninstallable-assets:", publish)
         self.assertIn("gh release delete-asset", publish)
         self.assertIn(
-            "always() && needs.publish.outputs.publish == 'true' && needs.publish.outputs.cleanup == 'true' && needs.public-install-smoke.result != 'success'",
+            "always() && needs.publish.outputs.publish == 'true' && needs.publish.outputs.cleanup == 'true' && (needs.publish.result != 'success' || needs.public-install-smoke.result != 'success')",
             publish,
         )
         self.assertNotIn("if: failure() && needs.publish.outputs.publish == 'true'", publish)
@@ -214,7 +216,7 @@ class ToolchainRequirements(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
 
     @unittest.skipUnless(BASH, 'Bash release idempotency execution required')
-    def test_release_asset_publication_reuses_exact_assets_and_refuses_partial_or_different_sets(self):
+    def test_release_asset_publication_reuses_or_resumes_exact_assets_and_refuses_different_sets(self):
         text = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
         block = re.search(
             r'      - name: Reuse exact existing installer assets without clobbering\n'
@@ -266,6 +268,11 @@ class ToolchainRequirements(unittest.TestCase):
             gh.chmod(0o755)
             assets = root / 'assets'
             output = root / 'github-output'
+
+            def reset_workdirs():
+                for name in ('.release-existing', '.release-publish'):
+                    shutil.rmtree(root / name, ignore_errors=True)
+
             environment = dict(
                 os.environ,
                 PATH=str(root) + os.pathsep + os.environ['PATH'],
@@ -274,6 +281,7 @@ class ToolchainRequirements(unittest.TestCase):
                 RELEASE_TAG='v1.2.3',
                 GITHUB_OUTPUT=str(output),
             )
+
             assets.write_text('', encoding='utf-8')
             fresh = subprocess.run(
                 [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script],
@@ -281,7 +289,10 @@ class ToolchainRequirements(unittest.TestCase):
             )
             self.assertEqual(fresh.returncode, 0, fresh.stdout + fresh.stderr)
             self.assertEqual(output.read_text().splitlines(), ['mode=fresh', 'cleanup=true'])
+            self.assertEqual(sorted(path.name for path in (root / '.release-publish').iterdir()), sorted(names))
+
             output.unlink()
+            reset_workdirs()
             assets.write_text('\n'.join(names) + '\n', encoding='utf-8')
             reuse = subprocess.run(
                 [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script],
@@ -289,13 +300,21 @@ class ToolchainRequirements(unittest.TestCase):
             )
             self.assertEqual(reuse.returncode, 0, reuse.stdout + reuse.stderr)
             self.assertEqual(output.read_text().splitlines(), ['mode=reuse', 'cleanup=false'])
+            self.assertFalse(any((root / '.release-publish').iterdir()))
+
             output.unlink()
+            reset_workdirs()
             assets.write_text('\n'.join(names[:-1]) + '\n', encoding='utf-8')
-            partial = subprocess.run(
+            resume = subprocess.run(
                 [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script],
                 cwd=root, env=environment, capture_output=True, text=True, encoding='utf-8', timeout=10,
             )
-            self.assertNotEqual(partial.returncode, 0)
+            self.assertEqual(resume.returncode, 0, resume.stdout + resume.stderr)
+            self.assertEqual(output.read_text().splitlines(), ['mode=resume', 'cleanup=true'])
+            self.assertEqual([path.name for path in (root / '.release-publish').iterdir()], [names[-1]])
+
+            output.unlink()
+            reset_workdirs()
             assets.write_text('\n'.join(names) + '\n', encoding='utf-8')
             (source / names[0]).write_text('different\n', encoding='utf-8')
             different = subprocess.run(
