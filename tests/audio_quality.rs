@@ -780,6 +780,87 @@ fn settled_large_makeup_cannot_blast_after_a_sudden_level_step() {
 }
 
 #[test]
+fn nonfinite_frames_do_not_poison_level_match_history() {
+    let profile = Profile::default();
+    let music = MusicProfile {
+        highpass_hz: Some(180.0),
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        level_match: true,
+        ..MusicProfile::default()
+    };
+    let mut processor = Processor::new(
+        Settings::compile(&profile, 48000)
+            .unwrap()
+            .with_music(&music, 48000)
+            .unwrap(),
+    );
+    for i in 0..192000 {
+        let x = (0.03 * (std::f64::consts::TAU * 997.0 * i as f64 / 48000.0).sin()) as f32;
+        let _ = processor.process([x, -0.7 * x]);
+    }
+    let before = processor.level_match_makeup_db();
+    for frame in [
+        [f32::NAN, f32::INFINITY],
+        [f32::NEG_INFINITY, f32::NAN],
+        [f32::MAX, -f32::MAX],
+    ] {
+        let output = processor.process(frame);
+        assert!(output
+            .iter()
+            .all(|sample| sample.is_finite() && sample.abs() <= 0.891252));
+        assert!(processor.level_match_makeup_db().is_finite());
+    }
+    for i in 0..96000 {
+        let x = (0.03 * (std::f64::consts::TAU * 997.0 * i as f64 / 48000.0).sin()) as f32;
+        let output = processor.process([x, -0.7 * x]);
+        assert!(output
+            .iter()
+            .all(|sample| sample.is_finite() && sample.abs() <= 0.891252));
+    }
+    let after = processor.level_match_makeup_db();
+    assert!(
+        (after - before).abs() < 0.5,
+        "nonfinite frames poisoned Level Match history: before={before:.3} dB after={after:.3} dB"
+    );
+}
+
+#[test]
+fn subnormal_floor_cannot_accumulate_pathological_level_match_makeup() {
+    let profile = Profile::default();
+    let music = MusicProfile {
+        correction_preamp_db: -30.0,
+        correction_source: Some("subnormal floor fixture".into()),
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        level_match: true,
+        ..MusicProfile::default()
+    };
+    let mut processor = Processor::new(
+        Settings::compile(&profile, 48000)
+            .unwrap()
+            .with_music(&music, 48000)
+            .unwrap(),
+    );
+    for i in 0_usize..192000 {
+        let sign = if i.is_multiple_of(2) { 1.0 } else { -1.0 };
+        let output = processor.process([f32::MIN_POSITIVE * sign, f32::from_bits(1)]);
+        assert!(output
+            .iter()
+            .all(|sample| sample.is_finite() && sample.abs() <= 0.891252));
+    }
+    let makeup = processor.level_match_makeup_db();
+    assert!(
+        makeup <= 30.1,
+        "subnormal floor accumulated makeup beyond configured static reserve: {makeup:.3} dB"
+    );
+}
+
+#[test]
 fn gain_only_identity_has_no_added_distortion_or_crosstalk() {
     let eq = Profile::default();
     let mut dsp = Processor::new(Settings::compile(&eq, 48000).unwrap());

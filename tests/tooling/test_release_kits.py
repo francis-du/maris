@@ -17,7 +17,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from release_bundle import _pax_without_volatile_times, _tar_header_with_size, combine, inspect_kit, pack, TARGETS
+from release_bundle import _normalize_pax_times, _pax_without_volatile_times, _tar_header_with_size, combine, inspect_kit, pack, TARGETS
 from package_smoke import extract
 from test_online import fixture
 
@@ -169,6 +169,17 @@ class ReleaseKits(unittest.TestCase):
         self.assertEqual(checksum, sum(checkable))
         with self.assertRaises(ValueError):
             _tar_header_with_size(bytes(header), 8 ** 11)
+
+    def test_failed_pax_normalization_preserves_original_bytes_and_cleans_temp(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / 'malformed.tar'
+            original = b'not even one complete tar header'
+            archive.write_bytes(original)
+            with self.assertRaisesRegex(ValueError, 'Truncated native pax archive'):
+                _normalize_pax_times(archive)
+            self.assertEqual(archive.read_bytes(), original)
+            self.assertFalse(list(root.glob('.maris-pax-*.tar')))
 
     def test_concurrent_collectors_cannot_both_publish_the_same_manifest(self):
         with tempfile.TemporaryDirectory() as temporary:

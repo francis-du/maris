@@ -119,6 +119,98 @@ fn compressor_is_optional_and_reduces_loud_material() {
     assert!(!MusicProfile::default().compressor.enabled);
 }
 #[test]
+fn retune_does_not_carry_compressor_envelope_into_a_different_compressor() {
+    let mut old = MusicProfile {
+        level_match: false,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        ..MusicProfile::default()
+    };
+    old.compressor.enabled = true;
+    old.compressor.threshold_db = -48.0;
+    old.compressor.ratio = 8.0;
+    old.compressor.attack_ms = 1.0;
+    old.compressor.release_ms = 500.0;
+
+    let mut next = MusicProfile {
+        level_match: false,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        ..MusicProfile::default()
+    };
+    next.compressor.enabled = true;
+    next.compressor.threshold_db = -6.0;
+    next.compressor.ratio = 2.0;
+
+    let mut trained = maris::music::Processor::new(old.compile(48_000).unwrap());
+    for _ in 0..48_000 {
+        let _ = trained.process([0.5, 0.5]);
+    }
+
+    let settings = next.compile(48_000).unwrap();
+    let mut retuned = trained.retune(settings);
+    let mut fresh = maris::music::Processor::new(settings);
+    let frame = [0.05, -0.05];
+    let actual = retuned.process(frame);
+    let expected = fresh.process(frame);
+    for channel in 0..2 {
+        assert!(
+            (actual[channel] - expected[channel]).abs() < 1e-10,
+            "new compressor inherited stale gain reduction: actual={} fresh={}",
+            actual[channel],
+            expected[channel]
+        );
+    }
+}
+
+#[test]
+fn retune_does_not_carry_adaptive_reduction_into_changed_dynamic_eq() {
+    let old = MusicProfile {
+        softness: 1.0,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: true,
+            strength: 1.0,
+        },
+        level_match: false,
+        ..MusicProfile::default()
+    };
+    let next = MusicProfile {
+        softness: 0.0,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: true,
+            strength: 0.15,
+        },
+        level_match: false,
+        ..MusicProfile::default()
+    };
+
+    let mut trained = maris::music::Processor::new(old.compile(48_000).unwrap());
+    for i in 0..96_000 {
+        let x = 0.35 * (std::f64::consts::TAU * 8_500.0 * i as f64 / 48_000.0).sin();
+        let _ = trained.process([x, x]);
+    }
+
+    let settings = next.compile(48_000).unwrap();
+    let mut retuned = trained.retune(settings);
+    let mut fresh = maris::music::Processor::new(settings);
+    let frame = [0.08, 0.08];
+    let actual = retuned.process(frame);
+    let expected = fresh.process(frame);
+    for channel in 0..2 {
+        assert!(
+            (actual[channel] - expected[channel]).abs() < 1e-8,
+            "changed Dynamic EQ inherited stale detector reduction: actual={} fresh={}",
+            actual[channel],
+            expected[channel]
+        );
+    }
+}
+
+#[test]
 fn output_switch_baseline_preserves_correction_but_neutralizes_subjective_controls() {
     let mut profile = maris::music::MusicProfile::preset("warm").unwrap();
     profile.presence_db = 1.0;

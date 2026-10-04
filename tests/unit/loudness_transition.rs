@@ -207,3 +207,179 @@ fn production_retune_between_opposite_spectral_profiles_stays_perceptually_level
         "opposite spectral retune changed BS.1770 momentary loudness too much: min={minimum_delta:.3} LU max={maximum_delta:.3} LU"
     );
 }
+
+#[test]
+fn queued_spectral_retunes_coalesce_without_loudness_step_or_stale_makeup() {
+    const RATE: u32 = 48_000;
+    const WINDOW: usize = RATE as usize * 2 / 5;
+    const STEP: usize = RATE as usize / 10;
+    let profile = Profile::default();
+    let make = |bass_db, presence_db, air_db| MusicProfile {
+        bass_db,
+        presence_db,
+        air_db,
+        adaptive: AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        compressor: Compressor {
+            enabled: false,
+            ..Compressor::default()
+        },
+        level_match: true,
+        ..MusicProfile::default()
+    };
+    let a = Settings::compile(&profile, RATE)
+        .unwrap()
+        .with_music(&make(5.0, -1.5, -1.5), RATE)
+        .unwrap();
+    let b = Settings::compile(&profile, RATE)
+        .unwrap()
+        .with_music(&make(-4.0, 2.5, 2.0), RATE)
+        .unwrap()
+        .with_transition_ms(RATE, 120);
+    let c = Settings::compile(&profile, RATE)
+        .unwrap()
+        .with_music(&make(2.0, 1.0, -2.0), RATE)
+        .unwrap()
+        .with_transition_ms(RATE, 120);
+    let (a, b) = a.share_transition_headroom(b);
+    let (_, c) = a.share_transition_headroom(c);
+    let mut processor = Processor::new(a);
+    let frame = |index: usize| {
+        let t = index as f64 / RATE as f64;
+        [
+            (0.05
+                * (0.44 * (std::f64::consts::TAU * 97.0 * t).sin()
+                    + 0.34 * (std::f64::consts::TAU * 911.0 * t).sin()
+                    + 0.22 * (std::f64::consts::TAU * 6203.0 * t).sin())) as f32,
+            (0.05
+                * (0.41 * (std::f64::consts::TAU * 127.0 * t + 0.2).sin()
+                    + 0.36 * (std::f64::consts::TAU * 1373.0 * t + 0.6).sin()
+                    + 0.23 * (std::f64::consts::TAU * 8011.0 * t + 1.0).sin())) as f32,
+        ]
+    };
+    let mut index = 0usize;
+    for _ in 0..RATE as usize * 4 {
+        let _ = processor.process(frame(index));
+        index += 1;
+    }
+
+    processor.update(b);
+    for _ in 0..RATE as usize * 3 / 100 {
+        let _ = processor.process(frame(index));
+        index += 1;
+    }
+    processor.update(c);
+
+    let mut dry = Vec::with_capacity(RATE as usize * 2 * 2);
+    let mut wet = Vec::with_capacity(RATE as usize * 2 * 2);
+    for _ in 0..RATE as usize * 2 {
+        let input = frame(index);
+        index += 1;
+        let output = processor.process(input);
+        assert!(output
+            .iter()
+            .all(|sample| sample.is_finite() && sample.abs() <= 0.891252));
+        dry.extend_from_slice(&input);
+        wet.extend_from_slice(&output);
+    }
+
+    let mut minimum_delta = f64::INFINITY;
+    let mut maximum_delta = f64::NEG_INFINITY;
+    for start in (0..=RATE as usize * 2 - WINDOW).step_by(STEP) {
+        let end = start + WINDOW;
+        let mut dry_meter = ebur128::EbuR128::new(2, RATE, ebur128::Mode::M).unwrap();
+        let mut wet_meter = ebur128::EbuR128::new(2, RATE, ebur128::Mode::M).unwrap();
+        dry_meter.add_frames_f32(&dry[start * 2..end * 2]).unwrap();
+        wet_meter.add_frames_f32(&wet[start * 2..end * 2]).unwrap();
+        let delta =
+            wet_meter.loudness_momentary().unwrap() - dry_meter.loudness_momentary().unwrap();
+        minimum_delta = minimum_delta.min(delta);
+        maximum_delta = maximum_delta.max(delta);
+    }
+    assert!(
+        minimum_delta > -1.5 && maximum_delta < 1.5,
+        "queued retunes changed BS.1770 momentary loudness too much: min={minimum_delta:.3} LU max={maximum_delta:.3} LU"
+    );
+}
+
+#[test]
+fn explicit_preamp_change_remains_intentional_through_level_matched_transition() {
+    const RATE: u32 = 48_000;
+    const BLOCK: usize = RATE as usize / 100;
+    let before_profile = Profile {
+        preamp_db: 0.0,
+        ..Profile::default()
+    };
+    let mut after_profile = before_profile.clone();
+    after_profile.preamp_db = -6.0;
+    let music = MusicProfile {
+        adaptive: AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        compressor: Compressor {
+            enabled: false,
+            ..Compressor::default()
+        },
+        level_match: true,
+        ..MusicProfile::default()
+    };
+    let before = Settings::compile(&before_profile, RATE)
+        .unwrap()
+        .with_music(&music, RATE)
+        .unwrap();
+    let after = Settings::compile(&after_profile, RATE)
+        .unwrap()
+        .with_music(&music, RATE)
+        .unwrap()
+        .with_transition_ms(RATE, 120);
+    let mut processor = Processor::new(before);
+    let sample = |index: usize| {
+        let t = index as f64 / RATE as f64;
+        (0.08
+            * (0.6 * (std::f64::consts::TAU * 337.0 * t).sin()
+                + 0.4 * (std::f64::consts::TAU * 2441.0 * t).sin())) as f32
+    };
+    let mut index = 0usize;
+    for _ in 0..RATE as usize * 3 {
+        let x = sample(index);
+        index += 1;
+        let _ = processor.process([x, -0.8 * x]);
+    }
+
+    processor.update(after);
+    let mut minimum_delta = f64::INFINITY;
+    let mut maximum_delta = f64::NEG_INFINITY;
+    let mut final_delta = 0.0;
+    for block in 0..80 {
+        let mut input_power = 0.0_f64;
+        let mut output_power = 0.0_f64;
+        for _ in 0..BLOCK {
+            let x = sample(index);
+            index += 1;
+            let input = [x, -0.8 * x];
+            let output = processor.process(input);
+            assert!(output
+                .iter()
+                .all(|sample| sample.is_finite() && sample.abs() <= 0.891252));
+            input_power += f64::from(input[0]).powi(2) + f64::from(input[1]).powi(2);
+            output_power += f64::from(output[0]).powi(2) + f64::from(output[1]).powi(2);
+        }
+        let delta = 10.0 * (output_power / input_power).log10();
+        minimum_delta = minimum_delta.min(delta);
+        maximum_delta = maximum_delta.max(delta);
+        if block >= 60 {
+            final_delta += delta / 20.0;
+        }
+    }
+    assert!(
+        maximum_delta < 0.5 && minimum_delta > -6.75,
+        "explicit preamp transition overshot its intended range: min={minimum_delta:.3} dB max={maximum_delta:.3} dB"
+    );
+    assert!(
+        (final_delta + 6.0).abs() < 0.35,
+        "Level Match erased or distorted an explicit -6 dB preamp request: settled={final_delta:.3} dB"
+    );
+}
