@@ -85,8 +85,12 @@ def validate(directory: Path, root: Path = ROOT) -> dict:
     if manifest.get('scope') != 'actual_offline_ratatui' or manifest.get('hardware_validation') is not False:
         raise ValueError('Missing explicit illustration provenance')
     for name, expected in manifest['source_sha256'].items():
-        if name not in SOURCES or digest(root / name) != expected:
-            raise ValueError('UI illustrations are stale; run scripts/docs_assets.py --refresh')
+        actual = digest(root / name) if name in SOURCES else None
+        if name not in SOURCES or actual != expected:
+            raise ValueError(
+                f'UI illustrations are stale at {name}: expected {expected}, got {actual}; '
+                'run scripts/docs_assets.py --refresh'
+            )
     if set(manifest['source_sha256']) != set(SOURCES):
         raise ValueError('Incomplete illustration source bindings')
     expected_names = {f'{view}-{lang}.svg' for view in VIEWS for lang in LANGUAGES}
