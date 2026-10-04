@@ -323,9 +323,8 @@ fn reference_toggle_preserves_settled_level_match_history_for_the_same_signal_pa
     let reference_settings = reference_profile.compile(48_000).unwrap();
     let mut processor = maris::music::Processor::new(wet_settings);
 
-    let sample = |index: usize| {
-        0.12 * (std::f64::consts::TAU * 80.0 * index as f64 / 48_000.0).sin()
-    };
+    let sample =
+        |index: usize| 0.12 * (std::f64::consts::TAU * 80.0 * index as f64 / 48_000.0).sin();
     let mut index = 0usize;
     let mut settled_power = 0.0;
     for i in 0..48_000 * 4 {
