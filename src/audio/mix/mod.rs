@@ -630,11 +630,16 @@ impl Session {
         status["level_match_makeup_db"] = json!(f32::from_bits(
             metrics.level_match_makeup.load(Ordering::Relaxed)
         ));
-        status["settings_pending"] = json!(self
-            .outputs
-            .iter()
-            .flatten()
-            .any(|output| !output.updates.is_empty()));
+        status["settings_pending"] = json!(
+            self.outputs
+                .iter()
+                .flatten()
+                .any(|output| !output.updates.is_empty())
+                || self
+                    .output_metrics
+                    .iter()
+                    .any(|metrics| metrics.settings_transitioning.load(Ordering::Relaxed))
+        );
         status["continuity"] = metrics.continuity();
         self.store.write_json("runtime.json", &status)
     }

@@ -515,6 +515,42 @@ fn spectral_content_change_during_retune_does_not_turn_level_match_into_pumping(
 }
 
 #[test]
+fn global_bypass_reenable_does_not_replay_outer_filter_history() {
+    const RATE: u32 = 48_000;
+    let active_profile = Profile::preset("bass").unwrap();
+    let mut bypass_profile = active_profile.clone();
+    bypass_profile.bypass = true;
+    let active = Settings::compile(&active_profile, RATE)
+        .unwrap()
+        .with_transition_ms(RATE, 1);
+    let bypass = Settings::compile(&bypass_profile, RATE)
+        .unwrap()
+        .with_transition_ms(RATE, 1);
+    let mut processor = Processor::new(active);
+
+    let _ = processor.process([0.8, -0.8]);
+    processor.update(bypass);
+    for _ in 0..RATE as usize / 1000 + 2 {
+        let _ = processor.process([0.0, 0.0]);
+    }
+    for _ in 0..RATE as usize {
+        assert_eq!(processor.process([0.0, 0.0]), [0.0, 0.0]);
+    }
+
+    processor.update(active);
+    let mut peak = 0.0_f32;
+    for _ in 0..RATE as usize / 1000 + 4 {
+        for sample in processor.process([0.0, 0.0]) {
+            peak = peak.max(sample.abs());
+        }
+    }
+    assert!(
+        peak < 1e-9,
+        "global bypass re-enable replayed frozen outer filter/crossfeed history: peak={peak}"
+    );
+}
+
+#[test]
 fn rapid_reversal_does_not_finish_an_obsolete_loudness_target_first() {
     const RATE: u32 = 48_000;
     let profile = Profile::default();

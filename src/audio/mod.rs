@@ -157,6 +157,7 @@ pub(super) struct Metrics {
     level_match_makeup: AtomicU32,
     adaptive_reduction: AtomicU32,
     tonal_bypass: AtomicBool,
+    settings_transitioning: AtomicBool,
     finished: AtomicBool,
     stopping: AtomicBool,
     faded_out: AtomicBool,
@@ -829,7 +830,9 @@ impl Session {
         status["level_match_makeup_db"] = json!(f32::from_bits(
             self.metrics.level_match_makeup.load(Ordering::Relaxed)
         ));
-        status["settings_pending"] = json!(!self.updates.is_empty());
+        status["settings_pending"] = json!(
+            !self.updates.is_empty() || self.metrics.settings_transitioning.load(Ordering::Relaxed)
+        );
         status["continuity"] = self.metrics.continuity();
         status["source_started"] = json!(self.metrics.source_started.load(Ordering::Relaxed));
         status["output_faded_out"] = json!(self.metrics.faded_out.load(Ordering::Acquire));

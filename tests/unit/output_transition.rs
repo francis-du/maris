@@ -139,3 +139,60 @@ fn renderer_keeps_third_target_pending_across_both_crossfades() {
         "queued third target remained pending after both DSP crossfades completed"
     );
 }
+
+#[test]
+fn reselecting_inflight_target_cancels_older_third_target_without_restarting() {
+    let updates = Arc::new(ArrayQueue::new(8));
+    let metrics = Arc::new(Metrics::default());
+    let base = Settings::compile(&Profile::default(), 48_000).unwrap();
+    let target = Settings::compile(&Profile::preset("bass").unwrap(), 48_000)
+        .unwrap()
+        .with_transition_ms(48_000, 120);
+    let obsolete = Settings::compile(&Profile::preset("clarity").unwrap(), 48_000)
+        .unwrap()
+        .with_transition_ms(48_000, 120);
+    let mut renderer = Renderer::new(base, 48_000, updates.clone(), metrics.clone());
+    let mut data = vec![0.0_f32; 480 * 2];
+
+    assert!(updates
+        .push(Update {
+            settings: target,
+            revision: 1,
+            music_revision: 0,
+        })
+        .is_ok());
+    for _ in 0..4 {
+        renderer.render(&mut data, 2, || ([0.05, -0.04], true));
+    }
+
+    assert!(updates
+        .push(Update {
+            settings: obsolete,
+            revision: 2,
+            music_revision: 0,
+        })
+        .is_ok());
+    renderer.render(&mut data, 2, || ([0.05, -0.04], true));
+    assert!(metrics.settings_transitioning.load(Ordering::Relaxed));
+
+    assert!(updates
+        .push(Update {
+            settings: target,
+            revision: 3,
+            music_revision: 0,
+        })
+        .is_ok());
+    renderer.render(&mut data, 2, || ([0.05, -0.04], true));
+    assert_eq!(metrics.revision.load(Ordering::Relaxed), 3);
+    assert!(metrics.settings_transitioning.load(Ordering::Relaxed));
+
+    // Six blocks remained after re-selecting B. One extra block proves the
+    // obsolete C target was cancelled rather than starting a second crossfade.
+    for _ in 0..7 {
+        renderer.render(&mut data, 2, || ([0.05, -0.04], true));
+    }
+    assert!(
+        !metrics.settings_transitioning.load(Ordering::Relaxed),
+        "re-selecting the in-flight target failed to cancel the older queued target"
+    );
+}

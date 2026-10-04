@@ -32,6 +32,31 @@ fn report(id: &str, mut times: Vec<f64>, peak: f32, checksum: f64) -> Value {
     })
 }
 
+fn probe_dsp(id: &str, frames: &[[f32; 2]], music: &MusicProfile) -> Result<Value> {
+    let settings = Settings::compile(&Profile::default(), RATE)?.with_music(music, RATE)?;
+    let mut dsp = Processor::new(settings);
+    for frame in frames.iter().take(RATE as usize / 2) {
+        black_box(dsp.process(*frame));
+    }
+    let mut times = Vec::with_capacity(BLOCKS);
+    let mut peak = 0.0_f32;
+    let mut checksum = 0.0_f64;
+    for block in frames.as_chunks::<BLOCK>().0 {
+        let began = Instant::now();
+        let mut output = [[0.0_f32; 2]; BLOCK];
+        for (source, target) in block.iter().zip(output.iter_mut()) {
+            *target = black_box(dsp.process(*source));
+        }
+        times.push(began.elapsed().as_secs_f64() * 1000.0);
+        for value in output.iter().flatten() {
+            ensure!(value.is_finite(), "DSP produced a nonfinite sample");
+            peak = peak.max(value.abs());
+            checksum += f64::from(*value);
+        }
+    }
+    Ok(report(id, times, peak, checksum))
+}
+
 fn main() -> Result<()> {
     ensure!(
         !cfg!(debug_assertions),
@@ -59,29 +84,16 @@ fn main() -> Result<()> {
             ]
         })
         .collect();
-    let settings =
-        Settings::compile(&Profile::default(), RATE)?.with_music(&MusicProfile::default(), RATE)?;
-    let mut dsp = Processor::new(settings);
-    for frame in frames.iter().take(RATE as usize / 2) {
-        black_box(dsp.process(*frame));
-    }
-    let mut times = Vec::with_capacity(BLOCKS);
-    let mut peak = 0.0_f32;
-    let mut checksum = 0.0_f64;
-    for block in frames.as_chunks::<BLOCK>().0 {
-        let began = Instant::now();
-        let mut output = [[0.0_f32; 2]; BLOCK];
-        for (source, target) in block.iter().zip(output.iter_mut()) {
-            *target = black_box(dsp.process(*source));
-        }
-        times.push(began.elapsed().as_secs_f64() * 1000.0);
-        for value in output.iter().flatten() {
-            ensure!(value.is_finite(), "DSP produced a nonfinite sample");
-            peak = peak.max(value.abs());
-            checksum += f64::from(*value);
-        }
-    }
-    let native = report("native-music-dsp", times, peak, checksum);
+    let native = probe_dsp("native-music-dsp", &frames, &MusicProfile::default())?;
+    let no_level_match = MusicProfile {
+        level_match: false,
+        ..MusicProfile::default()
+    };
+    let native_without_level_match = probe_dsp(
+        "native-music-dsp-without-level-match",
+        &frames,
+        &no_level_match,
+    )?;
     let mut model = VoiceModel::new();
     let mut input = [[0.0_f32; 2]; BLOCK];
     let mut output = input;
@@ -90,8 +102,8 @@ fn main() -> Result<()> {
         black_box(model.process(&input, &mut output));
     }
     let mut times = Vec::with_capacity(BLOCKS);
-    peak = 0.0;
-    checksum = 0.0;
+    let mut peak = 0.0_f32;
+    let mut checksum = 0.0_f64;
     for block in frames.as_chunks::<BLOCK>().0 {
         input.copy_from_slice(block);
         let began = Instant::now();
@@ -114,7 +126,7 @@ fn main() -> Result<()> {
         "scope":"offline_generated_signal_cost_only", "architecture":std::env::consts::ARCH,
         "platform":std::env::consts::OS, "build":"release", "audio_capture_started":false,
         "downloads":false, "music_model_added":false,
-        "results":[native,report("rnnoise-speech-only",times,peak,checksum)],
+        "results":[native,native_without_level_match,report("rnnoise-speech-only",times,peak,checksum)],
         "limitations":"Single offline run, not callback CPU, device latency, speech intelligibility or a listening-quality comparison. RNNoise remains speech-only."
     });
     std::fs::create_dir_all(".maris-review")?;

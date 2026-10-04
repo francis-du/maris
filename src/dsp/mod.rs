@@ -214,12 +214,17 @@ impl Chain {
     }
     fn retune(&self, settings: Settings) -> Self {
         let mut next = Self::new(settings);
-        next.low = self.low;
         next.music = self.music.retune(settings.music);
-        for channel in 0..2 {
-            for i in 0..10 {
-                if settings.coefficients[i] == self.settings.coefficients[i] {
-                    next.states[channel][i] = self.states[channel][i];
+        // Global bypass skips the outer EQ and crossfeed-lowpass path entirely.
+        // Do not carry state across a bypass boundary or that frozen history can
+        // reappear when processing is re-enabled after an arbitrary dry interval.
+        if !self.settings.bypass && !settings.bypass {
+            next.low = self.low;
+            for channel in 0..2 {
+                for i in 0..10 {
+                    if settings.coefficients[i] == self.settings.coefficients[i] {
+                        next.states[channel][i] = self.states[channel][i];
+                    }
                 }
             }
         }
@@ -234,7 +239,7 @@ impl Chain {
                 0.0
             }
         });
-        let static_makeup = static_level_match_gain(s);
+        let static_makeup = static_level_match_gain(&s);
         if s.bypass {
             // The returned branch is the music processor's dry/reference signal. Its wet
             // branch runs only to derive loudness matching and keep state warm. Known static
@@ -266,7 +271,7 @@ impl Chain {
     }
 }
 
-fn static_level_match_gain(settings: Settings) -> f64 {
+fn static_level_match_gain(settings: &Settings) -> f64 {
     if !settings.level_match {
         return 1.0;
     }
@@ -277,7 +282,7 @@ fn static_level_match_gain(settings: Settings) -> f64 {
 fn perceptual_match_power(
     frame: [f64; 2],
     states: &mut [[crate::dsp::tone::State; 2]; 2],
-    settings: Settings,
+    settings: &Settings,
 ) -> f64 {
     let raw_power = (frame[0] * frame[0] + frame[1] * frame[1]) * 0.5;
     let mut weighted_power = 0.0;
@@ -403,14 +408,17 @@ impl Processor {
         let t = 1.0 - self.remaining as f64 / self.total as f64;
         active * (1.0 - t) + next * t
     }
+    pub(crate) fn settings_pending(&self) -> bool {
+        self.remaining > 0 || self.pending.is_some()
+    }
     pub fn level_match_makeup_db(&self) -> f64 {
         let t = if self.remaining == 0 {
             0.0
         } else {
             1.0 - self.remaining as f64 / self.total as f64
         };
-        let static_makeup = static_level_match_gain(self.active.settings) * (1.0 - t)
-            + static_level_match_gain(self.next.settings) * t;
+        let static_makeup = static_level_match_gain(&self.active.settings) * (1.0 - t)
+            + static_level_match_gain(&self.next.settings) * t;
         let transition_gain = if self.remaining == 0 {
             self.match_gain
         } else {
@@ -466,9 +474,9 @@ impl Processor {
         });
         if settings.level_match {
             let reference_power =
-                perceptual_match_power(reference, &mut self.match_reference_filter, settings);
+                perceptual_match_power(reference, &mut self.match_reference_filter, &settings);
             let output_power =
-                perceptual_match_power(measurement, &mut self.match_output_filter, settings);
+                perceptual_match_power(measurement, &mut self.match_output_filter, &settings);
             self.match_reference_power = settings.match_meter * self.match_reference_power
                 + (1.0 - settings.match_meter) * reference_power;
             self.match_output_power = settings.match_meter * self.match_output_power
@@ -490,8 +498,8 @@ impl Processor {
                 1.0
             };
             if transitioning {
-                // The short detector and the settings crossfade already smooth this path.
-                // Extra gain slew here only delays compensation for deep cuts entering.
+                // The settings crossfade already smooths this path; extra gain slew here
+                // only delays loudness correction while the incoming chain is becoming audible.
                 self.match_gain = desired_match;
             } else {
                 self.match_gain = settings.match_slew * self.match_gain

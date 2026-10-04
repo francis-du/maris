@@ -148,6 +148,9 @@ impl RenderState {
     pub(super) fn update(&mut self, settings: Settings) {
         self.processor.update(settings);
     }
+    pub(super) fn settings_pending(&self) -> bool {
+        self.processor.settings_pending()
+    }
     fn resume_from_silence(&mut self) {
         self.gain = 0.0;
         self.origin = [0.0; 2];
@@ -466,6 +469,9 @@ impl Renderer {
             Ordering::Relaxed,
         );
         metrics
+            .settings_transitioning
+            .store(self.render.settings_pending(), Ordering::Relaxed);
+        metrics
             .peak
             .store(peak[0].max(peak[1]).to_bits(), Ordering::Relaxed);
         metrics
@@ -560,6 +566,9 @@ pub(super) fn handoff_output<T>(
 #[cfg(test)]
 #[path = "../../tests/unit/loudness_transition.rs"]
 mod loudness_transition_tests;
+#[cfg(test)]
+#[path = "../../tests/unit/output_transition.rs"]
+mod output_transition_tests;
 #[cfg(test)]
 #[path = "../../tests/unit/output_render.rs"]
 mod tests;
