@@ -503,7 +503,22 @@ impl Processor {
             next.dry_power = self.dry_power;
             next.wet_power = self.wet_power;
         }
-        if self.settings.compressor == settings.compressor {
+        let compressor_feed_unchanged = self.settings.enabled == settings.enabled
+            && self.settings.gain == settings.gain
+            && self.settings.count == settings.count
+            && self.settings.filters == settings.filters
+            && self.settings.adaptive == settings.adaptive
+            && self.settings.bass_assist == settings.bass_assist
+            && self.settings.width == settings.width
+            && self.settings.balance == settings.balance
+            && self.settings.virtual_surround == settings.virtual_surround
+            && self.settings.stereo_focus == settings.stereo_focus
+            && self.settings.surround_highpass == settings.surround_highpass
+            && self.settings.surround_allpass_a == settings.surround_allpass_a
+            && self.settings.surround_allpass_b == settings.surround_allpass_b
+            && self.settings.attack == settings.attack
+            && self.settings.release == settings.release;
+        if self.settings.compressor == settings.compressor && compressor_feed_unchanged {
             next.reduction_db = self.reduction_db;
         }
         if self.settings.adaptive == settings.adaptive {

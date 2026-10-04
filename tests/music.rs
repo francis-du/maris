@@ -168,6 +168,48 @@ fn retune_does_not_carry_compressor_envelope_into_a_different_compressor() {
 }
 
 #[test]
+fn retune_does_not_carry_compressor_envelope_across_upstream_tone_change() {
+    let mut old = MusicProfile {
+        bass_db: 6.0,
+        level_match: false,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        ..MusicProfile::default()
+    };
+    old.compressor.enabled = true;
+    old.compressor.threshold_db = -24.0;
+    old.compressor.ratio = 4.0;
+    old.compressor.attack_ms = 1.0;
+    old.compressor.release_ms = 500.0;
+
+    let mut next = old.clone();
+    next.bass_db = -6.0;
+    next.air_db = 3.0;
+
+    let mut trained = maris::music::Processor::new(old.compile(48_000).unwrap());
+    for _ in 0..48_000 {
+        let _ = trained.process([0.5, 0.5]);
+    }
+
+    let settings = next.compile(48_000).unwrap();
+    let mut retuned = trained.retune(settings);
+    let mut fresh = maris::music::Processor::new(settings);
+    let frame = [0.05, -0.05];
+    let actual = retuned.process(frame);
+    let expected = fresh.process(frame);
+    for channel in 0..2 {
+        assert!(
+            (actual[channel] - expected[channel]).abs() < 1e-8,
+            "same compressor inherited stale envelope across a changed upstream signal path: actual={} fresh={}",
+            actual[channel],
+            expected[channel]
+        );
+    }
+}
+
+#[test]
 fn retune_does_not_carry_adaptive_reduction_into_changed_dynamic_eq() {
     let old = MusicProfile {
         softness: 1.0,
