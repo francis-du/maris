@@ -168,7 +168,10 @@ impl MusicProfile {
         baseline.adaptive.enabled = false;
         baseline.bass_assist.enabled = false;
         baseline.reference = false;
-        baseline.level_match = false;
+        // Loudness matching is not a subjective tone control. Preserve the user's
+        // choice so correction/headroom reserve does not make a new output start
+        // several dB quieter than the pre-Maris signal.
+        baseline.level_match = self.level_match;
         baseline
     }
 

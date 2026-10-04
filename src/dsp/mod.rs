@@ -42,13 +42,17 @@ impl Coefficients {
     }
 }
 
-pub const DSP_REVISION: &str = "music-fidelity-7";
+pub const DSP_REVISION: &str = "music-fidelity-8";
 
 #[derive(Clone, Copy, PartialEq)]
 pub struct Settings {
     coefficients: [Coefficients; 10],
     gain: f64,
+    level_target_gain: f64,
     requested_preamp_db: f64,
+    level_match: bool,
+    match_meter: f64,
+    match_slew: f64,
     crossfeed: f64,
     width: f64,
     bypass: bool,
@@ -87,6 +91,12 @@ impl Settings {
         };
         let headroom = if peak > 0.01 { -peak - 0.5 } else { 0.0 };
         self.gain = 10.0_f64.powf(self.requested_preamp_db.min(correction).min(headroom) / 20.0);
+        // Safety headroom belongs before EQ/dynamics, but it must not become a permanent
+        // loudness cut versus the original system path. Restore only the difference between
+        // that safety gain and the user's requested preamp after tonal processing; the final
+        // limiter remains authoritative for peak safety.
+        self.level_target_gain = 10.0_f64.powf(self.requested_preamp_db / 20.0);
+        self.level_match = profile.level_match;
         self.music.gain = 1.0; // Reserve headroom once, not separately in both processors.
         Ok(self)
     }
@@ -122,10 +132,15 @@ impl Settings {
                 .all(|b| b.frequency_hz < rate as f64 / 2.0),
             "EQ frequency must be below Nyquist"
         );
+        let gain = 10.0_f64.powf(profile.effective_preamp_at(rate) / 20.0);
         Ok(Self {
             coefficients: profile.bands.map(|b| Coefficients::peaking(b, rate)),
-            gain: 10.0_f64.powf(profile.effective_preamp_at(rate) / 20.0),
+            gain,
+            level_target_gain: gain,
             requested_preamp_db: profile.preamp_db,
+            level_match: false,
+            match_meter: (-1.0 / (rate as f64 * 1.5)).exp(),
+            match_slew: (-1.0 / (rate as f64 * 0.25)).exp(),
             crossfeed: profile.crossfeed,
             width: profile.stereo_width,
             bypass: profile.bypass,
@@ -201,7 +216,7 @@ impl Chain {
         });
         if s.bypass {
             // The returned branch is the music processor's dry/reference signal. Its wet
-            // branch runs only to derive attenuation-only loudness matching and keep state warm.
+            // branch runs only to derive loudness matching and keep state warm.
             return self.music.process(v);
         }
         for (channel, sample) in v.iter_mut().enumerate() {
@@ -233,6 +248,9 @@ pub struct Processor {
     remaining: u32,
     total: u32,
     limiter_gain: f64,
+    match_reference_power: f64,
+    match_output_power: f64,
+    match_gain: f64,
     pending: Option<Settings>,
 }
 impl Processor {
@@ -243,6 +261,9 @@ impl Processor {
             remaining: 0,
             total: 1,
             limiter_gain: 1.0,
+            match_reference_power: 0.0,
+            match_output_power: 0.0,
+            match_gain: 1.0,
             pending: None,
         }
     }
@@ -264,6 +285,9 @@ impl Processor {
     pub(crate) fn reset_history(&mut self) {
         self.active = Chain::new(self.active.settings);
         self.next = Chain::new(self.next.settings);
+        self.match_reference_power = 0.0;
+        self.match_output_power = 0.0;
+        self.match_gain = 1.0;
     }
     pub fn adaptive_reduction_db(&self) -> f64 {
         if self.remaining > 0 {
@@ -293,6 +317,47 @@ impl Processor {
         if y.iter().any(|v| !v.is_finite()) {
             y = [0.0; 2];
         }
+        // Compare against the real pre-Maris program at the user's requested preamp.
+        // Static EQ/correction reserve stays in front of the filters, then measured settled
+        // loudness may recover that reserve. The linked limiter below remains authoritative
+        // for actual sample-peak safety.
+        let settings = self.active.settings;
+        let reference = input.map(|sample| {
+            if sample.is_finite() {
+                (sample as f64).clamp(-16.0, 16.0) * settings.level_target_gain
+            } else {
+                0.0
+            }
+        });
+        let reference_power = (reference[0] * reference[0] + reference[1] * reference[1]) * 0.5;
+        let output_power = (y[0] * y[0] + y[1] * y[1]) * 0.5;
+        self.match_reference_power = settings.match_meter * self.match_reference_power
+            + (1.0 - settings.match_meter) * reference_power;
+        self.match_output_power = settings.match_meter * self.match_output_power
+            + (1.0 - settings.match_meter) * output_power;
+        let desired_match = if settings.level_match
+            && self.match_reference_power > 1e-10
+            && self.match_output_power > 1e-10
+        {
+            // Always permit recovery of configured static safety reserve (up to the public
+            // -30 dB preamp/correction domain), while limiting any additional compensation
+            // for spectral/dynamic changes to +12 dB. This avoids turning a deep intentional
+            // filter null into unbounded makeup gain.
+            const MAX_STATIC_MAKEUP: f64 = 31.622_776_601_683_793; // +30 dB
+            const MAX_RESIDUAL_MAKEUP: f64 = 3.981_071_705_534_972_2; // +12 dB
+            let static_makeup = (settings.level_target_gain / settings.gain.max(1e-12))
+                .clamp(1.0, MAX_STATIC_MAKEUP);
+            let max_match = (static_makeup * MAX_RESIDUAL_MAKEUP).min(MAX_STATIC_MAKEUP);
+            (self.match_reference_power / self.match_output_power)
+                .sqrt()
+                .clamp(0.25, max_match)
+        } else {
+            1.0
+        };
+        self.match_gain =
+            settings.match_slew * self.match_gain + (1.0 - settings.match_slew) * desired_match;
+        y = y.map(|sample| sample * self.match_gain);
+
         let peak = y[0].abs().max(y[1].abs());
         const CEILING: f64 = 0.8912509381337456; // -1 dBFS sample peak, not true peak or SPL.
         let wanted = if peak > CEILING { CEILING / peak } else { 1.0 };

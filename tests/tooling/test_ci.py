@@ -137,16 +137,136 @@ class ToolchainRequirements(unittest.TestCase):
         build = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')
         publish = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
         self.assertRegex(build, r"release:\s*\n\s*types:\s*\n\s*- published")
+        self.assertIn('Require published release tag to match Cargo version', build)
+        self.assertIn('Published release tag must be vX.Y.Z', build)
+        self.assertIn('Release event ref does not match its published tag', build)
         self.assertIn('workflow_run:', publish)
         self.assertIn("gh release upload", publish)
         self.assertIn("maris-release.tsv", publish)
         self.assertIn("public-install-smoke:", publish)
         self.assertIn("bash install.sh --version", publish)
         self.assertIn("& ./install.ps1 -Version", publish)
+        self.assertIn("group: release-assets-", publish)
+        self.assertIn("cancel-in-progress: false", publish)
+        self.assertRegex(publish, r"permissions:\s*\n  contents: read\s*\n  actions: read")
+        self.assertRegex(publish, r"publish:\s*\n(?:    .*\n)*?    permissions:\s*\n      contents: write\s*\n      actions: read")
+        self.assertRegex(publish, r"public-install-smoke:\s*\n(?:    .*\n)*?    permissions:\s*\n      contents: read")
+        self.assertRegex(publish, r"remove-uninstallable-assets:\s*\n(?:    .*\n)*?    permissions:\s*\n      contents: write")
+        self.assertIn("remove-uninstallable-assets:", publish)
+        self.assertIn("gh release delete-asset", publish)
+        self.assertIn("failure() && needs.publish.outputs.publish == 'true'", publish)
         for runner in ('macos-15', 'macos-15-intel', 'ubuntu-24.04', 'ubuntu-24.04-arm',
                        'windows-2025', 'windows-11-arm'):
             with self.subTest(runner=runner):
                 self.assertIn(runner, publish)
+
+    @unittest.skipUnless(BASH, 'Bash release identity execution required')
+    def test_release_identity_gate_rejects_wrong_version_and_ref_before_native_matrix(self):
+        text = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')
+        block = re.search(
+            r'      - name: Require published release tag to match Cargo version\n'
+            r'(?:        .*\n)*?        run: \|\n((?:          .*\n?)+?)'
+            r'      - name: Require release validation pushes to match current main\n',
+            text,
+        )
+        self.assertIsNotNone(block)
+        script = '\n'.join(line[10:] for line in block[1].splitlines())
+        base = dict(os.environ, RELEASE_TAG='v0.1.0', GITHUB_REF='refs/tags/v0.1.0')
+        result = subprocess.run(
+            [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script],
+            cwd=ROOT,
+            env=base,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            timeout=10,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        for tag, ref in [('v0.1.1', 'refs/tags/v0.1.1'), ('release-0.1.0', 'refs/tags/release-0.1.0'),
+                         ('v0.1.0', 'refs/tags/v0.1.1')]:
+            with self.subTest(tag=tag, ref=ref):
+                environment = dict(base, RELEASE_TAG=tag, GITHUB_REF=ref)
+                result = subprocess.run(
+                    [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script],
+                    cwd=ROOT,
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8',
+                    timeout=10,
+                )
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    @unittest.skipUnless(BASH, 'Bash release cleanup execution required')
+    def test_failed_public_install_cleanup_deletes_only_installer_assets_and_surfaces_errors(self):
+        text = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
+        block = re.search(
+            r'      - name: Remove installer assets after any public installation failure\n'
+            r'(?:        .*\n)*?        run: \|\n((?:          .*\n?)+)',
+            text,
+        )
+        self.assertIsNotNone(block)
+        script = '\n'.join(line[10:] for line in block[1].splitlines())
+        expected = [
+            'Maris-1.2.3-macos-x86_64.tar.gz',
+            'Maris-1.2.3-macos-arm64.tar.gz',
+            'Maris-1.2.3-linux-x86_64.tar.gz',
+            'Maris-1.2.3-linux-arm64.tar.gz',
+            'Maris-1.2.3-windows-x86_64.zip',
+            'Maris-1.2.3-windows-arm64.zip',
+            'maris-release.tsv',
+            'SHA256SUMS',
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            assets = root / 'assets'
+            assets.write_text('\n'.join(expected + ['manual-release-notes.txt']) + '\n', encoding='utf-8')
+            gh = root / 'gh'
+            gh.write_text(
+                '#!/bin/sh\n'
+                'set -eu\n'
+                'if [ "$1:$2" = release:view ]; then cat "$GH_FIXTURE/assets"; exit 0; fi\n'
+                'if [ "$1:$2" = release:delete-asset ]; then\n'
+                '  printf "%s\\n" "$4" >> "$GH_FIXTURE/deleted"\n'
+                '  [ "${FAIL_ASSET:-}" != "$4" ] || exit 23\n'
+                '  exit 0\n'
+                'fi\n'
+                'exit 97\n',
+                encoding='utf-8',
+                newline='\n',
+            )
+            gh.chmod(0o755)
+            environment = dict(
+                os.environ,
+                PATH=str(root) + os.pathsep + os.environ['PATH'],
+                GH_FIXTURE=str(root),
+                GH_TOKEN= [REDACTED]
+                GH_REPO='francis-du/maris',
+                RELEASE_TAG='v1.2.3',
+            )
+            result = subprocess.run(
+                [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script],
+                env=environment,
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                timeout=10,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual((root / 'deleted').read_text().splitlines(), expected)
+
+            (root / 'deleted').unlink()
+            environment['FAIL_ASSET'] = expected[0]
+            result = subprocess.run(
+                [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script],
+                env=environment,
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                timeout=10,
+            )
+            self.assertEqual(result.returncode, 23, result.stdout + result.stderr)
+            self.assertEqual((root / 'deleted').read_text().splitlines(), [expected[0]])
 
     def test_developer_install_instructions_match_cargo(self):
         required = 'Rust ' + minimum_rust()
