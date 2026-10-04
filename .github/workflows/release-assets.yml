@@ -22,6 +22,7 @@ jobs:
     outputs:
       publish: ${{ steps.release.outputs.publish }}
       tag: ${{ steps.release.outputs.tag }}
+      cleanup: ${{ steps.assets.outputs.cleanup }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -140,13 +141,58 @@ jobs:
               sums.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}")
           (out / 'SHA256SUMS').write_text('\n'.join(sums) + '\n', encoding='ascii', newline='\n')
           PY
-      - name: Upload installer-consumable assets to GitHub Release
+      - name: Reuse exact existing installer assets without clobbering
+        id: assets
         if: steps.release.outputs.publish == 'true'
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
-        run: gh release upload "$RELEASE_TAG" .release-upload/* --clobber
+        run: |
+          set -euo pipefail
+          expected=()
+          for path in .release-upload/*; do
+            [ -f "$path" ] || continue
+            expected+=("$(basename "$path")")
+          done
+          if [ "${#expected[@]}" -ne 8 ]; then
+            echo "Expected exactly eight installer-facing release assets" >&2
+            exit 1
+          fi
+          existing="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
+          present=0
+          for asset in "${expected[@]}"; do
+            if printf '%s\n' "$existing" | grep -Fxq -- "$asset"; then
+              present=$((present + 1))
+            fi
+          done
+          if [ "$present" -eq 0 ]; then
+            echo "mode=fresh" >> "$GITHUB_OUTPUT"
+            echo "cleanup=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$present" -ne "${#expected[@]}" ]; then
+            echo "Refusing to overwrite a partial installer asset set for $RELEASE_TAG" >&2
+            exit 1
+          fi
+          mkdir .release-existing
+          for asset in "${expected[@]}"; do
+            gh release download "$RELEASE_TAG" --pattern "$asset" --dir .release-existing --clobber
+            if ! cmp -s ".release-upload/$asset" ".release-existing/$asset"; then
+              echo "Existing release asset differs from the exact successful build: $asset" >&2
+              exit 1
+            fi
+          done
+          echo "mode=reuse" >> "$GITHUB_OUTPUT"
+          echo "cleanup=false" >> "$GITHUB_OUTPUT"
+      - name: Upload installer-consumable assets to GitHub Release
+        if: steps.release.outputs.publish == 'true' && steps.assets.outputs.mode == 'fresh'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: gh release upload "$RELEASE_TAG" .release-upload/*
 
   public-install-smoke:
     needs: publish
@@ -195,7 +241,7 @@ jobs:
 
   remove-uninstallable-assets:
     needs: [publish, public-install-smoke]
-    if: always() && needs.publish.outputs.publish == 'true' && needs.public-install-smoke.result != 'success'
+    if: always() && needs.publish.outputs.publish == 'true' && needs.publish.outputs.cleanup == 'true' && needs.public-install-smoke.result != 'success'
     permissions:
       contents: write
     runs-on: ubuntu-24.04

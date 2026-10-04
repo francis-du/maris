@@ -142,6 +142,12 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn('Release event ref does not match its published tag', build)
         self.assertIn('workflow_run:', publish)
         self.assertIn("gh release upload", publish)
+        self.assertNotIn('gh release upload "$RELEASE_TAG" .release-upload/* --clobber', publish)
+        self.assertIn("Reuse exact existing installer assets without clobbering", publish)
+        self.assertIn('gh release download "$RELEASE_TAG"', publish)
+        self.assertIn("cmp -s", publish)
+        self.assertIn("cleanup: ${{ steps.assets.outputs.cleanup }}", publish)
+        self.assertIn("needs.publish.outputs.cleanup == 'true'", publish)
         self.assertIn("maris-release.tsv", publish)
         self.assertIn("public-install-smoke:", publish)
         self.assertIn("bash install.sh --version", publish)
@@ -158,7 +164,7 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn("remove-uninstallable-assets:", publish)
         self.assertIn("gh release delete-asset", publish)
         self.assertIn(
-            "always() && needs.publish.outputs.publish == 'true' && needs.public-install-smoke.result != 'success'",
+            "always() && needs.publish.outputs.publish == 'true' && needs.publish.outputs.cleanup == 'true' && needs.public-install-smoke.result != 'success'",
             publish,
         )
         self.assertNotIn("if: failure() && needs.publish.outputs.publish == 'true'", publish)
@@ -203,6 +209,97 @@ class ToolchainRequirements(unittest.TestCase):
                     timeout=10,
                 )
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    @unittest.skipUnless(BASH, 'Bash release idempotency execution required')
+    def test_release_asset_publication_reuses_exact_assets_and_refuses_partial_or_different_sets(self):
+        text = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
+        block = re.search(
+            r'      - name: Reuse exact existing installer assets without clobbering\n'
+            r'(?:        .*\n)*?        run: \|\n((?:          .*\n?)+?)'
+            r'      - name: Upload installer-consumable assets to GitHub Release\n',
+            text,
+        )
+        self.assertIsNotNone(block)
+        script = '\n'.join(line[10:] for line in block[1].splitlines())
+        names = [
+            'Maris-1.2.3-macos-x86_64.tar.gz',
+            'Maris-1.2.3-macos-arm64.tar.gz',
+            'Maris-1.2.3-linux-x86_64.tar.gz',
+            'Maris-1.2.3-linux-arm64.tar.gz',
+            'Maris-1.2.3-windows-x86_64.zip',
+            'Maris-1.2.3-windows-arm64.zip',
+            'maris-release.tsv',
+            'SHA256SUMS',
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            upload = root / '.release-upload'
+            source = root / '.release-source'
+            upload.mkdir()
+            source.mkdir()
+            for index, name in enumerate(names):
+                payload = f'asset-{index}\n'
+                (upload / name).write_text(payload, encoding='utf-8')
+                (source / name).write_text(payload, encoding='utf-8')
+            gh = root / 'gh'
+            gh.write_text(
+                '#!/bin/sh\n'
+                'set -eu\n'
+                'if [ "$1:$2" = release:view ]; then cat "$GH_FIXTURE/assets"; exit 0; fi\n'
+                'if [ "$1:$2" = release:download ]; then\n'
+                '  asset=""\n'
+                '  dir=""\n'
+                '  while [ "$#" -gt 0 ]; do\n'
+                '    case "$1" in --pattern) asset="$2"; shift 2 ;; --dir) dir="$2"; shift 2 ;; *) shift ;; esac\n'
+                '  done\n'
+                '  mkdir -p "$dir"\n'
+                '  cp "$GH_FIXTURE/.release-source/$asset" "$dir/$asset"\n'
+                '  exit 0\n'
+                'fi\n'
+                'exit 97\n',
+                encoding='utf-8',
+                newline='\n',
+            )
+            gh.chmod(0o755)
+            assets = root / 'assets'
+            output = root / 'github-output'
+            environment = dict(
+                os.environ,
+                PATH=str(root) + os.pathsep + os.environ['PATH'],
+                GH_FIXTURE=str(root),
+                GH_REPO='francis-du/maris',
+                RELEASE_TAG='v1.2.3',
+                GITHUB_OUTPUT=str(output),
+            )
+            assets.write_text('', encoding='utf-8')
+            fresh = subprocess.run(
+                [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script],
+                cwd=root, env=environment, capture_output=True, text=True, encoding='utf-8', timeout=10,
+            )
+            self.assertEqual(fresh.returncode, 0, fresh.stdout + fresh.stderr)
+            self.assertEqual(output.read_text().splitlines(), ['mode=fresh', 'cleanup=true'])
+            output.unlink()
+            assets.write_text('\n'.join(names) + '\n', encoding='utf-8')
+            reuse = subprocess.run(
+                [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script],
+                cwd=root, env=environment, capture_output=True, text=True, encoding='utf-8', timeout=10,
+            )
+            self.assertEqual(reuse.returncode, 0, reuse.stdout + reuse.stderr)
+            self.assertEqual(output.read_text().splitlines(), ['mode=reuse', 'cleanup=false'])
+            output.unlink()
+            assets.write_text('\n'.join(names[:-1]) + '\n', encoding='utf-8')
+            partial = subprocess.run(
+                [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script],
+                cwd=root, env=environment, capture_output=True, text=True, encoding='utf-8', timeout=10,
+            )
+            self.assertNotEqual(partial.returncode, 0)
+            assets.write_text('\n'.join(names) + '\n', encoding='utf-8')
+            (source / names[0]).write_text('different\n', encoding='utf-8')
+            different = subprocess.run(
+                [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script],
+                cwd=root, env=environment, capture_output=True, text=True, encoding='utf-8', timeout=10,
+            )
+            self.assertNotEqual(different.returncode, 0)
 
     @unittest.skipUnless(BASH, 'Bash release cleanup execution required')
     def test_failed_public_install_cleanup_deletes_only_installer_assets_and_surfaces_errors(self):
