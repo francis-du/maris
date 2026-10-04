@@ -460,4 +460,3 @@ fn rapid_reversal_does_not_finish_an_obsolete_loudness_target_first() {
         "rapid A→B→A reversal kept obsolete B audible too long: residual error {error_db:.2} dB"
     );
 }
-
