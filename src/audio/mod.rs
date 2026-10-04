@@ -154,6 +154,7 @@ pub(super) struct Metrics {
     revision: AtomicU64,
     music_revision: AtomicU64,
     effective_gain: AtomicU32,
+    level_match_makeup: AtomicU32,
     adaptive_reduction: AtomicU32,
     tonal_bypass: AtomicBool,
     finished: AtomicBool,
@@ -825,6 +826,9 @@ impl Session {
         "music_processing":true,"tonal_bypass":self.metrics.tonal_bypass.load(Ordering::Relaxed),
         "applied_revision":self.metrics.revision.load(Ordering::Relaxed),"sample_peak_limiter_dbfs":-1.0,
         "performance":performance});
+        status["level_match_makeup_db"] = json!(f32::from_bits(
+            self.metrics.level_match_makeup.load(Ordering::Relaxed)
+        ));
         status["settings_pending"] = json!(!self.updates.is_empty());
         status["continuity"] = self.metrics.continuity();
         status["source_started"] = json!(self.metrics.source_started.load(Ordering::Relaxed));

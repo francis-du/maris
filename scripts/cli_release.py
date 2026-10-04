@@ -74,7 +74,8 @@ def prepare(report: Path | None) -> dict:
     destination = ROOT / 'dist/online-approved'
     destination.mkdir(parents=True, exist_ok=True)
     archive = destination / (stem + ('.zip' if system == 'windows' else '.tar.gz'))
-    if archive.exists() or archive.is_symlink():
+    record_path = destination / (stem + '.release.json')
+    if archive.exists() or archive.is_symlink() or record_path.exists() or record_path.is_symlink():
         raise ValueError('Refusing to overwrite release inputs')
     with tempfile.TemporaryDirectory(prefix='cli-release-', dir=ROOT / '.maris-review') as temporary:
         work = Path(temporary)
@@ -116,6 +117,22 @@ def prepare(report: Path | None) -> dict:
                   'native_gate': proof, 'ci_run': os.environ.get('GITHUB_RUN_ID'),
                   'ci_commit': os.environ.get('GITHUB_SHA'), 'ci_repository': os.environ.get('GITHUB_REPOSITORY')}
         inspect_kit(packed, record)
-        shutil.move(str(packed), archive)
-        (destination / (stem + '.release.json')).write_text(json.dumps(record, indent=2) + '\n', encoding='utf-8', newline='\n')
+        record_ready = work / record_path.name
+        with record_ready.open('x', encoding='utf-8', newline='\n') as handle:
+            handle.write(json.dumps(record, indent=2) + '\n')
+            handle.flush()
+            os.fsync(handle.fileno())
+        published_archive = False
+        try:
+            os.link(packed, archive)
+            published_archive = True
+            os.link(record_ready, record_path)
+        except FileExistsError as error:
+            if published_archive:
+                archive.unlink(missing_ok=True)
+            raise ValueError('Refusing to overwrite release inputs') from error
+        except Exception:
+            if published_archive:
+                archive.unlink(missing_ok=True)
+            raise
     return {'archive': str(archive.relative_to(ROOT)), 'interface': 'cli', 'channel': 'stable', 'compiled_here': False, 'published': False}

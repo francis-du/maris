@@ -9,7 +9,9 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
@@ -75,6 +77,53 @@ class ReleaseKits(unittest.TestCase):
                                        str(restored / stem / 'Maris.app')],
                                       check=True, capture_output=True, timeout=10).stdout.rstrip(b'\n')
             self.assertEqual(metadata, b'payload metadata must survive')
+
+    def test_concurrent_collectors_cannot_both_publish_the_same_manifest(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            make_records(root)
+            output = root / 'output/maris-release.tsv'
+            barrier = threading.Barrier(2)
+            original_exists = Path.exists
+
+            def synchronized_exists(path):
+                if path == output:
+                    barrier.wait(timeout=10)
+                    return False
+                return original_exists(path)
+
+            results = []
+            failures = []
+
+            def collect():
+                try:
+                    results.append(combine(root, output))
+                except ValueError as error:
+                    failures.append(str(error))
+
+            with patch.object(Path, 'exists', synchronized_exists):
+                threads = [threading.Thread(target=collect) for _ in range(2)]
+                for thread in threads:
+                    thread.start()
+                for thread in threads:
+                    thread.join(timeout=30)
+                self.assertTrue(all(not thread.is_alive() for thread in threads))
+
+            self.assertEqual(results, ['candidate'])
+            self.assertEqual(failures, ['Manifest destination already exists'])
+            self.assertEqual(len(output.read_text().splitlines()), 10)
+            self.assertFalse(list(output.parent.glob('.maris-release.*')))
+
+    def test_manifest_publish_failure_leaves_no_partial_output_or_temp_file(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            make_records(root)
+            output = root / 'output/maris-release.tsv'
+            with patch('release_bundle.os.link', side_effect=OSError('simulated publish failure')):
+                with self.assertRaisesRegex(OSError, 'simulated publish failure'):
+                    combine(root, output)
+            self.assertFalse(output.exists())
+            self.assertFalse(list(output.parent.glob('.maris-release.*')))
 
     def test_recomputed_archive_hash_does_not_make_arbitrary_bytes_a_ci_package(self):
         with tempfile.TemporaryDirectory() as temporary:

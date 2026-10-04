@@ -53,6 +53,8 @@ pub struct Settings {
     level_match: bool,
     match_meter: f64,
     match_slew: f64,
+    match_pre_filter: crate::dsp::tone::Biquad,
+    match_rlb_filter: crate::dsp::tone::Biquad,
     crossfeed: f64,
     width: f64,
     bypass: bool,
@@ -141,6 +143,24 @@ impl Settings {
             level_match: false,
             match_meter: (-1.0 / (rate as f64 * 1.5)).exp(),
             match_slew: (-1.0 / (rate as f64 * 0.25)).exp(),
+            // Approximate the BS.1770 K-weighting detector with the standard pre-filter
+            // and RLB corner parameters, compiled through the existing allocation-free
+            // RBJ biquads. This keeps the audio callback real-time safe while making Level
+            // Match track perceived program loudness instead of unweighted RMS alone.
+            match_pre_filter: crate::dsp::tone::Filter {
+                kind: crate::dsp::tone::Kind::HighShelf,
+                frequency_hz: 1_681.974_450_955_533,
+                gain_db: 3.999_843_853_973_347,
+                q: 0.707_175_236_955_419_6,
+            }
+            .compile(rate)?,
+            match_rlb_filter: crate::dsp::tone::Filter {
+                kind: crate::dsp::tone::Kind::HighPass,
+                frequency_hz: 38.135_470_876_024_44,
+                gain_db: 0.0,
+                q: 0.500_327_037_323_877_3,
+            }
+            .compile(rate)?,
             crossfeed: profile.crossfeed,
             width: profile.stereo_width,
             bypass: profile.bypass,
@@ -254,6 +274,24 @@ fn static_level_match_gain(settings: Settings) -> f64 {
     (settings.level_target_gain / settings.gain.max(1e-12)).clamp(1.0, MAX_STATIC_MAKEUP)
 }
 
+fn perceptual_match_power(
+    frame: [f64; 2],
+    states: &mut [[crate::dsp::tone::State; 2]; 2],
+    settings: Settings,
+) -> f64 {
+    let raw_power = (frame[0] * frame[0] + frame[1] * frame[1]) * 0.5;
+    let mut weighted_power = 0.0;
+    for channel in 0..2 {
+        let pre = states[channel][0].process(frame[channel], settings.match_pre_filter);
+        let weighted = states[channel][1].process(pre, settings.match_rlb_filter);
+        weighted_power += weighted * weighted * 0.5;
+    }
+    // Pure RMS can sound mismatched after strong spectral shaping, while a pure K-weighted
+    // detector can over-correct broadband electrical level. Bias toward BS.1770 weighting but
+    // retain enough linear power to keep ordinary A/B and explicit-preamp behavior stable.
+    raw_power * 0.30 + weighted_power * 0.70
+}
+
 pub struct Processor {
     active: Chain,
     next: Chain,
@@ -262,6 +300,8 @@ pub struct Processor {
     limiter_gain: f64,
     match_reference_power: f64,
     match_output_power: f64,
+    match_reference_filter: [[crate::dsp::tone::State; 2]; 2],
+    match_output_filter: [[crate::dsp::tone::State; 2]; 2],
     match_gain: f64,
     pending: Option<Settings>,
 }
@@ -275,6 +315,8 @@ impl Processor {
             limiter_gain: 1.0,
             match_reference_power: 0.0,
             match_output_power: 0.0,
+            match_reference_filter: [[crate::dsp::tone::State::default(); 2]; 2],
+            match_output_filter: [[crate::dsp::tone::State::default(); 2]; 2],
             match_gain: 1.0,
             pending: None,
         }
@@ -299,6 +341,8 @@ impl Processor {
         self.next = Chain::new(self.next.settings);
         self.match_reference_power = 0.0;
         self.match_output_power = 0.0;
+        self.match_reference_filter = [[crate::dsp::tone::State::default(); 2]; 2];
+        self.match_output_filter = [[crate::dsp::tone::State::default(); 2]; 2];
         self.match_gain = 1.0;
     }
     pub fn adaptive_reduction_db(&self) -> f64 {
@@ -310,7 +354,36 @@ impl Processor {
             self.active.adaptive_reduction_db()
         }
     }
+    fn level_match_blend(&self) -> f64 {
+        let active = if self.active.settings.level_match {
+            1.0
+        } else {
+            0.0
+        };
+        if self.remaining == 0 {
+            return active;
+        }
+        let next = if self.next.settings.level_match {
+            1.0
+        } else {
+            0.0
+        };
+        let t = 1.0 - self.remaining as f64 / self.total as f64;
+        active * (1.0 - t) + next * t
+    }
+    pub fn level_match_makeup_db(&self) -> f64 {
+        let t = if self.remaining == 0 {
+            0.0
+        } else {
+            1.0 - self.remaining as f64 / self.total as f64
+        };
+        let static_makeup = static_level_match_gain(self.active.settings) * (1.0 - t)
+            + static_level_match_gain(self.next.settings) * t;
+        let residual_makeup = 1.0 + (self.match_gain - 1.0) * self.level_match_blend();
+        20.0 * (static_makeup * residual_makeup).max(1e-12).log10()
+    }
     pub fn process(&mut self, input: [f32; 2]) -> [f32; 2] {
+        let match_blend = self.level_match_blend();
         let mut y = self.active.frame(input);
         if self.remaining > 0 {
             let other = self.next.frame(input);
@@ -341,34 +414,44 @@ impl Processor {
                 0.0
             }
         });
-        let reference_power = (reference[0] * reference[0] + reference[1] * reference[1]) * 0.5;
-        let output_power = (y[0] * y[0] + y[1] * y[1]) * 0.5;
         if settings.level_match {
+            let reference_power =
+                perceptual_match_power(reference, &mut self.match_reference_filter, settings);
+            let output_power = perceptual_match_power(y, &mut self.match_output_filter, settings);
             self.match_reference_power = settings.match_meter * self.match_reference_power
                 + (1.0 - settings.match_meter) * reference_power;
             self.match_output_power = settings.match_meter * self.match_output_power
                 + (1.0 - settings.match_meter) * output_power;
-            let desired_match =
-                if self.match_reference_power > 1e-10 && self.match_output_power > 1e-10 {
-                    // Static reserve is already recovered per chain. Bound only the remaining
-                    // program-dependent correction so a spectral null cannot become unbounded gain.
-                    const MAX_RESIDUAL_MAKEUP: f64 = 3.981_071_705_534_972_2; // +12 dB
-                    (self.match_reference_power / self.match_output_power)
-                        .sqrt()
-                        .clamp(0.25, MAX_RESIDUAL_MAKEUP)
-                } else {
-                    1.0
-                };
+            let desired_match = if reference_power <= 1e-12 && output_power <= 1e-12 {
+                // Digital silence is a content boundary, not evidence that the next program
+                // needs the previous program's residual spectral makeup. Let the residual
+                // gain return smoothly to unity while static safety-reserve recovery remains
+                // active in each chain.
+                1.0
+            } else if self.match_reference_power > 1e-10 && self.match_output_power > 1e-10 {
+                // Static reserve is already recovered per chain. Bound only the remaining
+                // program-dependent correction so a spectral null cannot become unbounded gain.
+                const MAX_RESIDUAL_MAKEUP: f64 = 3.981_071_705_534_972_2; // +12 dB
+                (self.match_reference_power / self.match_output_power)
+                    .sqrt()
+                    .clamp(0.25, MAX_RESIDUAL_MAKEUP)
+            } else {
+                1.0
+            };
             self.match_gain =
                 settings.match_slew * self.match_gain + (1.0 - settings.match_slew) * desired_match;
-        } else {
-            // Disabling Level Match is an explicit request to stop compensation now.
-            // Clear the program meter as well so a later re-enable cannot reuse stale history.
+        } else if match_blend <= f64::EPSILON {
+            // Once the settings crossfade has fully removed Level Match, clear the program
+            // meter so a later re-enable cannot reuse stale history. During the crossfade,
+            // keep the old meter but fade its residual gain to unity with the same envelope.
             self.match_reference_power = 0.0;
             self.match_output_power = 0.0;
+            self.match_reference_filter = [[crate::dsp::tone::State::default(); 2]; 2];
+            self.match_output_filter = [[crate::dsp::tone::State::default(); 2]; 2];
             self.match_gain = 1.0;
         }
-        y = y.map(|sample| sample * self.match_gain);
+        let applied_match_gain = 1.0 + (self.match_gain - 1.0) * match_blend;
+        y = y.map(|sample| sample * applied_match_gain);
 
         let peak = y[0].abs().max(y[1].abs());
         const CEILING: f64 = 0.8912509381337456; // -1 dBFS sample peak, not true peak or SPL.

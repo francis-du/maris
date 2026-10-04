@@ -627,6 +627,9 @@ impl Session {
             "performance":{"callback_calls":metrics.callback_calls.load(Ordering::Relaxed),"callback_frames":metrics.callback_frames.load(Ordering::Relaxed),
                 "callback_processing_average_percent":(metrics.callback_frames.load(Ordering::Relaxed)>0).then(|| metrics.callback_processing_nanos.load(Ordering::Relaxed) as f64*self.rate as f64*100.0/(metrics.callback_frames.load(Ordering::Relaxed) as f64*1e9)),
                 "callback_processing_max_us":metrics.callback_max_nanos.load(Ordering::Relaxed) as f64/1000.0,"worker_cpu_percent":Value::Null}});
+        status["level_match_makeup_db"] = json!(f32::from_bits(
+            metrics.level_match_makeup.load(Ordering::Relaxed)
+        ));
         status["settings_pending"] = json!(self
             .outputs
             .iter()

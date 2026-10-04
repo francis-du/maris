@@ -258,11 +258,31 @@ fn level_match_is_close_in_ebu_r128_integrated_loudness_not_only_raw_power() {
                 ..MusicProfile::default()
             },
         ),
+        (
+            Profile::preset("clarity").unwrap(),
+            MusicProfile {
+                bass_db: 6.0,
+                presence_db: 3.0,
+                air_db: 3.0,
+                highpass_hz: Some(200.0),
+                compressor: maris::music::Compressor {
+                    enabled: true,
+                    threshold_db: -24.0,
+                    ratio: 4.0,
+                    ..maris::music::Compressor::default()
+                },
+                adaptive: maris::music::AdaptiveEq {
+                    enabled: true,
+                    strength: 1.0,
+                },
+                ..MusicProfile::default()
+            },
+        ),
     ];
     for (profile, music) in cases {
         let delta = integrated_loudness_delta_db(&profile, &music);
         assert!(
-            delta.abs() < 0.8,
+            delta.abs() < 0.7,
             "EBU R128 integrated loudness mismatch remains {delta:.3} LU"
         );
     }
@@ -574,12 +594,26 @@ fn disabling_level_match_drops_residual_makeup_without_stale_meter_history() {
         let _ = processor.process([x, x]);
     }
 
+    let settled_makeup = processor.level_match_makeup_db();
+    assert!(
+        settled_makeup > 3.0,
+        "fixture did not establish meaningful residual makeup: {settled_makeup:.3} dB"
+    );
     processor.update(disabled_settings);
+    let mut previous_makeup = settled_makeup;
+    let mut maximum_makeup_step = 0.0_f64;
     for _ in 0..2400 {
         let x = sample(phase);
         phase += 1;
         let _ = processor.process([x, x]);
+        let makeup = processor.level_match_makeup_db();
+        maximum_makeup_step = maximum_makeup_step.max((makeup - previous_makeup).abs());
+        previous_makeup = makeup;
     }
+    assert!(
+        maximum_makeup_step < 0.1,
+        "disabling Level Match stepped residual makeup by {maximum_makeup_step:.3} dB in one frame"
+    );
 
     let mut input_power = 0.0_f64;
     let mut output_power = 0.0_f64;
@@ -602,6 +636,48 @@ fn disabling_level_match_drops_residual_makeup_without_stale_meter_history() {
         phase += 1;
         let y = processor.process([x, x])[0];
         assert!(y.is_finite() && y.abs() <= 0.891252);
+    }
+}
+
+#[test]
+fn digital_silence_releases_program_dependent_makeup_before_new_content() {
+    let profile = Profile::default();
+    let music = MusicProfile {
+        highpass_hz: Some(200.0),
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        ..MusicProfile::default()
+    };
+    let mut processor = Processor::new(
+        Settings::compile(&profile, 48000)
+            .unwrap()
+            .with_music(&music, 48000)
+            .unwrap(),
+    );
+    for i in 0..192000 {
+        let x = (0.02 * (std::f64::consts::TAU * 80.0 * i as f64 / 48000.0).sin()) as f32;
+        let _ = processor.process([x, x]);
+    }
+    let before_silence = processor.level_match_makeup_db();
+    assert!(
+        before_silence > 3.0,
+        "fixture did not establish program-dependent makeup: {before_silence:.3} dB"
+    );
+    for _ in 0..96000 {
+        let _ = processor.process([0.0, 0.0]);
+    }
+    let after_silence = processor.level_match_makeup_db();
+    assert!(
+        after_silence.abs() < 0.2,
+        "digital silence retained stale residual makeup: {after_silence:.3} dB"
+    );
+    for i in 0..24000 {
+        let x = (0.08 * (std::f64::consts::TAU * 2000.0 * i as f64 / 48000.0).sin()) as f32;
+        for sample in processor.process([x, -x]) {
+            assert!(sample.is_finite() && sample.abs() <= 0.891252);
+        }
     }
 }
 

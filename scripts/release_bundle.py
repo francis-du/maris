@@ -228,7 +228,22 @@ def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: di
     if output.exists() or output.is_symlink():
         raise ValueError('Manifest destination already exists')
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text('\n'.join(lines) + '\n', encoding='ascii', newline='\n')
+    payload = ('\n'.join(lines) + '\n').encode('ascii')
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(prefix='.maris-release.', dir=output.parent, delete=False) as handle:
+            temporary = Path(handle.name)
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        # Hard-link publication is an atomic no-overwrite commit on the destination
+        # filesystem: concurrent collectors cannot both win the earlier existence check.
+        os.link(temporary, output)
+    except FileExistsError as error:
+        raise ValueError('Manifest destination already exists') from error
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
     return channel
 
 
@@ -320,7 +335,8 @@ def main() -> None:
     destination = ROOT / 'dist' / ('online-candidate' if args.candidate else 'online-approved')
     destination.mkdir(parents=True, exist_ok=True)
     archive = destination / (stem + ('.zip' if system == 'windows' else '.tar.gz'))
-    if archive.exists() or archive.is_symlink():
+    record_path = destination / (stem + '.release.json')
+    if archive.exists() or archive.is_symlink() or record_path.exists() or record_path.is_symlink():
         raise ValueError('Online kit already exists; never overwrite release inputs')
     review = ROOT / '.maris-review'; review.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='online-kit-', dir=review) as temporary:
@@ -376,8 +392,27 @@ def main() -> None:
                   'ci_run': os.environ.get('GITHUB_RUN_ID'), 'ci_commit': os.environ.get('GITHUB_SHA'),
                   'ci_repository': os.environ.get('GITHUB_REPOSITORY')}
         inspect_kit(packed, record)
-        shutil.move(str(packed), archive)
-        (destination / (stem + '.release.json')).write_text(json.dumps(record, indent=2) + '\n', encoding='utf-8')
+        record_ready = work / record_path.name
+        with record_ready.open('x', encoding='utf-8', newline='\n') as handle:
+            handle.write(json.dumps(record, indent=2) + '\n')
+            handle.flush()
+            os.fsync(handle.fileno())
+        published_archive = False
+        try:
+            # Commit only fully-written files and never replace an existing release input.
+            # Concurrent preparers may both pass the early check, but only one can link each
+            # final path. A normal record-publication failure removes its just-linked archive.
+            os.link(packed, archive)
+            published_archive = True
+            os.link(record_ready, record_path)
+        except FileExistsError as error:
+            if published_archive:
+                archive.unlink(missing_ok=True)
+            raise ValueError('Online kit already exists; never overwrite release inputs') from error
+        except Exception:
+            if published_archive:
+                archive.unlink(missing_ok=True)
+            raise
     print(json.dumps({'archive': str(archive.relative_to(ROOT)), 'channel': channel, 'compiled_here': False, 'published': False}))
 
 

@@ -575,6 +575,41 @@ fn preparing_an_output_does_not_publish_settings_before_a_callback_runs() {
 }
 
 #[test]
+fn renderer_reports_level_match_makeup_separately_from_static_safety_preamp() {
+    let metrics = Arc::new(Metrics::default());
+    let profile = Profile::default();
+    let music = crate::music::MusicProfile {
+        bass_db: 6.0,
+        adaptive: crate::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        ..crate::music::MusicProfile::default()
+    };
+    let settings = Settings::compile(&profile, 48_000)
+        .unwrap()
+        .with_music(&music, 48_000)
+        .unwrap();
+    assert!(settings.effective_preamp_db() < -5.0);
+    let mut renderer = Renderer::new(
+        settings,
+        48_000,
+        Arc::new(ArrayQueue::new(8)),
+        metrics.clone(),
+    );
+    renderer.render(&mut [0.0_f32; 256], 2, || ([0.01, 0.01], true));
+    let makeup = f32::from_bits(metrics.level_match_makeup.load(Ordering::Relaxed));
+    assert!(
+        makeup > 5.0,
+        "renderer hid active level-match makeup from telemetry: {makeup:.3} dB"
+    );
+    assert_eq!(
+        f32::from_bits(metrics.effective_gain.load(Ordering::Relaxed)),
+        settings.effective_preamp_db() as f32
+    );
+}
+
+#[test]
 fn all_settings_rows_commit_through_the_session_queue_into_the_real_renderer() {
     // This fixture represents a live session, independent of CI disk/scheduler delays.
     let _clock = crate::analysis::test_clock::Clock::freeze();
