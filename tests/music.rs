@@ -302,6 +302,107 @@ fn retune_resets_adaptive_cut_state_when_upstream_tone_changes() {
 }
 
 #[test]
+fn retune_resets_bass_assist_state_when_its_dry_gain_changes() {
+    let bass_assist = maris::music::BassAssist {
+        enabled: true,
+        amount: 1.0,
+    };
+    let old = MusicProfile {
+        bass_assist,
+        correction_preamp_db: 0.0,
+        level_match: false,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        ..MusicProfile::default()
+    };
+    let next = MusicProfile {
+        bass_assist,
+        correction_preamp_db: -12.0,
+        correction_source: Some("gain-change fixture".into()),
+        level_match: false,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        ..MusicProfile::default()
+    };
+    let mut trained = maris::music::Processor::new(old.compile(48_000).unwrap());
+    for i in 0..48_000 {
+        let t = i as f64 / 48_000.0;
+        let x = 0.35 * (std::f64::consts::TAU * 72.0 * t).sin();
+        let _ = trained.process([x, x]);
+    }
+    let settings = next.compile(48_000).unwrap();
+    let mut retuned = trained.retune(settings);
+    let mut fresh = maris::music::Processor::new(settings);
+    for i in 0..256 {
+        let t = i as f64 / 48_000.0;
+        let x = 0.02 * (std::f64::consts::TAU * 440.0 * t).sin();
+        let actual = retuned.process([x, x]);
+        let expected = fresh.process([x, x]);
+        for channel in 0..2 {
+            assert!(
+                (actual[channel] - expected[channel]).abs() < 1e-8,
+                "Bass Assist inherited filter history measured at a different dry gain: actual={} fresh={}",
+                actual[channel],
+                expected[channel]
+            );
+        }
+    }
+}
+
+#[test]
+fn retune_resets_virtual_surround_state_when_upstream_wet_path_changes() {
+    let old = MusicProfile {
+        bass_db: 6.0,
+        air_db: -3.0,
+        virtual_surround: 1.0,
+        level_match: false,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        ..MusicProfile::default()
+    };
+    let next = MusicProfile {
+        bass_db: -6.0,
+        air_db: 3.0,
+        virtual_surround: 1.0,
+        level_match: false,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        ..MusicProfile::default()
+    };
+    let mut trained = maris::music::Processor::new(old.compile(48_000).unwrap());
+    for i in 0..48_000 {
+        let t = i as f64 / 48_000.0;
+        let x = 0.25 * (std::f64::consts::TAU * 3_700.0 * t).sin();
+        let _ = trained.process([x, -x]);
+    }
+    let settings = next.compile(48_000).unwrap();
+    let mut retuned = trained.retune(settings);
+    let mut fresh = maris::music::Processor::new(settings);
+    for i in 0..256 {
+        let t = i as f64 / 48_000.0;
+        let x = 0.02 * (std::f64::consts::TAU * 1_100.0 * t).sin();
+        let actual = retuned.process([x, -0.7 * x]);
+        let expected = fresh.process([x, -0.7 * x]);
+        for channel in 0..2 {
+            assert!(
+                (actual[channel] - expected[channel]).abs() < 1e-8,
+                "Virtual 360 inherited all-pass history from a different upstream wet path: actual={} fresh={}",
+                actual[channel],
+                expected[channel]
+            );
+        }
+    }
+}
+
+#[test]
 fn reference_toggle_preserves_settled_level_match_history_for_the_same_signal_path() {
     let wet_profile = MusicProfile {
         highpass_hz: Some(180.0),
@@ -764,4 +865,91 @@ fn adaptive_eq_leaves_midband_mostly_alone() {
         reduction < 0.2,
         "Off-target detector over-triggered: {reduction:.3} dB"
     );
+}
+
+fn retune_meter_profile(level_match: bool, reference: bool) -> MusicProfile {
+    MusicProfile {
+        bass_db: 6.0,
+        air_db: -2.0,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        compressor: maris::music::Compressor {
+            enabled: false,
+            ..maris::music::Compressor::default()
+        },
+        level_match,
+        reference,
+        ..MusicProfile::default()
+    }
+}
+
+fn retune_meter_frame(index: usize) -> [f64; 2] {
+    let t = index as f64 / 48_000.0;
+    let envelope = if index % 24_000 < 12_000 { 0.18 } else { 0.035 };
+    [
+        envelope
+            * (0.72 * (std::f64::consts::TAU * 83.0 * t).sin()
+                + 0.28 * (std::f64::consts::TAU * 2100.0 * t).sin()),
+        envelope
+            * (0.64 * (std::f64::consts::TAU * 109.0 * t + 0.3).sin()
+                + 0.36 * (std::f64::consts::TAU * 6900.0 * t + 0.7).sin()),
+    ]
+}
+
+#[test]
+fn retune_preserves_level_match_meter_across_reference_toggle() {
+    let wet_settings = retune_meter_profile(true, false).compile(48_000).unwrap();
+    let reference_settings = retune_meter_profile(true, true).compile(48_000).unwrap();
+    let mut source = maris::music::Processor::new(wet_settings);
+    let mut control = maris::music::Processor::new(reference_settings);
+    for index in 0..144_000 {
+        let frame = retune_meter_frame(index);
+        let _ = source.process(frame);
+        let _ = control.process(frame);
+    }
+
+    let mut retuned = source.retune(reference_settings);
+    for index in 144_000..144_128 {
+        let frame = retune_meter_frame(index);
+        let actual = retuned.process(frame);
+        let expected = control.process(frame);
+        for channel in 0..2 {
+            assert!(
+                (actual[channel] - expected[channel]).abs() < 1e-10,
+                "reference toggle discarded settled Level Match history: actual={} expected={}",
+                actual[channel],
+                expected[channel]
+            );
+        }
+    }
+}
+
+#[test]
+fn retune_preserves_meter_when_level_match_is_enabled() {
+    let unmatched_settings = retune_meter_profile(false, false).compile(48_000).unwrap();
+    let matched_settings = retune_meter_profile(true, false).compile(48_000).unwrap();
+    let mut source = maris::music::Processor::new(unmatched_settings);
+    let mut control = maris::music::Processor::new(matched_settings);
+    for index in 0..144_000 {
+        let frame = retune_meter_frame(index);
+        let _ = source.process(frame);
+        let _ = control.process(frame);
+    }
+
+    let mut retuned = source.retune(matched_settings);
+    for index in 144_000..144_128 {
+        let frame = retune_meter_frame(index);
+        let actual = retuned.process(frame);
+        let expected = control.process(frame);
+        for channel in 0..2 {
+            assert!(
+                (actual[channel] - expected[channel]).abs() < 1e-10,
+                "enabling Level Match discarded meter history: actual={} expected={}",
+                actual[channel],
+                expected[channel]
+            );
+        }
+    }
 }

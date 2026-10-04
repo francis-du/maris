@@ -567,13 +567,22 @@ impl Processor {
                 }
             }
         }
-        if state_continuous && self.settings.bass_assist == settings.bass_assist {
+        if state_continuous
+            && self.settings.gain == settings.gain
+            && self.settings.bass_assist == settings.bass_assist
+        {
             next.bass_source_highpass = self.bass_source_highpass;
             next.bass_source_lowpass = self.bass_source_lowpass;
             next.bass_harmonic_highpass = self.bass_harmonic_highpass;
             next.bass_harmonic_lowpass = self.bass_harmonic_lowpass;
         }
-        if state_continuous
+        let spatial_feed_unchanged = state_continuous
+            && self.settings.gain == settings.gain
+            && self.settings.count == settings.count
+            && self.settings.filters == settings.filters
+            && self.settings.adaptive == settings.adaptive
+            && self.settings.bass_assist == settings.bass_assist;
+        if spatial_feed_unchanged
             && self.settings.virtual_surround > 1e-9
             && settings.virtual_surround > 1e-9
             && self.settings.surround_highpass == settings.surround_highpass
