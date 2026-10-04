@@ -57,8 +57,14 @@ jobs:
             echo "Tag $tag does not match Cargo version $cargo_version" >&2
             exit 1
           fi
-          release_state="$(gh release view "$tag" --json isDraft,isPrerelease,publishedAt --jq '[.isDraft,.isPrerelease,(.publishedAt != null)] | @tsv')"
-          if [ "$release_state" != 
+          is_draft="$(gh release view "$tag" --json isDraft --jq '.isDraft')"
+          is_prerelease="$(gh release view "$tag" --json isPrerelease --jq '.isPrerelease')"
+          published_at="$(gh release view "$tag" --json publishedAt --jq '.publishedAt // ""')"
+          if [ "$is_draft" != "false" ] || [ "$is_prerelease" != "false" ] || [ -z "$published_at" ]; then
+            echo "Release $tag must be a published stable release, not a draft or prerelease" >&2
+            exit 1
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - name: Download exact successful run artifacts
         if: steps.release.outputs.publish == 'true'
