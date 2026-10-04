@@ -549,7 +549,9 @@ impl Processor {
             next.bass_harmonic_highpass = self.bass_harmonic_highpass;
             next.bass_harmonic_lowpass = self.bass_harmonic_lowpass;
         }
-        if self.settings.surround_highpass == settings.surround_highpass
+        if self.settings.virtual_surround > 1e-9
+            && settings.virtual_surround > 1e-9
+            && self.settings.surround_highpass == settings.surround_highpass
             && self.settings.surround_allpass_a == settings.surround_allpass_a
             && self.settings.surround_allpass_b == settings.surround_allpass_b
         {

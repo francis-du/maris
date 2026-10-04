@@ -386,6 +386,52 @@ fn virtual_surround_does_not_replay_stale_side_after_a_mono_passage() {
 }
 
 #[test]
+fn virtual_surround_reenable_does_not_replay_state_frozen_while_disabled() {
+    let enabled = MusicProfile {
+        virtual_surround: 1.0,
+        level_match: false,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        ..MusicProfile::default()
+    };
+    let mut disabled = enabled.clone();
+    disabled.virtual_surround = 0.0;
+
+    let enabled_settings = enabled.compile(48_000).unwrap();
+    let disabled_settings = disabled.compile(48_000).unwrap();
+    let mut processor = maris::music::Processor::new(enabled_settings);
+    for i in 0..4_096 {
+        let x = 0.2 * (std::f64::consts::TAU * 3_500.0 * i as f64 / 48_000.0).sin();
+        let _ = processor.process([x, -x]);
+    }
+
+    processor = processor.retune(disabled_settings);
+    for i in 0..48_000 {
+        let x = 0.1 * (std::f64::consts::TAU * 440.0 * i as f64 / 48_000.0).sin();
+        let y = processor.process([x, x]);
+        assert!((y[0] - y[1]).abs() < 1e-12);
+    }
+
+    processor = processor.retune(enabled_settings);
+    let mut fresh = maris::music::Processor::new(enabled_settings);
+    for i in 0..2_048 {
+        let x = 0.1 * (std::f64::consts::TAU * 440.0 * i as f64 / 48_000.0).sin();
+        let actual = processor.process([x, x]);
+        let expected = fresh.process([x, x]);
+        for channel in 0..2 {
+            assert!(
+                (actual[channel] - expected[channel]).abs() < 1e-10,
+                "re-enabled Virtual 360 replayed filter state frozen while disabled: actual={} fresh={}",
+                actual[channel],
+                expected[channel]
+            );
+        }
+    }
+}
+
+#[test]
 fn virtual_surround_decorrelates_side_but_preserves_center_sum() {
     let profile = MusicProfile {
         virtual_surround: 0.8,

@@ -567,10 +567,15 @@ fn rapid_reversal_does_not_finish_an_obsolete_loudness_target_first() {
         index += 1;
     }
 
+    let mut previous_makeup = processor.level_match_makeup_db();
+    let mut maximum_makeup_step = 0.0_f64;
     processor.update(b);
     for _ in 0..RATE as usize * 3 / 100 {
         let input = frame(index);
         let _ = processor.process(input);
+        let makeup = processor.level_match_makeup_db();
+        maximum_makeup_step = maximum_makeup_step.max((makeup - previous_makeup).abs());
+        previous_makeup = makeup;
         let _ = reference.process(input);
         index += 1;
     }
@@ -582,6 +587,9 @@ fn rapid_reversal_does_not_finish_an_obsolete_loudness_target_first() {
         let input = frame(index);
         index += 1;
         let actual = processor.process(input);
+        let makeup = processor.level_match_makeup_db();
+        maximum_makeup_step = maximum_makeup_step.max((makeup - previous_makeup).abs());
+        previous_makeup = makeup;
         let expected = reference.process(input);
         for channel in 0..2 {
             deviation_power += f64::from(actual[channel] - expected[channel]).powi(2);
@@ -592,5 +600,9 @@ fn rapid_reversal_does_not_finish_an_obsolete_loudness_target_first() {
     assert!(
         error_db < -24.0,
         "rapid A→B→A reversal kept obsolete B audible too long: residual error {error_db:.2} dB"
+    );
+    assert!(
+        maximum_makeup_step < 0.08,
+        "rapid A→B→A reversal stepped Level Match telemetry by {maximum_makeup_step:.4} dB/sample"
     );
 }
