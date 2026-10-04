@@ -14,8 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from dependency_notices import validate as validate_notices
 from portable_package import create_payload, validate_binary
-from release_bundle import inspect_kit
-from cli_release import commit_release_inputs
+from release_bundle import commit_release_inputs, inspect_kit
 from test_online import fixture
 import test_online
 from test_portable import fixture as binary_fixture

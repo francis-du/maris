@@ -15,7 +15,7 @@ from dependency_notices import target, validate as validate_notices
 from package_smoke import extract
 from portable_package import host_target, validate_binary
 from release_gate import check_report
-from release_bundle import digest, inspect_kit, pack
+from release_bundle import commit_release_inputs, digest, inspect_kit, pack
 from source_audit import ROOT, source_digest
 
 
@@ -54,24 +54,6 @@ def software_gate(payload: Path, source: str, system: str, arch: str, version: s
             'project_license_status': 'declared' if licensed else 'unspecified',
             'hardware_validation': False, 'subjective_listening_validation': False,
             'scope': 'Native CLI/TUI archives, checksums and isolated install/upgrade/recovery; no GUI signing or physical-device certification.'}
-
-
-def commit_release_inputs(packed: Path, record_ready: Path, archive: Path, record_path: Path, expected_sha256: str) -> None:
-    """Commit an archive/record pair without clobbering and recover an exact orphan archive."""
-    if archive.exists():
-        if archive.is_symlink() or archive.stat().st_size != packed.stat().st_size or digest(archive) != expected_sha256:
-            raise ValueError('Existing release archive differs from the exact rebuilt input')
-    else:
-        try:
-            os.link(packed, archive)
-        except FileExistsError:
-            if archive.is_symlink() or archive.stat().st_size != packed.stat().st_size or digest(archive) != expected_sha256:
-                raise ValueError('Existing release archive differs from the exact rebuilt input')
-    try:
-        os.link(record_ready, record_path)
-    except FileExistsError:
-        if record_path.is_symlink() or record_path.read_bytes() != record_ready.read_bytes():
-            raise ValueError('Existing release record differs from the exact rebuilt input')
 
 
 def prepare(report: Path | None) -> dict:

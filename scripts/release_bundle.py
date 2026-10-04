@@ -32,6 +32,30 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def commit_release_inputs(
+    packed: Path,
+    record_ready: Path,
+    archive: Path,
+    record_path: Path,
+    expected_sha256: str,
+) -> None:
+    """Atomically converge an exact archive/record pair after races or process crashes."""
+    if archive.exists():
+        if archive.is_symlink() or archive.stat().st_size != packed.stat().st_size or digest(archive) != expected_sha256:
+            raise ValueError('Existing release archive differs from the exact rebuilt input')
+    else:
+        try:
+            os.link(packed, archive)
+        except FileExistsError:
+            if archive.is_symlink() or archive.stat().st_size != packed.stat().st_size or digest(archive) != expected_sha256:
+                raise ValueError('Existing release archive differs from the exact rebuilt input')
+    try:
+        os.link(record_ready, record_path)
+    except FileExistsError:
+        if record_path.is_symlink() or record_path.read_bytes() != record_ready.read_bytes():
+            raise ValueError('Existing release record differs from the exact rebuilt input')
+
+
 def inspect_kit(archive: Path, item: dict) -> None:
     """Bind catalog metadata to the actual package before any publication manifest exists."""
     system, arch, version = item['platform'], item['architecture'], item['version']
@@ -344,8 +368,10 @@ def main() -> None:
     destination.mkdir(parents=True, exist_ok=True)
     archive = destination / (stem + ('.zip' if system == 'windows' else '.tar.gz'))
     record_path = destination / (stem + '.release.json')
-    if archive.exists() or archive.is_symlink() or record_path.exists() or record_path.is_symlink():
+    if archive.is_symlink() or record_path.is_symlink() or record_path.exists():
         raise ValueError('Online kit already exists; never overwrite release inputs')
+    # An archive without its matching record can be left by process death between
+    # the two final hard links. Rebuild first and recover it only if bytes are exact.
     review = ROOT / '.maris-review'; review.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='online-kit-', dir=review) as temporary:
         work = Path(temporary)
@@ -405,22 +431,10 @@ def main() -> None:
             handle.write(json.dumps(record, indent=2) + '\n')
             handle.flush()
             os.fsync(handle.fileno())
-        published_archive = False
-        try:
-            # Commit only fully-written files and never replace an existing release input.
-            # Concurrent preparers may both pass the early check, but only one can link each
-            # final path. A normal record-publication failure removes its just-linked archive.
-            os.link(packed, archive)
-            published_archive = True
-            os.link(record_ready, record_path)
-        except FileExistsError as error:
-            if published_archive:
-                archive.unlink(missing_ok=True)
-            raise ValueError('Online kit already exists; never overwrite release inputs') from error
-        except Exception:
-            if published_archive:
-                archive.unlink(missing_ok=True)
-            raise
+        # Final publication is exact-byte idempotent. This makes a rerun recover
+        # an orphan archive left by process death and lets identical concurrent
+        # preparers converge without replacing either final path.
+        commit_release_inputs(packed, record_ready, archive, record_path, record['sha256'])
     print(json.dumps({'archive': str(archive.relative_to(ROOT)), 'channel': channel, 'compiled_here': False, 'published': False}))
 
 
