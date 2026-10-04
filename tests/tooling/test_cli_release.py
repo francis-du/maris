@@ -9,6 +9,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
@@ -119,6 +120,41 @@ class CliContracts(unittest.TestCase):
             record.write_bytes(b'different record')
             with self.assertRaisesRegex(ValueError, 'record differs'):
                 commit_release_inputs(packed, ready, archive, record, expected)
+
+    def test_new_archive_is_rolled_back_when_record_conflicts_or_link_fails(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            packed = root / 'packed.tar.gz'
+            ready = root / 'ready.json'
+            archive = root / 'final.tar.gz'
+            record = root / 'final.json'
+            packed.write_bytes(b'exact archive bytes')
+            ready.write_bytes(b'{"exact":true}\\n')
+            expected = hashlib.sha256(packed.read_bytes()).hexdigest()
+
+            record.write_bytes(b'different record')
+            with self.assertRaisesRegex(ValueError, 'record differs'):
+                commit_release_inputs(packed, ready, archive, record, expected)
+            self.assertFalse(archive.exists(), 'new archive survived a conflicting final record')
+            self.assertEqual(record.read_bytes(), b'different record')
+
+            record.unlink()
+            real_link = os.link
+            def fail_record_link(source, destination):
+                if Path(destination) == record:
+                    raise OSError('simulated record link failure')
+                return real_link(source, destination)
+            with patch('release_bundle.os.link', side_effect=fail_record_link):
+                with self.assertRaisesRegex(OSError, 'simulated record link failure'):
+                    commit_release_inputs(packed, ready, archive, record, expected)
+            self.assertFalse(archive.exists(), 'new archive survived a record-link failure')
+            self.assertFalse(record.exists())
+
+            os.link(packed, archive)
+            record.write_bytes(b'different record')
+            with self.assertRaisesRegex(ValueError, 'record differs'):
+                commit_release_inputs(packed, ready, archive, record, expected)
+            self.assertEqual(archive.read_bytes(), packed.read_bytes())
 
     def test_identical_concurrent_release_input_commits_converge_to_one_exact_pair(self):
         with tempfile.TemporaryDirectory() as temporary:
