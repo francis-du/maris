@@ -326,6 +326,26 @@ impl Processor {
     pub fn update(&mut self, settings: Settings) {
         // Entire chains are crossfaded; interpolating raw IIR coefficients is avoided.
         if self.remaining > 0 {
+            if settings == self.next.settings {
+                // Re-selecting the in-flight target cancels any older queued third target.
+                self.pending = None;
+                return;
+            }
+            if settings == self.active.settings {
+                // A fast A→B→A reversal should not force the obsolete B target to finish
+                // before returning. Reverse the existing crossfade at the exact same mix
+                // point so the waveform stays continuous and the remaining time is only
+                // the distance already travelled toward B.
+                std::mem::swap(&mut self.active, &mut self.next);
+                self.remaining = self.total.saturating_sub(self.remaining).max(1);
+                std::mem::swap(&mut self.match_transition_from, &mut self.match_gain);
+                self.match_reference_power = 0.0;
+                self.match_output_power = 0.0;
+                self.match_reference_filter = [[crate::dsp::tone::State::default(); 2]; 2];
+                self.match_output_filter = [[crate::dsp::tone::State::default(); 2]; 2];
+                self.pending = None;
+                return;
+            }
             self.pending = Some(settings);
             return;
         }

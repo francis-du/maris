@@ -383,3 +383,81 @@ fn explicit_preamp_change_remains_intentional_through_level_matched_transition()
         "Level Match erased or distorted an explicit -6 dB preamp request: settled={final_delta:.3} dB"
     );
 }
+
+#[test]
+fn rapid_reversal_does_not_finish_an_obsolete_loudness_target_first() {
+    const RATE: u32 = 48_000;
+    let profile = Profile::default();
+    let make = |bass_db, air_db| MusicProfile {
+        bass_db,
+        air_db,
+        adaptive: AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        compressor: Compressor {
+            enabled: false,
+            ..Compressor::default()
+        },
+        level_match: true,
+        ..MusicProfile::default()
+    };
+    let a = Settings::compile(&profile, RATE)
+        .unwrap()
+        .with_music(&make(0.0, 0.0), RATE)
+        .unwrap()
+        .with_transition_ms(RATE, 120);
+    let b = Settings::compile(&profile, RATE)
+        .unwrap()
+        .with_music(&make(6.0, -3.0), RATE)
+        .unwrap()
+        .with_transition_ms(RATE, 120);
+    let (a, b) = a.share_transition_headroom(b);
+    let mut processor = Processor::new(a);
+
+    let frame = |index: usize| {
+        let t = index as f64 / RATE as f64;
+        [
+            (0.05
+                * (0.55 * (std::f64::consts::TAU * 83.0 * t).sin()
+                    + 0.30 * (std::f64::consts::TAU * 997.0 * t).sin()
+                    + 0.15 * (std::f64::consts::TAU * 6833.0 * t).sin())) as f32,
+            (0.05
+                * (0.52 * (std::f64::consts::TAU * 109.0 * t + 0.3).sin()
+                    + 0.31 * (std::f64::consts::TAU * 1499.0 * t + 0.7).sin()
+                    + 0.17 * (std::f64::consts::TAU * 8921.0 * t + 1.1).sin())) as f32,
+        ]
+    };
+    let mut index = 0usize;
+    for _ in 0..RATE as usize * 3 {
+        let _ = processor.process(frame(index));
+        index += 1;
+    }
+
+    processor.update(b);
+    for _ in 0..RATE as usize * 3 / 100 {
+        let _ = processor.process(frame(index));
+        index += 1;
+    }
+    processor.update(a);
+
+    let mut reference = Processor::new(a);
+    let mut deviation_power = 0.0_f64;
+    let mut reference_power = 0.0_f64;
+    for _ in 0..RATE as usize / 10 {
+        let input = frame(index);
+        index += 1;
+        let actual = processor.process(input);
+        let expected = reference.process(input);
+        for channel in 0..2 {
+            deviation_power += f64::from(actual[channel] - expected[channel]).powi(2);
+            reference_power += f64::from(expected[channel]).powi(2);
+        }
+    }
+    let error_db = 10.0 * (deviation_power / reference_power.max(1e-30)).log10();
+    assert!(
+        error_db < -24.0,
+        "rapid A→B→A reversal kept obsolete B audible too long: residual error {error_db:.2} dB"
+    );
+}
+
