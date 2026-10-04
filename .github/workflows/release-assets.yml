@@ -6,11 +6,17 @@ on:
     types:
       - completed
 permissions:
-  contents: write
+  contents: read
   actions: read
+concurrency:
+  group: release-assets-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
 jobs:
   publish:
     if: github.event.workflow_run.conclusion == 'success'
+    permissions:
+      contents: write
+      actions: read
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
@@ -145,6 +151,8 @@ jobs:
   public-install-smoke:
     needs: publish
     if: needs.publish.outputs.publish == 'true'
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -154,8 +162,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The public docs serve the current bootstrap scripts. Pin only the
-          # downloaded release via --version; keep package bytes tied to the tag.
+          # Prove the public package with the exact bootstrap source that produced it.
+          # This avoids deleting valid assets because main moved while publication ran.
+          ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
       - name: Install from the public Release with install.sh
         if: runner.os != 'Windows'
@@ -183,3 +192,37 @@ jobs:
           & ./install.ps1 -Version $version -Prefix $prefix -Yes
           & (Join-Path $prefix 'Maris\bin\maris.exe') --version
           Remove-Item -LiteralPath $prefix -Recurse -Force
+
+  remove-uninstallable-assets:
+    needs: [publish, public-install-smoke]
+    if: always() && needs.publish.outputs.publish == 'true' && needs.public-install-smoke.result != 'success'
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Remove installer assets after any public installation failure
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.publish.outputs.tag }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          existing="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
+          expected=(
+            "Maris-$version-macos-x86_64.tar.gz"
+            "Maris-$version-macos-arm64.tar.gz"
+            "Maris-$version-linux-x86_64.tar.gz"
+            "Maris-$version-linux-arm64.tar.gz"
+            "Maris-$version-windows-x86_64.zip"
+            "Maris-$version-windows-arm64.zip"
+            "maris-release.tsv"
+            "SHA256SUMS"
+          )
+          for asset in "${expected[@]}"; do
+            if printf '%s\n' "$existing" | grep -Fxq -- "$asset"; then
+              gh release delete-asset "$RELEASE_TAG" "$asset" --yes
+            fi
+          done
