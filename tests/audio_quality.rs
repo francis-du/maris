@@ -542,6 +542,70 @@ fn removing_deep_static_reserve_cannot_reuse_old_makeup_as_a_gain_blast() {
 }
 
 #[test]
+fn disabling_level_match_drops_residual_makeup_without_stale_meter_history() {
+    let profile = Profile::default();
+    let enabled = MusicProfile {
+        highpass_hz: Some(200.0),
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        level_match: true,
+        ..MusicProfile::default()
+    };
+    let mut disabled = enabled.clone();
+    disabled.level_match = false;
+    let enabled_settings = Settings::compile(&profile, 48000)
+        .unwrap()
+        .with_music(&enabled, 48000)
+        .unwrap();
+    let disabled_settings = Settings::compile(&profile, 48000)
+        .unwrap()
+        .with_music(&disabled, 48000)
+        .unwrap();
+    let mut processor = Processor::new(enabled_settings);
+    let mut phase = 0usize;
+    let sample = |index: usize| {
+        (0.02 * (std::f64::consts::TAU * 80.0 * index as f64 / 48000.0).sin()) as f32
+    };
+    for _ in 0..192000 {
+        let x = sample(phase);
+        phase += 1;
+        let _ = processor.process([x, x]);
+    }
+
+    processor.update(disabled_settings);
+    for _ in 0..2400 {
+        let x = sample(phase);
+        phase += 1;
+        let _ = processor.process([x, x]);
+    }
+
+    let mut input_power = 0.0_f64;
+    let mut output_power = 0.0_f64;
+    for _ in 0..4800 {
+        let x = sample(phase);
+        phase += 1;
+        let y = processor.process([x, x])[0];
+        input_power += f64::from(x).powi(2);
+        output_power += f64::from(y).powi(2);
+    }
+    let delta = 10.0 * (output_power / input_power).log10();
+    assert!(
+        delta < -3.0,
+        "Level Match off retained stale makeup instead of exposing the intended high-pass attenuation: {delta:.3} dB"
+    );
+
+    processor.update(enabled_settings);
+    for _ in 0..12000 {
+        let x = sample(phase);
+        phase += 1;
+        let y = processor.process([x, x])[0];
+        assert!(y.is_finite() && y.abs() <= 0.891252);
+    }
+}
+
+#[test]
 fn settled_large_makeup_cannot_blast_after_a_sudden_level_step() {
     let profile = Profile::default();
     let music = MusicProfile {

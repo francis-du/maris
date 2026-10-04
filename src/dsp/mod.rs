@@ -343,25 +343,31 @@ impl Processor {
         });
         let reference_power = (reference[0] * reference[0] + reference[1] * reference[1]) * 0.5;
         let output_power = (y[0] * y[0] + y[1] * y[1]) * 0.5;
-        self.match_reference_power = settings.match_meter * self.match_reference_power
-            + (1.0 - settings.match_meter) * reference_power;
-        self.match_output_power = settings.match_meter * self.match_output_power
-            + (1.0 - settings.match_meter) * output_power;
-        let desired_match = if settings.level_match
-            && self.match_reference_power > 1e-10
-            && self.match_output_power > 1e-10
-        {
-            // Static reserve is already recovered per chain. Bound only the remaining
-            // program-dependent correction so a spectral null cannot become unbounded gain.
-            const MAX_RESIDUAL_MAKEUP: f64 = 3.981_071_705_534_972_2; // +12 dB
-            (self.match_reference_power / self.match_output_power)
-                .sqrt()
-                .clamp(0.25, MAX_RESIDUAL_MAKEUP)
+        if settings.level_match {
+            self.match_reference_power = settings.match_meter * self.match_reference_power
+                + (1.0 - settings.match_meter) * reference_power;
+            self.match_output_power = settings.match_meter * self.match_output_power
+                + (1.0 - settings.match_meter) * output_power;
+            let desired_match =
+                if self.match_reference_power > 1e-10 && self.match_output_power > 1e-10 {
+                    // Static reserve is already recovered per chain. Bound only the remaining
+                    // program-dependent correction so a spectral null cannot become unbounded gain.
+                    const MAX_RESIDUAL_MAKEUP: f64 = 3.981_071_705_534_972_2; // +12 dB
+                    (self.match_reference_power / self.match_output_power)
+                        .sqrt()
+                        .clamp(0.25, MAX_RESIDUAL_MAKEUP)
+                } else {
+                    1.0
+                };
+            self.match_gain =
+                settings.match_slew * self.match_gain + (1.0 - settings.match_slew) * desired_match;
         } else {
-            1.0
-        };
-        self.match_gain =
-            settings.match_slew * self.match_gain + (1.0 - settings.match_slew) * desired_match;
+            // Disabling Level Match is an explicit request to stop compensation now.
+            // Clear the program meter as well so a later re-enable cannot reuse stale history.
+            self.match_reference_power = 0.0;
+            self.match_output_power = 0.0;
+            self.match_gain = 1.0;
+        }
         y = y.map(|sample| sample * self.match_gain);
 
         let peak = y[0].abs().max(y[1].abs());
