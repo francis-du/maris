@@ -461,6 +461,10 @@ impl Renderer {
             (self.render.processor.adaptive_reduction_db() as f32).to_bits(),
             Ordering::Relaxed,
         );
+        metrics.level_match_makeup.store(
+            (self.render.processor.level_match_makeup_db() as f32).to_bits(),
+            Ordering::Relaxed,
+        );
         metrics
             .peak
             .store(peak[0].max(peak[1]).to_bits(), Ordering::Relaxed);
