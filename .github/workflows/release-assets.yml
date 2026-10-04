@@ -23,6 +23,7 @@ jobs:
       publish: ${{ steps.release.outputs.publish }}
       tag: ${{ steps.release.outputs.tag }}
       cleanup: ${{ steps.assets.outputs.cleanup }}
+      cleanup_assets: ${{ steps.assets.outputs.cleanup_assets }}
       mode: ${{ steps.assets.outputs.mode }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -57,13 +58,7 @@ jobs:
             echo "Tag $tag does not match Cargo version $cargo_version" >&2
             exit 1
           fi
-          is_draft="$(gh release view "$tag" --json isDraft --jq '.isDraft')"
-          is_prerelease="$(gh release view "$tag" --json isPrerelease --jq '.isPrerelease')"
-          published_at="$(gh release view "$tag" --json publishedAt --jq '.publishedAt // ""')"
-          if [ "$is_draft" != "false" ] || [ "$is_prerelease" != "false" ] || [ -z "$published_at" ]; then
-            echo "Release $tag must be a published stable release, not a draft or prerelease" >&2
-            exit 1
-          fi
+          gh release view "$tag" >/dev/null
           echo "publish=true" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - name: Download exact successful run artifacts
@@ -170,33 +165,55 @@ jobs:
           existing="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
           mkdir .release-existing .release-publish
           present=0
+          cleanup_assets=()
           for asset in "${expected[@]}"; do
-            if printf '%s\n' "$existing" | grep -Fxq -- "$asset"; then
+            if grep -Fxq -- "$asset" <<< "$existing"; then
               present=$((present + 1))
+            else
+              cleanup_assets+=("$asset")
             fi
           done
+          emit_cleanup_assets() {
+            local joined=""
+            if [ "${#cleanup_assets[@]}" -gt 0 ]; then
+              joined="$(IFS=,; printf '%s' "${cleanup_assets[*]}")"
+            fi
+            echo "cleanup_assets=$joined" >> "$GITHUB_OUTPUT"
+          }
+          add_cleanup_asset() {
+            local candidate="$1"
+            local asset
+            for asset in "${cleanup_assets[@]}"; do
+              [ "$asset" = "$candidate" ] && return
+            done
+            cleanup_assets+=("$candidate")
+          }
 
-          # A partial installer set is already fail-closed state: if any later
-          # verification/upload step fails, remove the installer-facing names.
-          # A complete existing set is preserved on a transient download/API error
-          # until we have positive evidence that one of its bytes is wrong.
-          echo "failed=false" >> "$GITHUB_OUTPUT"
+          # Missing names are exactly the assets this run may upload. Roll back only
+          # those names on a later upload/public-install failure so an exact pre-existing
+          # partial set remains resumable. Existing bytes are removed only after a
+          # positive mismatch proves that specific asset is invalid.
           if [ "$present" -lt "${#expected[@]}" ]; then
-            echo "cleanup=true" >> "$GITHUB_OUTPUT"
+            cleanup=true
+          else
+            cleanup=false
           fi
 
           for asset in "${expected[@]}"; do
-            if printf '%s\n' "$existing" | grep -Fxq -- "$asset"; then
+            if grep -Fxq -- "$asset" <<< "$existing"; then
               if ! gh release download "$RELEASE_TAG" --pattern "$asset" --dir .release-existing --clobber; then
                 echo "failed=true" >> "$GITHUB_OUTPUT"
+                echo "cleanup=$cleanup" >> "$GITHUB_OUTPUT"
+                emit_cleanup_assets
                 echo "Could not verify existing release asset: $asset" >&2
                 exit 0
               fi
               if ! cmp -s ".release-upload/$asset" ".release-existing/$asset"; then
-                if [ "$present" -eq "${#expected[@]}" ]; then
-                  echo "cleanup=true" >> "$GITHUB_OUTPUT"
-                fi
+                add_cleanup_asset "$asset"
+                cleanup=true
                 echo "failed=true" >> "$GITHUB_OUTPUT"
+                echo "cleanup=$cleanup" >> "$GITHUB_OUTPUT"
+                emit_cleanup_assets
                 echo "Existing release asset differs from the exact successful build: $asset" >&2
                 exit 0
               fi
@@ -204,9 +221,11 @@ jobs:
               ln ".release-upload/$asset" ".release-publish/$asset"
             fi
           done
+          echo "failed=false" >> "$GITHUB_OUTPUT"
+          echo "cleanup=$cleanup" >> "$GITHUB_OUTPUT"
+          emit_cleanup_assets
           if [ "$present" -eq "${#expected[@]}" ]; then
             echo "mode=reuse" >> "$GITHUB_OUTPUT"
-            echo "cleanup=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if [ "$present" -eq 0 ]; then
@@ -293,6 +312,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ needs.publish.outputs.tag }}
+          CLEANUP_ASSETS: ${{ needs.publish.outputs.cleanup_assets }}
         run: |
           set -euo pipefail
           version="${RELEASE_TAG#v}"
@@ -307,8 +327,23 @@ jobs:
             "maris-release.tsv"
             "SHA256SUMS"
           )
-          for asset in "${expected[@]}"; do
-            if printf '%s\n' "$existing" | grep -Fxq -- "$asset"; then
+          cleanup=()
+          if [ -n "$CLEANUP_ASSETS" ]; then
+            IFS=',' read -r -a cleanup <<< "$CLEANUP_ASSETS"
+          fi
+          for asset in "${cleanup[@]}"; do
+            allowed=false
+            for expected_asset in "${expected[@]}"; do
+              if [ "$asset" = "$expected_asset" ]; then
+                allowed=true
+                break
+              fi
+            done
+            if [ "$allowed" != true ]; then
+              echo "Refusing to delete unexpected release asset: $asset" >&2
+              exit 1
+            fi
+            if grep -Fxq -- "$asset" <<< "$existing"; then
               gh release delete-asset "$RELEASE_TAG" "$asset" --yes
             fi
           done

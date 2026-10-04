@@ -70,8 +70,15 @@ def _tar_header_with_size(header: bytes, size: int) -> bytes:
     if size >= 8 ** 11:
         raise ValueError('Native pax metadata exceeds tar size field')
     updated = bytearray(header)
+    # Container ownership is not part of the signed payload. Normalize it so an
+    # identical notarized app repacked by a runner with a different uid/user name
+    # remains byte-for-byte recoverable after an interrupted publication.
+    updated[108:116] = b'0000000\0'
+    updated[116:124] = b'0000000\0'
     updated[124:136] = f'{size:011o}\0'.encode('ascii')
     updated[136:148] = b'00000000000\0'
+    updated[265:297] = b'\0' * 32
+    updated[297:329] = b'\0' * 32
     updated[148:156] = b'        '
     checksum = sum(updated)
     updated[148:156] = f'{checksum:06o}\0 '.encode('ascii')

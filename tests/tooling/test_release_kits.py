@@ -188,14 +188,22 @@ class ReleaseKits(unittest.TestCase):
     def test_tar_header_rewrite_normalizes_mtime_and_recomputes_checksum(self):
         header = bytearray(512)
         header[0:8] = b'fixture\0'
+        header[108:116] = b'0000765\0'
+        header[116:124] = b'0000020\0'
         header[124:136] = b'00000000012\0'
         header[136:148] = b'77777777777\0'
         header[148:156] = b'        '
         header[156:157] = b'x'
         header[257:263] = b'ustar\0'
+        header[265:297] = b'runner-user\0' + b'\0' * 20
+        header[297:329] = b'runner-group\0' + b'\0' * 19
         rewritten = _tar_header_with_size(bytes(header), 7)
+        self.assertEqual(rewritten[108:116], b'0000000\0')
+        self.assertEqual(rewritten[116:124], b'0000000\0')
         self.assertEqual(rewritten[124:136], b'00000000007\0')
         self.assertEqual(rewritten[136:148], b'00000000000\0')
+        self.assertEqual(rewritten[265:297], b'\0' * 32)
+        self.assertEqual(rewritten[297:329], b'\0' * 32)
         checksum = int(rewritten[148:154], 8)
         checkable = bytearray(rewritten)
         checkable[148:156] = b'        '
