@@ -310,6 +310,10 @@ impl Processor {
             self.active.adaptive_reduction_db()
         }
     }
+    pub fn level_match_makeup_db(&self) -> f64 {
+        let gain = static_level_match_gain(self.active.settings) * self.match_gain;
+        20.0 * gain.max(1e-12).log10()
+    }
     pub fn process(&mut self, input: [f32; 2]) -> [f32; 2] {
         let mut y = self.active.frame(input);
         if self.remaining > 0 {
