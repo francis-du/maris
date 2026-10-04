@@ -232,8 +232,14 @@ fn level_match_tracks_the_original_program_not_the_already_attenuated_dry_path()
 #[test]
 fn level_match_is_close_in_ebu_r128_integrated_loudness_not_only_raw_power() {
     let cases = [
-        (Profile::preset("bass").unwrap(), MusicProfile::preset("detail").unwrap()),
-        (Profile::preset("soft").unwrap(), MusicProfile::preset("warm").unwrap()),
+        (
+            Profile::preset("bass").unwrap(),
+            MusicProfile::preset("detail").unwrap(),
+        ),
+        (
+            Profile::preset("soft").unwrap(),
+            MusicProfile::preset("warm").unwrap(),
+        ),
         (
             Profile::default(),
             MusicProfile {
