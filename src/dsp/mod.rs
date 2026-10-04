@@ -92,9 +92,9 @@ impl Settings {
         let headroom = if peak > 0.01 { -peak - 0.5 } else { 0.0 };
         self.gain = 10.0_f64.powf(self.requested_preamp_db.min(correction).min(headroom) / 20.0);
         // Safety headroom belongs before EQ/dynamics, but it must not become a permanent
-        // loudness cut versus the original system path. Restore only the difference between
-        // that safety gain and the user's requested preamp after tonal processing; the final
-        // limiter remains authoritative for peak safety.
+        // loudness cut versus the original system path. Keep the user's requested preamp as
+        // the post-processing level-match target; the final limiter remains authoritative for
+        // instantaneous peak safety.
         self.level_target_gain = 10.0_f64.powf(self.requested_preamp_db / 20.0);
         self.level_match = profile.level_match;
         self.music.gain = 1.0; // Reserve headroom once, not separately in both processors.
