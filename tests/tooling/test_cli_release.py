@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 from dependency_notices import validate as validate_notices
 from portable_package import create_payload, validate_binary
 from release_bundle import inspect_kit
+from cli_release import commit_release_inputs
 from test_online import fixture
 import test_online
 from test_portable import fixture as binary_fixture
@@ -81,6 +82,43 @@ class CliContracts(unittest.TestCase):
             index.write_text(json.dumps(record), encoding='utf-8')
             with self.assertRaises(ValueError):
                 validate_notices(directory, 'fixture-native-target')
+
+    def test_release_input_commit_recovers_exact_orphan_and_refuses_different_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            packed = root / 'packed.tar.gz'
+            ready = root / 'ready.json'
+            archive = root / 'published.tar.gz'
+            record = root / 'published.json'
+            packed.write_bytes(b'exact archive bytes')
+            ready.write_bytes(b'{"exact":true}\n')
+            expected = hashlib.sha256(packed.read_bytes()).hexdigest()
+
+            # Simulate a process crash after the archive hard-link but before the record.
+            os.link(packed, archive)
+            commit_release_inputs(packed, ready, archive, record, expected)
+            self.assertEqual(archive.read_bytes(), packed.read_bytes())
+            self.assertEqual(record.read_bytes(), ready.read_bytes())
+
+            # A concurrent identical preparer is idempotent and does not rewrite either file.
+            before_archive = archive.stat().st_ino
+            before_record = record.stat().st_ino
+            commit_release_inputs(packed, ready, archive, record, expected)
+            self.assertEqual(archive.stat().st_ino, before_archive)
+            self.assertEqual(record.stat().st_ino, before_record)
+
+            # Existing data with the same names but different bytes must remain fail-closed.
+            archive.unlink()
+            archive.write_bytes(b'different archive')
+            with self.assertRaisesRegex(ValueError, 'archive differs'):
+                commit_release_inputs(packed, ready, archive, root / 'other.json', expected)
+
+            archive.unlink()
+            os.link(packed, archive)
+            record.unlink()
+            record.write_bytes(b'different record')
+            with self.assertRaisesRegex(ValueError, 'record differs'):
+                commit_release_inputs(packed, ready, archive, record, expected)
 
     @unittest.skipUnless(os.name == 'nt', 'Native PowerShell production parser/extractor required')
     def test_native_windows_download_accepts_cli_contract_and_still_rejects_bad_inputs(self):

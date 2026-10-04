@@ -640,6 +640,64 @@ fn disabling_level_match_drops_residual_makeup_without_stale_meter_history() {
 }
 
 #[test]
+fn rapid_level_match_toggles_coalesce_without_gain_steps_or_stale_makeup() {
+    let profile = Profile::default();
+    let enabled = MusicProfile {
+        highpass_hz: Some(200.0),
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        level_match: true,
+        ..MusicProfile::default()
+    };
+    let mut disabled = enabled.clone();
+    disabled.level_match = false;
+    let enabled_settings = Settings::compile(&profile, 48000)
+        .unwrap()
+        .with_music(&enabled, 48000)
+        .unwrap();
+    let disabled_settings = Settings::compile(&profile, 48000)
+        .unwrap()
+        .with_music(&disabled, 48000)
+        .unwrap();
+    let mut processor = Processor::new(enabled_settings);
+    let mut previous = 0.0_f32;
+    let mut max_step = 0.0_f32;
+    for index in 0..96_000usize {
+        if index % 137 == 0 {
+            processor.update(if (index / 137).is_multiple_of(2) {
+                disabled_settings
+            } else {
+                enabled_settings
+            });
+        }
+        let x = (0.04 * (std::f64::consts::TAU * 80.0 * index as f64 / 48000.0).sin()) as f32;
+        let y = processor.process([x, x])[0];
+        assert!(y.is_finite() && y.abs() <= 0.891252);
+        if index > 0 {
+            max_step = max_step.max((y - previous).abs());
+        }
+        previous = y;
+    }
+    assert!(
+        max_step < 0.06,
+        "rapid Level Match updates created an audible sample step: {max_step:.6}"
+    );
+
+    processor.update(disabled_settings);
+    for index in 0..12_000usize {
+        let x = (0.04 * (std::f64::consts::TAU * 80.0 * index as f64 / 48000.0).sin()) as f32;
+        let _ = processor.process([x, x]);
+    }
+    assert!(
+        processor.level_match_makeup_db().abs() < 0.2,
+        "rapid updates left stale makeup after Level Match settled off: {:.3} dB",
+        processor.level_match_makeup_db()
+    );
+}
+
+#[test]
 fn digital_silence_releases_program_dependent_makeup_before_new_content() {
     let profile = Profile::default();
     let music = MusicProfile {

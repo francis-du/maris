@@ -56,6 +56,24 @@ def software_gate(payload: Path, source: str, system: str, arch: str, version: s
             'scope': 'Native CLI/TUI archives, checksums and isolated install/upgrade/recovery; no GUI signing or physical-device certification.'}
 
 
+def commit_release_inputs(packed: Path, record_ready: Path, archive: Path, record_path: Path, expected_sha256: str) -> None:
+    """Commit an archive/record pair without clobbering and recover an exact orphan archive."""
+    if archive.exists():
+        if archive.is_symlink() or archive.stat().st_size != packed.stat().st_size or digest(archive) != expected_sha256:
+            raise ValueError('Existing release archive differs from the exact rebuilt input')
+    else:
+        try:
+            os.link(packed, archive)
+        except FileExistsError:
+            if archive.is_symlink() or archive.stat().st_size != packed.stat().st_size or digest(archive) != expected_sha256:
+                raise ValueError('Existing release archive differs from the exact rebuilt input')
+    try:
+        os.link(record_ready, record_path)
+    except FileExistsError:
+        if record_path.is_symlink() or record_path.read_bytes() != record_ready.read_bytes():
+            raise ValueError('Existing release record differs from the exact rebuilt input')
+
+
 def prepare(report: Path | None) -> dict:
     system, arch = host_target()
     source = source_digest()
@@ -75,8 +93,10 @@ def prepare(report: Path | None) -> dict:
     destination.mkdir(parents=True, exist_ok=True)
     archive = destination / (stem + ('.zip' if system == 'windows' else '.tar.gz'))
     record_path = destination / (stem + '.release.json')
-    if archive.exists() or archive.is_symlink() or record_path.exists() or record_path.is_symlink():
+    if archive.is_symlink() or record_path.is_symlink() or record_path.exists():
         raise ValueError('Refusing to overwrite release inputs')
+    # A crash may have committed the exact archive hard-link before the matching record.
+    # Rebuild and byte-verify that orphan below instead of making the release lane unrecoverable.
     with tempfile.TemporaryDirectory(prefix='cli-release-', dir=ROOT / '.maris-review') as temporary:
         work = Path(temporary)
         local_stem = locals[0].name[:-len(suffix)]
@@ -122,17 +142,5 @@ def prepare(report: Path | None) -> dict:
             handle.write(json.dumps(record, indent=2) + '\n')
             handle.flush()
             os.fsync(handle.fileno())
-        published_archive = False
-        try:
-            os.link(packed, archive)
-            published_archive = True
-            os.link(record_ready, record_path)
-        except FileExistsError as error:
-            if published_archive:
-                archive.unlink(missing_ok=True)
-            raise ValueError('Refusing to overwrite release inputs') from error
-        except Exception:
-            if published_archive:
-                archive.unlink(missing_ok=True)
-            raise
+        commit_release_inputs(packed, record_ready, archive, record_path, record['sha256'])
     return {'archive': str(archive.relative_to(ROOT)), 'interface': 'cli', 'channel': 'stable', 'compiled_here': False, 'published': False}
