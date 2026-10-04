@@ -180,6 +180,7 @@ jobs:
           # verification/upload step fails, remove the installer-facing names.
           # A complete existing set is preserved on a transient download/API error
           # until we have positive evidence that one of its bytes is wrong.
+          echo "failed=false" >> "$GITHUB_OUTPUT"
           if [ "$present" -lt "${#expected[@]}" ]; then
             echo "cleanup=true" >> "$GITHUB_OUTPUT"
           fi
@@ -187,15 +188,17 @@ jobs:
           for asset in "${expected[@]}"; do
             if printf '%s\n' "$existing" | grep -Fxq -- "$asset"; then
               if ! gh release download "$RELEASE_TAG" --pattern "$asset" --dir .release-existing --clobber; then
+                echo "failed=true" >> "$GITHUB_OUTPUT"
                 echo "Could not verify existing release asset: $asset" >&2
-                exit 1
+                exit 0
               fi
               if ! cmp -s ".release-upload/$asset" ".release-existing/$asset"; then
                 if [ "$present" -eq "${#expected[@]}" ]; then
                   echo "cleanup=true" >> "$GITHUB_OUTPUT"
                 fi
+                echo "failed=true" >> "$GITHUB_OUTPUT"
                 echo "Existing release asset differs from the exact successful build: $asset" >&2
-                exit 1
+                exit 0
               fi
             else
               ln ".release-upload/$asset" ".release-publish/$asset"
@@ -211,251 +214,14 @@ jobs:
           else
             echo "mode=resume" >> "$GITHUB_OUTPUT"
           fi
+      - name: Fail after publishing cleanup intent for invalid existing assets
+        if: steps.release.outputs.publish == 'true' && steps.assets.outputs.failed == 'true'
+        shell: bash
+        run: |
+          echo "Existing release assets could not be safely verified." >&2
+          exit 1
       - name: Upload installer-consumable assets to GitHub Release
-        if: steps.release.outputs.publish == 'true' && steps.assets.outputs.mode != 'reuse'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-        run: gh release upload "$RELEASE_TAG" .release-publish/*
-
-  public-install-smoke:
-    needs: publish
-    if: needs.publish.outputs.publish == 'true'
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-15, macos-15-intel, ubuntu-24.04, ubuntu-24.04-arm, windows-2025, windows-11-arm]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
-    steps:
-      - name: Checkout release-source bootstrap for a fresh or resumed publication
-        if: needs.publish.outputs.mode != 'reuse'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-          persist-credentials: false
-      - name: Checkout the current public bootstrap when revalidating existing assets
-        if: needs.publish.outputs.mode == 'reuse'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          persist-credentials: false
-      - name: Install from the public Release with install.sh
-        if: runner.os != 'Windows'
-        shell: bash
-        env:
-          RELEASE_TAG: ${{ needs.publish.outputs.tag }}
-        run: |
-          set -euo pipefail
-          version="${RELEASE_TAG#v}"
-          prefix="$HOME/maris-public-release-smoke"
-          rm -rf "$prefix"
-          bash install.sh --version "$version" --prefix "$prefix" --yes
-          "$prefix/bin/maris" --version
-          rm -rf "$prefix"
-      - name: Install from the public Release with install.ps1
-        if: runner.os == 'Windows'
-        shell: pwsh
-        env:
-          RELEASE_TAG: ${{ needs.publish.outputs.tag }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $version = $env:RELEASE_TAG -replace '^v', ''
-          $prefix = Join-Path $env:USERPROFILE 'maris-public-release-smoke'
-          if (Test-Path -LiteralPath $prefix) { Remove-Item -LiteralPath $prefix -Recurse -Force }
-          & ./install.ps1 -Version $version -Prefix $prefix -Yes
-          & (Join-Path $prefix 'Maris\bin\maris.exe') --version
-          Remove-Item -LiteralPath $prefix -Recurse -Force
-
-  remove-uninstallable-assets:
-    needs: [publish, public-install-smoke]
-    if: always() && needs.publish.outputs.publish == 'true' && needs.publish.outputs.cleanup == 'true' && (needs.publish.result != 'success' || needs.public-install-smoke.result != 'success')
-    permissions:
-      contents: write
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - name: Remove installer assets after any public installation failure
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ needs.publish.outputs.tag }}
-        run: |
-          set -euo pipefail
-          version="${RELEASE_TAG#v}"
-          existing="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
-          expected=(
-            "Maris-$version-macos-x86_64.tar.gz"
-            "Maris-$version-macos-arm64.tar.gz"
-            "Maris-$version-linux-x86_64.tar.gz"
-            "Maris-$version-linux-arm64.tar.gz"
-            "Maris-$version-windows-x86_64.zip"
-            "Maris-$version-windows-arm64.zip"
-            "maris-release.tsv"
-            "SHA256SUMS"
-          )
-          for asset in "${expected[@]}"; do
-            if printf '%s\n' "$existing" | grep -Fxq -- "$asset"; then
-              gh release delete-asset "$RELEASE_TAG" "$asset" --yes
-            fi
-          done
-false\tfalse\ttrue' ]; then
-            echo "Release $tag must be a published stable release, not a draft or prerelease" >&2
-            exit 1
-          fi
-          echo "publish=true" >> "$GITHUB_OUTPUT"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-      - name: Download exact successful run artifacts
-        if: steps.release.outputs.publish == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
-        run: gh run download "$SOURCE_RUN_ID" --pattern 'maris-cli-*' --dir .release-download
-      - name: Verify installer contract and prepare public assets
-        if: steps.release.outputs.publish == 'true'
-        env:
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import hashlib
-          import shutil
-          import os
-
-          root = Path('.release-download')
-          manifests = list(root.rglob('maris-release.tsv'))
-          if len(manifests) != 1:
-              raise SystemExit(f'expected exactly one assembled manifest, found {len(manifests)}')
-          manifest = manifests[0]
-          lines = manifest.read_text(encoding='ascii').splitlines()
-          values = {}
-          assets = []
-          seen_targets = set()
-          for line in lines:
-              fields = line.split('\t')
-              if fields[0] == 'asset':
-                  if len(fields) != 7:
-                      raise SystemExit('invalid asset row in release manifest')
-                  system, arch, name, archive_hash, archive_bytes, binary_hash = fields[1:]
-                  expected_name = f"Maris-{values.get('version', '')}-{system}-{arch}" + ('.zip' if system == 'windows' else '.tar.gz')
-                  if name != expected_name:
-                      raise SystemExit(f'installer-visible asset name mismatch: {name} != {expected_name}')
-                  if (system, arch) in seen_targets:
-                      raise SystemExit(f'duplicate installer target: {system}/{arch}')
-                  seen_targets.add((system, arch))
-                  assets.append((system, arch, name, archive_hash, archive_bytes, binary_hash))
-              elif len(fields) == 2:
-                  values[fields[0]] = fields[1]
-
-          version = os.environ['RELEASE_TAG'].removeprefix('v')
-          expected_targets = {
-              ('macos', 'x86_64'), ('macos', 'arm64'),
-              ('linux', 'x86_64'), ('linux', 'arm64'),
-              ('windows', 'x86_64'), ('windows', 'arm64'),
-          }
-          if lines[0] != 'maris-release-v2':
-              raise SystemExit('installers require the v2 CLI release manifest')
-          if values.get('version') != version or values.get('channel') != 'stable' or values.get('interface') != 'cli':
-              raise SystemExit('assembled manifest is not the stable CLI release for this tag')
-          if seen_targets != expected_targets or len(lines) != 11:
-              raise SystemExit('manifest must contain exactly the six installer-supported native targets')
-
-          out = Path('.release-upload')
-          out.mkdir()
-          copied = []
-          for system, arch, name, expected_hash, expected_bytes, binary_hash in assets:
-              if len(expected_hash) != 64 or len(binary_hash) != 64:
-                  raise SystemExit(f'invalid checksum field for {name}')
-              matches = [p for p in root.rglob(name) if p.is_file()]
-              if len(matches) != 1:
-                  raise SystemExit(f'expected one {name}, found {len(matches)}')
-              source = matches[0]
-              actual_bytes = source.stat().st_size
-              actual_hash = hashlib.sha256(source.read_bytes()).hexdigest()
-              if actual_bytes != int(expected_bytes) or actual_hash != expected_hash:
-                  raise SystemExit(f'archive integrity mismatch: {name}')
-              target = out / name
-              shutil.copy2(source, target)
-              copied.append(target)
-
-          manifest_target = out / 'maris-release.tsv'
-          shutil.copy2(manifest, manifest_target)
-          copied.append(manifest_target)
-          sums = []
-          for path in sorted(copied, key=lambda p: p.name):
-              sums.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}")
-          (out / 'SHA256SUMS').write_text('\n'.join(sums) + '\n', encoding='ascii', newline='\n')
-          PY
-      - name: Reuse exact existing installer assets without clobbering
-        id: assets
-        if: steps.release.outputs.publish == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-        run: |
-          set -euo pipefail
-          expected=()
-          for path in .release-upload/*; do
-            [ -f "$path" ] || continue
-            expected+=("$(basename "$path")")
-          done
-          if [ "${#expected[@]}" -ne 8 ]; then
-            echo "Expected exactly eight installer-facing release assets" >&2
-            exit 1
-          fi
-          existing="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
-          mkdir .release-existing .release-publish
-          present=0
-          for asset in "${expected[@]}"; do
-            if printf '%s\n' "$existing" | grep -Fxq -- "$asset"; then
-              present=$((present + 1))
-            fi
-          done
-
-          # A partial installer set is already fail-closed state: if any later
-          # verification/upload step fails, remove the installer-facing names.
-          # A complete existing set is preserved on a transient download/API error
-          # until we have positive evidence that one of its bytes is wrong.
-          if [ "$present" -lt "${#expected[@]}" ]; then
-            echo "cleanup=true" >> "$GITHUB_OUTPUT"
-          fi
-
-          for asset in "${expected[@]}"; do
-            if printf '%s\n' "$existing" | grep -Fxq -- "$asset"; then
-              if ! gh release download "$RELEASE_TAG" --pattern "$asset" --dir .release-existing --clobber; then
-                echo "Could not verify existing release asset: $asset" >&2
-                exit 1
-              fi
-              if ! cmp -s ".release-upload/$asset" ".release-existing/$asset"; then
-                if [ "$present" -eq "${#expected[@]}" ]; then
-                  echo "cleanup=true" >> "$GITHUB_OUTPUT"
-                fi
-                echo "Existing release asset differs from the exact successful build: $asset" >&2
-                exit 1
-              fi
-            else
-              ln ".release-upload/$asset" ".release-publish/$asset"
-            fi
-          done
-          if [ "$present" -eq "${#expected[@]}" ]; then
-            echo "mode=reuse" >> "$GITHUB_OUTPUT"
-            echo "cleanup=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [ "$present" -eq 0 ]; then
-            echo "mode=fresh" >> "$GITHUB_OUTPUT"
-          else
-            echo "mode=resume" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Upload installer-consumable assets to GitHub Release
-        if: steps.release.outputs.publish == 'true' && steps.assets.outputs.mode != 'reuse'
+        if: steps.release.outputs.publish == 'true' && steps.assets.outputs.failed != 'true' && steps.assets.outputs.mode != 'reuse'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
