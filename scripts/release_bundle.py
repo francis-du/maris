@@ -135,12 +135,14 @@ def commit_release_inputs(
     expected_sha256: str,
 ) -> None:
     """Atomically converge an exact archive/record pair after races or process crashes."""
+    created_archive = False
     if archive.exists():
         if archive.is_symlink() or archive.stat().st_size != packed.stat().st_size or digest(archive) != expected_sha256:
             raise ValueError('Existing release archive differs from the exact rebuilt input')
     else:
         try:
             os.link(packed, archive)
+            created_archive = True
         except FileExistsError:
             if archive.is_symlink() or archive.stat().st_size != packed.stat().st_size or digest(archive) != expected_sha256:
                 raise ValueError('Existing release archive differs from the exact rebuilt input')
@@ -148,7 +150,13 @@ def commit_release_inputs(
         os.link(record_ready, record_path)
     except FileExistsError:
         if record_path.is_symlink() or record_path.read_bytes() != record_ready.read_bytes():
+            if created_archive:
+                archive.unlink(missing_ok=True)
             raise ValueError('Existing release record differs from the exact rebuilt input')
+    except Exception:
+        if created_archive:
+            archive.unlink(missing_ok=True)
+        raise
 
 
 def inspect_kit(archive: Path, item: dict) -> None:
