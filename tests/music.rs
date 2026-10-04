@@ -253,6 +253,108 @@ fn retune_does_not_carry_adaptive_reduction_into_changed_dynamic_eq() {
 }
 
 #[test]
+fn retune_resets_adaptive_cut_state_when_upstream_tone_changes() {
+    let adaptive = maris::music::AdaptiveEq {
+        enabled: true,
+        strength: 1.0,
+    };
+    let old = MusicProfile {
+        bass_db: 6.0,
+        presence_db: -2.0,
+        air_db: 3.0,
+        adaptive,
+        level_match: false,
+        ..MusicProfile::default()
+    };
+    let next = MusicProfile {
+        bass_db: -6.0,
+        presence_db: 3.0,
+        air_db: -3.0,
+        adaptive,
+        level_match: false,
+        ..MusicProfile::default()
+    };
+    let mut trained = maris::music::Processor::new(old.compile(48_000).unwrap());
+    for i in 0..96_000 {
+        let t = i as f64 / 48_000.0;
+        let x = 0.3
+            * (0.45 * (std::f64::consts::TAU * 95.0 * t).sin()
+                + 0.55 * (std::f64::consts::TAU * 8_500.0 * t).sin());
+        let _ = trained.process([x, -0.8 * x]);
+    }
+    let settings = next.compile(48_000).unwrap();
+    let mut retuned = trained.retune(settings);
+    let mut fresh = maris::music::Processor::new(settings);
+    for i in 0..128 {
+        let t = i as f64 / 48_000.0;
+        let x = 0.04 * (std::f64::consts::TAU * 1_200.0 * t).sin();
+        let actual = retuned.process([x, x]);
+        let expected = fresh.process([x, x]);
+        for channel in 0..2 {
+            assert!(
+                (actual[channel] - expected[channel]).abs() < 1e-7,
+                "Dynamic EQ cut state leaked across upstream tone retune: actual={} fresh={}",
+                actual[channel],
+                expected[channel]
+            );
+        }
+    }
+}
+
+#[test]
+fn reference_toggle_preserves_settled_level_match_history_for_the_same_signal_path() {
+    let wet_profile = MusicProfile {
+        highpass_hz: Some(180.0),
+        level_match: true,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        compressor: maris::music::Compressor {
+            enabled: false,
+            ..maris::music::Compressor::default()
+        },
+        ..MusicProfile::default()
+    };
+    let mut reference_profile = wet_profile.clone();
+    reference_profile.reference = true;
+
+    let wet_settings = wet_profile.compile(48_000).unwrap();
+    let reference_settings = reference_profile.compile(48_000).unwrap();
+    let mut processor = maris::music::Processor::new(wet_settings);
+
+    let sample = |index: usize| {
+        0.12 * (std::f64::consts::TAU * 80.0 * index as f64 / 48_000.0).sin()
+    };
+    let mut index = 0usize;
+    let mut settled_power = 0.0;
+    for i in 0..48_000 * 4 {
+        let x = sample(index);
+        index += 1;
+        let y = processor.process([x, x]);
+        if i >= 48_000 * 3 {
+            settled_power += y[0] * y[0] + y[1] * y[1];
+        }
+    }
+    let settled_rms = (settled_power / (48_000.0 * 2.0)).sqrt();
+
+    processor = processor.retune(reference_settings);
+    let mut switched_power = 0.0;
+    for _ in 0..4_800 {
+        let x = sample(index);
+        index += 1;
+        let y = processor.process([x, x]);
+        switched_power += y[0] * y[0] + y[1] * y[1];
+    }
+    let switched_rms = (switched_power / (4_800.0 * 2.0)).sqrt();
+    let delta_db = 20.0 * (switched_rms / settled_rms).max(1e-12).log10();
+    assert!(
+        delta_db.abs() < 0.35,
+        "Reference toggle discarded settled Level Match history and changed A/B level by {delta_db:.3} dB"
+    );
+}
+
+#[test]
 fn output_switch_baseline_preserves_correction_but_neutralizes_subjective_controls() {
     let mut profile = maris::music::MusicProfile::preset("warm").unwrap();
     profile.presence_db = 1.0;
@@ -382,6 +484,47 @@ fn virtual_surround_does_not_replay_stale_side_after_a_mono_passage() {
             (y[0] - y[1]).abs() < 1e-12,
             "Virtual 360 leaked stale Side energy into mono content"
         );
+    }
+}
+
+#[test]
+fn music_reenable_does_not_replay_filter_state_frozen_while_disabled() {
+    let enabled = MusicProfile {
+        bass_db: 6.0,
+        air_db: -3.0,
+        level_match: false,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        ..MusicProfile::default()
+    };
+    let mut disabled = enabled.clone();
+    disabled.enabled = false;
+
+    let enabled_settings = enabled.compile(48_000).unwrap();
+    let disabled_settings = disabled.compile(48_000).unwrap();
+    let mut processor = maris::music::Processor::new(enabled_settings);
+    let _ = processor.process([0.8, -0.8]);
+
+    processor = processor.retune(disabled_settings);
+    for _ in 0..48_000 {
+        assert_eq!(processor.process([0.0, 0.0]), [0.0, 0.0]);
+    }
+
+    processor = processor.retune(enabled_settings);
+    let mut fresh = maris::music::Processor::new(enabled_settings);
+    for _ in 0..256 {
+        let actual = processor.process([0.0, 0.0]);
+        let expected = fresh.process([0.0, 0.0]);
+        for channel in 0..2 {
+            assert!(
+                (actual[channel] - expected[channel]).abs() < 1e-12,
+                "re-enabled music stage replayed filter state frozen while disabled: actual={} fresh={}",
+                actual[channel],
+                expected[channel]
+            );
+        }
     }
 }
 

@@ -496,14 +496,12 @@ impl Processor {
     }
     pub fn retune(&self, settings: Settings) -> Self {
         let mut next = Self::new(settings);
-        // The dry/wet ratio is only valid for the exact signal path that measured it.
-        // Carrying a neutral baseline's slow meter into a newly boosted target lets the
-        // boost arrive before Level Match catches up during the startup crossfade.
-        if self.settings == settings {
-            next.dry_power = self.dry_power;
-            next.wet_power = self.wet_power;
-        }
-        let compressor_feed_unchanged = self.settings.enabled == settings.enabled
+        // The dry/wet ratio is valid as long as the actual signal path is unchanged.
+        // Reference/Level Match toggles only choose which already-computed branch is heard;
+        // throwing away the 1.5 s meter history there creates a transient A/B level wobble.
+        // Any change that alters the wet path must still reset the ratio.
+        let state_continuous = self.settings.enabled && settings.enabled;
+        let compressor_feed_unchanged = state_continuous
             && self.settings.gain == settings.gain
             && self.settings.count == settings.count
             && self.settings.filters == settings.filters
@@ -518,38 +516,65 @@ impl Processor {
             && self.settings.surround_allpass_b == settings.surround_allpass_b
             && self.settings.attack == settings.attack
             && self.settings.release == settings.release;
-        if self.settings.compressor == settings.compressor && compressor_feed_unchanged {
+        let signal_path_unchanged =
+            self.settings.compressor == settings.compressor && compressor_feed_unchanged;
+        if signal_path_unchanged {
+            next.dry_power = self.dry_power;
+            next.wet_power = self.wet_power;
             next.reduction_db = self.reduction_db;
         }
-        if self.settings.adaptive == settings.adaptive {
+
+        // Dynamic-EQ detection runs from `dry`, while its cut filters run on the
+        // already tone-shaped `wet` path. Preserve those histories independently:
+        // a pure A/B/reference change may keep both, a gain change invalidates the
+        // detector history, and an upstream tone/correction change invalidates only
+        // the cut-filter state so old IIR energy cannot leak into the new curve.
+        let adaptive_detector_feed_unchanged = state_continuous
+            && self.settings.gain == settings.gain
+            && self.settings.adaptive == settings.adaptive;
+        let adaptive_cut_feed_unchanged = adaptive_detector_feed_unchanged
+            && self.settings.count == settings.count
+            && self.settings.filters == settings.filters;
+        if adaptive_detector_feed_unchanged {
             next.program_power = self.program_power;
         }
-        for c in 0..2 {
-            for i in 0..MAX_FILTERS {
-                if self.settings.filters[i] == settings.filters[i] {
-                    next.states[c][i] = self.states[c][i];
+        if state_continuous {
+            for c in 0..2 {
+                for i in 0..MAX_FILTERS {
+                    if self.settings.filters[i] == settings.filters[i] {
+                        next.states[c][i] = self.states[c][i];
+                    }
+                }
+                for i in 0..ADAPTIVE_BANDS {
+                    if adaptive_detector_feed_unchanged
+                        && self.settings.adaptive[i] == settings.adaptive[i]
+                    {
+                        next.adaptive_detector[c][i] = self.adaptive_detector[c][i];
+                    }
+                    if adaptive_cut_feed_unchanged
+                        && self.settings.adaptive[i] == settings.adaptive[i]
+                    {
+                        next.adaptive_cut[c][i] = self.adaptive_cut[c][i];
+                    }
                 }
             }
-            for i in 0..ADAPTIVE_BANDS {
-                if self.settings.adaptive[i] == settings.adaptive[i] {
-                    next.adaptive_detector[c][i] = self.adaptive_detector[c][i];
-                    next.adaptive_cut[c][i] = self.adaptive_cut[c][i];
+            if adaptive_detector_feed_unchanged {
+                for i in 0..ADAPTIVE_BANDS {
+                    if self.settings.adaptive[i] == settings.adaptive[i] {
+                        next.adaptive_power[i] = self.adaptive_power[i];
+                        next.adaptive_reduction_db[i] = self.adaptive_reduction_db[i];
+                    }
                 }
             }
         }
-        for i in 0..ADAPTIVE_BANDS {
-            if self.settings.adaptive[i] == settings.adaptive[i] {
-                next.adaptive_power[i] = self.adaptive_power[i];
-                next.adaptive_reduction_db[i] = self.adaptive_reduction_db[i];
-            }
-        }
-        if self.settings.bass_assist == settings.bass_assist {
+        if state_continuous && self.settings.bass_assist == settings.bass_assist {
             next.bass_source_highpass = self.bass_source_highpass;
             next.bass_source_lowpass = self.bass_source_lowpass;
             next.bass_harmonic_highpass = self.bass_harmonic_highpass;
             next.bass_harmonic_lowpass = self.bass_harmonic_lowpass;
         }
-        if self.settings.virtual_surround > 1e-9
+        if state_continuous
+            && self.settings.virtual_surround > 1e-9
             && settings.virtual_surround > 1e-9
             && self.settings.surround_highpass == settings.surround_highpass
             && self.settings.surround_allpass_a == settings.surround_allpass_a
