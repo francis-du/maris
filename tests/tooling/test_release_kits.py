@@ -120,6 +120,39 @@ class ReleaseKits(unittest.TestCase):
                                       check=True, capture_output=True, timeout=10).stdout.rstrip(b'\n')
             self.assertEqual(metadata, b'payload metadata must survive')
 
+    @unittest.skipUnless(sys.platform == 'darwin', 'Native Apple archive metadata requires macOS')
+    def test_native_mac_pack_is_independent_of_directory_insertion_order(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            stem = 'Maris-1.2.3-macos-arm64'
+            kits = []
+            for parent_name, names in [('forward', ['a.txt', 'b.txt', 'c.txt']),
+                                       ('reverse', ['c.txt', 'b.txt', 'a.txt'])]:
+                kit = root / parent_name / stem
+                resources = kit / 'Maris.app/Contents/Resources'
+                resources.mkdir(parents=True)
+                for name in names:
+                    (resources / name).write_text(f'payload-{name}\n', encoding='utf-8')
+                (kit / '.maris-release').write_text('fixture\n', encoding='utf-8')
+                subprocess.run(
+                    ['/usr/bin/xattr', '-w', 'com.maris.archive-test', 'same metadata',
+                     str(kit / 'Maris.app')],
+                    check=True, capture_output=True, timeout=10,
+                )
+                kits.append(kit)
+            for index, path in enumerate([kits[1], *sorted(kits[1].rglob('*'))]):
+                stamp = 1_700_000_000 + index * 17
+                os.utime(path, (stamp, stamp), follow_symlinks=False)
+            first = root / 'forward.tar.gz'
+            second = root / 'reverse.tar.gz'
+            pack(kits[0], first, 'macos')
+            pack(kits[1], second, 'macos')
+            self.assertEqual(
+                first.read_bytes(),
+                second.read_bytes(),
+                'macOS native archive depends on directory entry insertion order',
+            )
+
     def test_pax_time_normalizer_preserves_non_time_records_and_rejects_malformed_lengths(self):
         def record(key, value):
             body = f' {key}={value}\n'.encode()

@@ -385,6 +385,136 @@ fn explicit_preamp_change_remains_intentional_through_level_matched_transition()
 }
 
 #[test]
+fn spectral_content_change_during_retune_does_not_turn_level_match_into_pumping() {
+    const RATE: u32 = 48_000;
+    const WINDOW: usize = RATE as usize * 2 / 5;
+    const STEP: usize = RATE as usize / 20;
+    let profile = Profile::default();
+    let old_music = MusicProfile {
+        bass_db: 5.0,
+        presence_db: -1.5,
+        air_db: -2.0,
+        adaptive: AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        compressor: Compressor {
+            enabled: false,
+            ..Compressor::default()
+        },
+        level_match: true,
+        ..MusicProfile::default()
+    };
+    let new_music = MusicProfile {
+        bass_db: -3.0,
+        presence_db: 2.5,
+        air_db: 3.0,
+        highpass_hz: Some(120.0),
+        adaptive: AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        compressor: Compressor {
+            enabled: false,
+            ..Compressor::default()
+        },
+        level_match: true,
+        ..MusicProfile::default()
+    };
+    let old = Settings::compile(&profile, RATE)
+        .unwrap()
+        .with_music(&old_music, RATE)
+        .unwrap();
+    let next = Settings::compile(&profile, RATE)
+        .unwrap()
+        .with_music(&new_music, RATE)
+        .unwrap()
+        .with_transition_ms(RATE, 120);
+    let (old, next) = old.share_transition_headroom(next);
+    let mut processor = Processor::new(old);
+
+    let bass_program = |index: usize| {
+        let t = index as f64 / RATE as f64;
+        [
+            (0.055
+                * (0.72 * (std::f64::consts::TAU * 73.0 * t).sin()
+                    + 0.20 * (std::f64::consts::TAU * 511.0 * t).sin()
+                    + 0.08 * (std::f64::consts::TAU * 4200.0 * t).sin())) as f32,
+            (0.052
+                * (0.69 * (std::f64::consts::TAU * 91.0 * t + 0.3).sin()
+                    + 0.22 * (std::f64::consts::TAU * 733.0 * t + 0.6).sin()
+                    + 0.09 * (std::f64::consts::TAU * 5100.0 * t + 1.0).sin())) as f32,
+        ]
+    };
+    let bright_program = |index: usize| {
+        let t = index as f64 / RATE as f64;
+        [
+            (0.055
+                * (0.10 * (std::f64::consts::TAU * 103.0 * t).sin()
+                    + 0.38 * (std::f64::consts::TAU * 1711.0 * t).sin()
+                    + 0.52 * (std::f64::consts::TAU * 8903.0 * t).sin())) as f32,
+            (0.052
+                * (0.11 * (std::f64::consts::TAU * 131.0 * t + 0.2).sin()
+                    + 0.36 * (std::f64::consts::TAU * 2137.0 * t + 0.7).sin()
+                    + 0.53 * (std::f64::consts::TAU * 10103.0 * t + 1.1).sin())) as f32,
+        ]
+    };
+
+    let mut index = 0usize;
+    for _ in 0..RATE as usize * 4 {
+        let _ = processor.process(bass_program(index));
+        index += 1;
+    }
+
+    processor.update(next);
+    let mut dry = Vec::with_capacity(RATE as usize * 3 * 2);
+    let mut wet = Vec::with_capacity(RATE as usize * 3 * 2);
+    let mut makeup = Vec::with_capacity(RATE as usize * 3);
+    for frame_index in 0..RATE as usize * 3 {
+        let input = if frame_index < RATE as usize / 20 {
+            bass_program(index)
+        } else {
+            bright_program(index)
+        };
+        index += 1;
+        let output = processor.process(input);
+        assert!(output
+            .iter()
+            .all(|sample| sample.is_finite() && sample.abs() <= 0.891252));
+        dry.extend_from_slice(&input);
+        wet.extend_from_slice(&output);
+        makeup.push(processor.level_match_makeup_db());
+    }
+
+    let mut minimum_delta = f64::INFINITY;
+    let mut maximum_delta = f64::NEG_INFINITY;
+    for start in (0..=RATE as usize * 3 - WINDOW).step_by(STEP) {
+        let end = start + WINDOW;
+        let mut dry_meter = ebur128::EbuR128::new(2, RATE, ebur128::Mode::M).unwrap();
+        let mut wet_meter = ebur128::EbuR128::new(2, RATE, ebur128::Mode::M).unwrap();
+        dry_meter.add_frames_f32(&dry[start * 2..end * 2]).unwrap();
+        wet_meter.add_frames_f32(&wet[start * 2..end * 2]).unwrap();
+        let delta =
+            wet_meter.loudness_momentary().unwrap() - dry_meter.loudness_momentary().unwrap();
+        minimum_delta = minimum_delta.min(delta);
+        maximum_delta = maximum_delta.max(delta);
+    }
+
+    let mut maximum_makeup_step = 0.0_f64;
+    for pair in makeup.windows(2) {
+        maximum_makeup_step = maximum_makeup_step.max((pair[1] - pair[0]).abs());
+    }
+    assert!(
+        minimum_delta > -1.75 && maximum_delta < 1.75,
+        "content + settings transition pumped program loudness: min={minimum_delta:.3} LU max={maximum_delta:.3} LU"
+    );
+    assert!(
+        maximum_makeup_step < 0.08,
+        "Level Match telemetry stepped too abruptly during content switch: {maximum_makeup_step:.4} dB/sample"
+    );
+}
+
+#[test]
 fn rapid_reversal_does_not_finish_an_obsolete_loudness_target_first() {
     const RATE: u32 = 48_000;
     let profile = Profile::default();
@@ -414,6 +544,7 @@ fn rapid_reversal_does_not_finish_an_obsolete_loudness_target_first() {
         .with_transition_ms(RATE, 120);
     let (a, b) = a.share_transition_headroom(b);
     let mut processor = Processor::new(a);
+    let mut reference = Processor::new(a);
 
     let frame = |index: usize| {
         let t = index as f64 / RATE as f64;
@@ -430,18 +561,21 @@ fn rapid_reversal_does_not_finish_an_obsolete_loudness_target_first() {
     };
     let mut index = 0usize;
     for _ in 0..RATE as usize * 3 {
-        let _ = processor.process(frame(index));
+        let input = frame(index);
+        let _ = processor.process(input);
+        let _ = reference.process(input);
         index += 1;
     }
 
     processor.update(b);
     for _ in 0..RATE as usize * 3 / 100 {
-        let _ = processor.process(frame(index));
+        let input = frame(index);
+        let _ = processor.process(input);
+        let _ = reference.process(input);
         index += 1;
     }
     processor.update(a);
 
-    let mut reference = Processor::new(a);
     let mut deviation_power = 0.0_f64;
     let mut reference_power = 0.0_f64;
     for _ in 0..RATE as usize / 10 {
