@@ -17,7 +17,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from release_bundle import combine, inspect_kit, pack, TARGETS
+from release_bundle import _pax_without_volatile_times, _tar_header_with_size, combine, inspect_kit, pack, TARGETS
 from package_smoke import extract
 from test_online import fixture
 
@@ -87,8 +87,28 @@ class ReleaseKits(unittest.TestCase):
                                 (kit / 'Maris.app', 'payload metadata must survive')]:
                 subprocess.run(['/usr/bin/xattr', '-w', 'com.maris.archive-test', value, str(path)],
                                check=True, capture_output=True, timeout=10)
+            original_mtimes = {
+                path.relative_to(kit): path.stat().st_mtime_ns
+                for path in [kit, *sorted(kit.rglob('*'))]
+            }
             archive = root / 'native.tar.gz'
             pack(kit, archive, 'macos')
+            repeated = root / 'native-repeated.tar.gz'
+            time.sleep(1.05)
+            pack(kit, repeated, 'macos')
+            self.assertEqual(
+                original_mtimes,
+                {
+                    path.relative_to(kit): path.stat().st_mtime_ns
+                    for path in [kit, *sorted(kit.rglob('*'))]
+                },
+                'macOS release packing modified input filesystem mtimes',
+            )
+            self.assertEqual(
+                archive.read_bytes(),
+                repeated.read_bytes(),
+                'macOS native release bytes depend on wall time despite identical signed payload metadata',
+            )
             with tarfile.open(archive, 'r:gz') as source:
                 self.assertTrue(all(entry.name.startswith(stem + '/') for entry in source))
             inspect_kit(archive, record)
@@ -99,6 +119,56 @@ class ReleaseKits(unittest.TestCase):
                                        str(restored / stem / 'Maris.app')],
                                       check=True, capture_output=True, timeout=10).stdout.rstrip(b'\n')
             self.assertEqual(metadata, b'payload metadata must survive')
+
+    def test_pax_time_normalizer_preserves_non_time_records_and_rejects_malformed_lengths(self):
+        def record(key, value):
+            body = f' {key}={value}\n'.encode()
+            for digits in range(1, 8):
+                size = len(body) + digits
+                if len(str(size)) == digits:
+                    return str(size).encode() + body
+            raise AssertionError('record length did not converge')
+
+        payload = b''.join([
+            record('ctime', '1791116074.416274307'),
+            record('LIBARCHIVE.xattr.com.example', 'cGF5bG9hZA'),
+            record('mtime', '1791116073'),
+            record('path', 'Maris.app/Contents/MacOS/maris'),
+        ])
+        normalized = _pax_without_volatile_times(payload)
+        self.assertNotIn(b'ctime=', normalized)
+        self.assertNotIn(b'mtime=', normalized)
+        self.assertIn(b'LIBARCHIVE.xattr.com.example=cGF5bG9hZA', normalized)
+        self.assertIn(b'path=Maris.app/Contents/MacOS/maris', normalized)
+
+        for malformed in [
+            b'',
+            b'10 noequals\n',
+            b'999 path=x\n',
+            b'x path=x\n',
+            b'8 path=x',
+        ]:
+            if malformed:
+                with self.subTest(malformed=malformed), self.assertRaises(ValueError):
+                    _pax_without_volatile_times(malformed)
+
+    def test_tar_header_rewrite_normalizes_mtime_and_recomputes_checksum(self):
+        header = bytearray(512)
+        header[0:8] = b'fixture\0'
+        header[124:136] = b'00000000012\0'
+        header[136:148] = b'77777777777\0'
+        header[148:156] = b'        '
+        header[156:157] = b'x'
+        header[257:263] = b'ustar\0'
+        rewritten = _tar_header_with_size(bytes(header), 7)
+        self.assertEqual(rewritten[124:136], b'00000000007\0')
+        self.assertEqual(rewritten[136:148], b'00000000000\0')
+        checksum = int(rewritten[148:154], 8)
+        checkable = bytearray(rewritten)
+        checkable[148:156] = b'        '
+        self.assertEqual(checksum, sum(checkable))
+        with self.assertRaises(ValueError):
+            _tar_header_with_size(bytes(header), 8 ** 11)
 
     def test_concurrent_collectors_cannot_both_publish_the_same_manifest(self):
         with tempfile.TemporaryDirectory() as temporary:

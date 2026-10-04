@@ -496,10 +496,19 @@ impl Processor {
     }
     pub fn retune(&self, settings: Settings) -> Self {
         let mut next = Self::new(settings);
-        next.dry_power = self.dry_power;
-        next.wet_power = self.wet_power;
-        next.program_power = self.program_power;
-        next.reduction_db = self.reduction_db;
+        // The dry/wet ratio is only valid for the exact signal path that measured it.
+        // Carrying a neutral baseline's slow meter into a newly boosted target lets the
+        // boost arrive before Level Match catches up during the startup crossfade.
+        if self.settings == settings {
+            next.dry_power = self.dry_power;
+            next.wet_power = self.wet_power;
+        }
+        if self.settings.compressor == settings.compressor {
+            next.reduction_db = self.reduction_db;
+        }
+        if self.settings.adaptive == settings.adaptive {
+            next.program_power = self.program_power;
+        }
         for c in 0..2 {
             for i in 0..MAX_FILTERS {
                 if self.settings.filters[i] == settings.filters[i] {
@@ -513,8 +522,12 @@ impl Processor {
                 }
             }
         }
-        next.adaptive_power = self.adaptive_power;
-        next.adaptive_reduction_db = self.adaptive_reduction_db;
+        for i in 0..ADAPTIVE_BANDS {
+            if self.settings.adaptive[i] == settings.adaptive[i] {
+                next.adaptive_power[i] = self.adaptive_power[i];
+                next.adaptive_reduction_db[i] = self.adaptive_reduction_db[i];
+            }
+        }
         if self.settings.bass_assist == settings.bass_assist {
             next.bass_source_highpass = self.bass_source_highpass;
             next.bass_source_lowpass = self.bass_source_lowpass;

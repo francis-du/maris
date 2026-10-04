@@ -219,8 +219,8 @@ class ToolchainRequirements(unittest.TestCase):
     def test_release_asset_publication_reuses_or_resumes_exact_assets_and_refuses_different_sets(self):
         text = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
         block = re.search(
-            r'      - name: Reuse exact existing installer assets without clobbering\n'
-            r'(?:        .*\n)*?        run: \|\n((?:          .*\n?)+?)'
+            r'(?s)      - name: Reuse exact existing installer assets without clobbering\n'
+            r'(?:        .*\n)*?        run: \|\n(.*?)'
             r'      - name: Upload installer-consumable assets to GitHub Release\n',
             text,
         )
@@ -257,6 +257,7 @@ class ToolchainRequirements(unittest.TestCase):
                 '  while [ "$#" -gt 0 ]; do\n'
                 '    case "$1" in --pattern) asset="$2"; shift 2 ;; --dir) dir="$2"; shift 2 ;; *) shift ;; esac\n'
                 '  done\n'
+                '  [ "${FAIL_DOWNLOAD:-}" != "$asset" ] || exit 29\n'
                 '  mkdir -p "$dir"\n'
                 '  cp "$GH_FIXTURE/.release-source/$asset" "$dir/$asset"\n'
                 '  exit 0\n'
@@ -288,7 +289,7 @@ class ToolchainRequirements(unittest.TestCase):
                 cwd=root, env=environment, capture_output=True, text=True, encoding='utf-8', timeout=10,
             )
             self.assertEqual(fresh.returncode, 0, fresh.stdout + fresh.stderr)
-            self.assertEqual(output.read_text().splitlines(), ['mode=fresh', 'cleanup=true'])
+            self.assertEqual(output.read_text().splitlines(), ['cleanup=true', 'mode=fresh'])
             self.assertEqual(sorted(path.name for path in (root / '.release-publish').iterdir()), sorted(names))
 
             output.unlink()
@@ -310,7 +311,7 @@ class ToolchainRequirements(unittest.TestCase):
                 cwd=root, env=environment, capture_output=True, text=True, encoding='utf-8', timeout=10,
             )
             self.assertEqual(resume.returncode, 0, resume.stdout + resume.stderr)
-            self.assertEqual(output.read_text().splitlines(), ['mode=resume', 'cleanup=true'])
+            self.assertEqual(output.read_text().splitlines(), ['cleanup=true', 'mode=resume'])
             self.assertEqual([path.name for path in (root / '.release-publish').iterdir()], [names[-1]])
 
             output.unlink()
@@ -322,6 +323,21 @@ class ToolchainRequirements(unittest.TestCase):
                 cwd=root, env=environment, capture_output=True, text=True, encoding='utf-8', timeout=10,
             )
             self.assertNotEqual(different.returncode, 0)
+            self.assertEqual(output.read_text().splitlines(), ['cleanup=true'])
+
+            # A transient inability to download one member of an otherwise complete
+            # eight-asset set is not evidence that a previously valid publication is bad.
+            # Fail the verification, but do not arm destructive cleanup.
+            (source / names[0]).write_text('asset-0\n', encoding='utf-8')
+            output.unlink()
+            reset_workdirs()
+            environment['FAIL_DOWNLOAD'] = names[0]
+            transient = subprocess.run(
+                [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script],
+                cwd=root, env=environment, capture_output=True, text=True, encoding='utf-8', timeout=10,
+            )
+            self.assertEqual(transient.returncode, 29)
+            self.assertFalse(output.exists())
 
     @unittest.skipUnless(BASH, 'Bash release cleanup execution required')
     def test_failed_public_install_cleanup_deletes_only_installer_assets_and_surfaces_errors(self):

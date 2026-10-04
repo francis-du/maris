@@ -558,5 +558,8 @@ pub(super) fn handoff_output<T>(
 }
 
 #[cfg(test)]
+#[path = "../../tests/unit/loudness_transition.rs"]
+mod loudness_transition_tests;
+#[cfg(test)]
 #[path = "../../tests/unit/output_render.rs"]
 mod tests;

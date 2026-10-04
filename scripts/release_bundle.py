@@ -29,7 +29,95 @@ TARGETS = {(system, arch) for system in ('macos', 'linux', 'windows') for arch i
 
 
 def digest(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    hasher = hashlib.sha256()
+    with path.open('rb') as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b''):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def _tar_entry_size(field: bytes) -> int:
+    if field[0] & 0x80:
+        return int.from_bytes(field, 'big', signed=True)
+    value = field.rstrip(b'\0 ').lstrip(b' ')
+    return int(value or b'0', 8)
+
+
+def _pax_without_volatile_times(payload: bytes) -> bytes:
+    records = []
+    cursor = 0
+    while cursor < len(payload):
+        space = payload.find(b' ', cursor)
+        if space < 0:
+            raise ValueError('Malformed native pax metadata')
+        try:
+            record_size = int(payload[cursor:space])
+        except ValueError as error:
+            raise ValueError('Malformed native pax record length') from error
+        end = cursor + record_size
+        if record_size <= space - cursor + 3 or end > len(payload) or payload[end - 1] != 0x0A:
+            raise ValueError('Malformed native pax record')
+        equals = payload.find(b'=', space + 1, end - 1)
+        if equals < 0:
+            raise ValueError('Malformed native pax key/value record')
+        if payload[space + 1:equals] not in (b'atime', b'ctime', b'mtime'):
+            records.append(payload[cursor:end])
+        cursor = end
+    return b''.join(records)
+
+
+def _tar_header_with_size(header: bytes, size: int) -> bytes:
+    if size >= 8 ** 11:
+        raise ValueError('Native pax metadata exceeds tar size field')
+    updated = bytearray(header)
+    updated[124:136] = f'{size:011o}\0'.encode('ascii')
+    updated[136:148] = b'00000000000\0'
+    updated[148:156] = b'        '
+    checksum = sum(updated)
+    updated[148:156] = f'{checksum:06o}\0 '.encode('ascii')
+    return bytes(updated)
+
+
+def _normalize_pax_times(path: Path) -> None:
+    """Normalize archive-only times without decoding or rewriting any other metadata."""
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            prefix='.maris-pax-', suffix='.tar', dir=path.parent, delete=False
+        ) as handle:
+            temporary = Path(handle.name)
+        with path.open('rb') as source, temporary.open('wb') as output:
+            while True:
+                header = source.read(512)
+                if len(header) != 512:
+                    raise ValueError('Truncated native pax archive')
+                if header == b'\0' * 512:
+                    output.write(header)
+                    shutil.copyfileobj(source, output, length=1024 * 1024)
+                    break
+                size = _tar_entry_size(header[124:136])
+                if size < 0:
+                    raise ValueError('Invalid native pax entry size')
+                padded = ((size + 511) // 512) * 512
+                body = source.read(padded)
+                if len(body) != padded:
+                    raise ValueError('Truncated native pax entry')
+                if header[156:157] in (b'x', b'g'):
+                    payload = body[:size]
+                    normalized = _pax_without_volatile_times(payload)
+                    if not normalized:
+                        continue
+                    output.write(_tar_header_with_size(header, len(normalized)))
+                    output.write(normalized)
+                    output.write(b'\0' * ((512 - len(normalized) % 512) % 512))
+                else:
+                    output.write(_tar_header_with_size(header, size))
+                    output.write(body)
+        os.replace(temporary, path)
+        temporary = None
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def commit_release_inputs(
@@ -284,7 +372,8 @@ def pack(kit: Path, archive: Path, system: str) -> None:
                     info.compress_type = zipfile.ZIP_DEFLATED
                     info.create_system = 3
                     info.external_attr = 0o100644 << 16
-                    output.writestr(info, path.read_bytes())
+                    with path.open('rb') as source, output.open(info, 'w', force_zip64=True) as target:
+                        shutil.copyfileobj(source, target, length=1024 * 1024)
     elif system == 'macos':
         # Native bsdtar preserves application metadata. The same native gate is rerun
         # after extraction below; lost signing/stapling data cannot produce a stable kit.
@@ -297,8 +386,25 @@ def pack(kit: Path, archive: Path, system: str) -> None:
         members = [f'{kit.name}/{path.name}' for path in sorted(kit.iterdir())]
         if not members:
             raise ValueError('Empty macOS kit')
-        subprocess.run(['/usr/bin/tar', '--mac-metadata', '--format', 'pax', '-czf', str(archive),
-                        '-C', str(kit.parent), *members], check=True, env=env, timeout=120)
+        raw_tar = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                prefix='.maris-native-', suffix='.tar', dir=archive.parent, delete=False
+            ) as handle:
+                raw_tar = Path(handle.name)
+            subprocess.run(
+                ['/usr/bin/tar', '--mac-metadata', '--format', 'pax', '-cf', str(raw_tar),
+                 '-C', str(kit.parent), *members],
+                check=True, env=env, timeout=120,
+            )
+            _normalize_pax_times(raw_tar)
+            with archive.open('xb') as raw:
+                with gzip.GzipFile(filename='', mode='wb', fileobj=raw, mtime=0) as compressed:
+                    with raw_tar.open('rb') as source:
+                        shutil.copyfileobj(source, compressed, length=1024 * 1024)
+        finally:
+            if raw_tar is not None:
+                raw_tar.unlink(missing_ok=True)
     else:
         def clean(info):
             if not (info.isfile() or info.isdir()):

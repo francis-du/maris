@@ -303,6 +303,7 @@ pub struct Processor {
     match_reference_filter: [[crate::dsp::tone::State; 2]; 2],
     match_output_filter: [[crate::dsp::tone::State; 2]; 2],
     match_gain: f64,
+    match_transition_from: f64,
     pending: Option<Settings>,
 }
 impl Processor {
@@ -318,6 +319,7 @@ impl Processor {
             match_reference_filter: [[crate::dsp::tone::State::default(); 2]; 2],
             match_output_filter: [[crate::dsp::tone::State::default(); 2]; 2],
             match_gain: 1.0,
+            match_transition_from: 1.0,
             pending: None,
         }
     }
@@ -330,6 +332,15 @@ impl Processor {
         if settings == self.active.settings {
             return;
         }
+        // Residual loudness gain belongs to the measured signal path. Keep the old
+        // value only as the first crossfade endpoint; fresh meters learn the new
+        // blended path instead of dragging an opposite spectral profile's gain along.
+        self.match_transition_from = self.match_gain;
+        self.match_gain = 1.0;
+        self.match_reference_power = 0.0;
+        self.match_output_power = 0.0;
+        self.match_reference_filter = [[crate::dsp::tone::State::default(); 2]; 2];
+        self.match_output_filter = [[crate::dsp::tone::State::default(); 2]; 2];
         self.next = self.active.retune(settings);
         self.total = settings.transition_frames.max(1);
         self.remaining = self.total;
@@ -344,6 +355,7 @@ impl Processor {
         self.match_reference_filter = [[crate::dsp::tone::State::default(); 2]; 2];
         self.match_output_filter = [[crate::dsp::tone::State::default(); 2]; 2];
         self.match_gain = 1.0;
+        self.match_transition_from = 1.0;
     }
     pub fn adaptive_reduction_db(&self) -> f64 {
         if self.remaining > 0 {
@@ -379,24 +391,42 @@ impl Processor {
         };
         let static_makeup = static_level_match_gain(self.active.settings) * (1.0 - t)
             + static_level_match_gain(self.next.settings) * t;
-        let residual_makeup = 1.0 + (self.match_gain - 1.0) * self.level_match_blend();
+        let transition_gain = if self.remaining == 0 {
+            self.match_gain
+        } else {
+            self.match_transition_from * (1.0 - t) + self.match_gain * t
+        };
+        let residual_makeup = 1.0 + (transition_gain - 1.0) * self.level_match_blend();
         20.0 * (static_makeup * residual_makeup).max(1e-12).log10()
     }
     pub fn process(&mut self, input: [f32; 2]) -> [f32; 2] {
         let match_blend = self.level_match_blend();
+        let transitioning = self.remaining > 0;
+        let transition_t = if self.remaining == 0 {
+            1.0
+        } else {
+            1.0 - self.remaining as f64 / self.total as f64
+        };
+        let active_settings = self.active.settings;
         let mut y = self.active.frame(input);
+        let mut measurement = y;
+        let mut measurement_settings = active_settings;
+        let mut pending_after_frame = None;
         if self.remaining > 0 {
             let other = self.next.frame(input);
             let t = 1.0 - self.remaining as f64 / self.total as f64;
+            // Warm the residual matcher against the incoming chain itself. Measuring
+            // the temporary old/new mixture biases the detector toward the outgoing
+            // spectrum and carries stale attenuation into the completed retune.
+            measurement = other;
+            measurement_settings = self.next.settings;
             for c in 0..2 {
                 y[c] = y[c] * (1.0 - t) + other[c] * t;
             }
             self.remaining -= 1;
             if self.remaining == 0 {
                 self.active = self.next;
-                if let Some(settings) = self.pending.take() {
-                    self.update(settings);
-                }
+                pending_after_frame = self.pending.take();
             }
         }
         if y.iter().any(|v| !v.is_finite()) {
@@ -406,7 +436,7 @@ impl Processor {
         // Static EQ/correction reserve stays in front of the filters, then measured settled
         // loudness may recover that reserve. The linked limiter below remains authoritative
         // for actual sample-peak safety.
-        let settings = self.active.settings;
+        let settings = measurement_settings;
         let reference = input.map(|sample| {
             if sample.is_finite() {
                 (sample as f64).clamp(-16.0, 16.0) * settings.level_target_gain
@@ -417,7 +447,8 @@ impl Processor {
         if settings.level_match {
             let reference_power =
                 perceptual_match_power(reference, &mut self.match_reference_filter, settings);
-            let output_power = perceptual_match_power(y, &mut self.match_output_filter, settings);
+            let output_power =
+                perceptual_match_power(measurement, &mut self.match_output_filter, settings);
             self.match_reference_power = settings.match_meter * self.match_reference_power
                 + (1.0 - settings.match_meter) * reference_power;
             self.match_output_power = settings.match_meter * self.match_output_power
@@ -438,8 +469,14 @@ impl Processor {
             } else {
                 1.0
             };
-            self.match_gain =
-                settings.match_slew * self.match_gain + (1.0 - settings.match_slew) * desired_match;
+            if transitioning {
+                // The short detector and the settings crossfade already smooth this path.
+                // Extra gain slew here only delays compensation for deep cuts entering.
+                self.match_gain = desired_match;
+            } else {
+                self.match_gain = settings.match_slew * self.match_gain
+                    + (1.0 - settings.match_slew) * desired_match;
+            }
         } else if match_blend <= f64::EPSILON {
             // Once the settings crossfade has fully removed Level Match, clear the program
             // meter so a later re-enable cannot reuse stale history. During the crossfade,
@@ -450,7 +487,12 @@ impl Processor {
             self.match_output_filter = [[crate::dsp::tone::State::default(); 2]; 2];
             self.match_gain = 1.0;
         }
-        let applied_match_gain = 1.0 + (self.match_gain - 1.0) * match_blend;
+        let transition_gain = if transitioning {
+            self.match_transition_from * (1.0 - transition_t) + self.match_gain * transition_t
+        } else {
+            self.match_gain
+        };
+        let applied_match_gain = 1.0 + (transition_gain - 1.0) * match_blend;
         y = y.map(|sample| sample * applied_match_gain);
 
         let peak = y[0].abs().max(y[1].abs());
@@ -462,6 +504,10 @@ impl Processor {
             self.limiter_gain = self.active.settings.release * self.limiter_gain
                 + (1.0 - self.active.settings.release) * wanted;
         }
-        y.map(|v| (v * self.limiter_gain).clamp(-CEILING, CEILING) as f32)
+        let output = y.map(|v| (v * self.limiter_gain).clamp(-CEILING, CEILING) as f32);
+        if let Some(settings) = pending_after_frame {
+            self.update(settings);
+        }
+        output
     }
 }

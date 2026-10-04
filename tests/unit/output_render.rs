@@ -610,6 +610,50 @@ fn renderer_reports_level_match_makeup_separately_from_static_safety_preamp() {
 }
 
 #[test]
+fn renderer_clears_level_match_makeup_telemetry_after_matching_is_disabled() {
+    let metrics = Arc::new(Metrics::default());
+    let updates = Arc::new(ArrayQueue::new(8));
+    let profile = Profile::default();
+    let enabled_music = crate::music::MusicProfile {
+        bass_db: 6.0,
+        adaptive: crate::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        level_match: true,
+        ..crate::music::MusicProfile::default()
+    };
+    let mut disabled_music = enabled_music.clone();
+    disabled_music.level_match = false;
+    let enabled = Settings::compile(&profile, 48_000)
+        .unwrap()
+        .with_music(&enabled_music, 48_000)
+        .unwrap();
+    let disabled = Settings::compile(&profile, 48_000)
+        .unwrap()
+        .with_music(&disabled_music, 48_000)
+        .unwrap();
+    let mut renderer = Renderer::new(enabled, 48_000, updates.clone(), metrics.clone());
+    renderer.render(&mut [0.0_f32; 256], 2, || ([0.01, 0.01], true));
+    assert!(f32::from_bits(metrics.level_match_makeup.load(Ordering::Relaxed)) > 5.0);
+
+    assert!(updates
+        .push(Update {
+            settings: disabled,
+            revision: 1,
+            music_revision: 1,
+        })
+        .is_ok());
+    let mut output = [0.0_f32; 4_800];
+    renderer.render(&mut output, 2, || ([0.01, 0.01], true));
+    let makeup = f32::from_bits(metrics.level_match_makeup.load(Ordering::Relaxed));
+    assert!(
+        makeup.abs() < 0.05,
+        "renderer retained stale Level Match telemetry after disabling it: {makeup:.3} dB"
+    );
+}
+
+#[test]
 fn all_settings_rows_commit_through_the_session_queue_into_the_real_renderer() {
     // This fixture represents a live session, independent of CI disk/scheduler delays.
     let _clock = crate::analysis::test_clock::Clock::freeze();

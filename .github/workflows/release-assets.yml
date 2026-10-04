@@ -167,8 +167,27 @@ jobs:
           for asset in "${expected[@]}"; do
             if printf '%s\n' "$existing" | grep -Fxq -- "$asset"; then
               present=$((present + 1))
-              gh release download "$RELEASE_TAG" --pattern "$asset" --dir .release-existing --clobber
+            fi
+          done
+
+          # A partial installer set is already fail-closed state: if any later
+          # verification/upload step fails, remove the installer-facing names.
+          # A complete existing set is preserved on a transient download/API error
+          # until we have positive evidence that one of its bytes is wrong.
+          if [ "$present" -lt "${#expected[@]}" ]; then
+            echo "cleanup=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          for asset in "${expected[@]}"; do
+            if printf '%s\n' "$existing" | grep -Fxq -- "$asset"; then
+              if ! gh release download "$RELEASE_TAG" --pattern "$asset" --dir .release-existing --clobber; then
+                echo "Could not verify existing release asset: $asset" >&2
+                exit 1
+              fi
               if ! cmp -s ".release-upload/$asset" ".release-existing/$asset"; then
+                if [ "$present" -eq "${#expected[@]}" ]; then
+                  echo "cleanup=true" >> "$GITHUB_OUTPUT"
+                fi
                 echo "Existing release asset differs from the exact successful build: $asset" >&2
                 exit 1
               fi
@@ -186,7 +205,6 @@ jobs:
           else
             echo "mode=resume" >> "$GITHUB_OUTPUT"
           fi
-          echo "cleanup=true" >> "$GITHUB_OUTPUT"
       - name: Upload installer-consumable assets to GitHub Release
         if: steps.release.outputs.publish == 'true' && steps.assets.outputs.mode != 'reuse'
         env:
