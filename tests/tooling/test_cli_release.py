@@ -7,6 +7,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -119,6 +120,36 @@ class CliContracts(unittest.TestCase):
             record.write_bytes(b'different record')
             with self.assertRaisesRegex(ValueError, 'record differs'):
                 commit_release_inputs(packed, ready, archive, record, expected)
+
+    def test_identical_concurrent_release_input_commits_converge_to_one_exact_pair(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            packed = root / 'packed.tar.gz'
+            ready = root / 'ready.json'
+            archive = root / 'published.tar.gz'
+            record = root / 'published.json'
+            packed.write_bytes(b'concurrent exact archive')
+            ready.write_bytes(b'{"concurrent":true}\n')
+            expected = hashlib.sha256(packed.read_bytes()).hexdigest()
+            barrier = threading.Barrier(2)
+            failures = []
+
+            def publish():
+                try:
+                    barrier.wait(timeout=5)
+                    commit_release_inputs(packed, ready, archive, record, expected)
+                except Exception as error:
+                    failures.append(error)
+
+            threads = [threading.Thread(target=publish) for _ in range(2)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=10)
+            self.assertTrue(all(not thread.is_alive() for thread in threads))
+            self.assertEqual(failures, [])
+            self.assertEqual(archive.read_bytes(), packed.read_bytes())
+            self.assertEqual(record.read_bytes(), ready.read_bytes())
 
     @unittest.skipUnless(os.name == 'nt', 'Native PowerShell production parser/extractor required')
     def test_native_windows_download_accepts_cli_contract_and_still_rejects_bad_inputs(self):

@@ -6,6 +6,7 @@ kits require the native release preflight on the final signed/reviewed payload.
 """
 from __future__ import annotations
 import argparse
+import gzip
 import hashlib
 import json
 import os
@@ -254,7 +255,12 @@ def pack(kit: Path, archive: Path, system: str) -> None:
                 if path.is_symlink():
                     raise ValueError('Linked kit entry rejected')
                 if path.is_file():
-                    output.write(path, f'{kit.name}/{path.relative_to(kit).as_posix()}')
+                    info = zipfile.ZipInfo(f'{kit.name}/{path.relative_to(kit).as_posix()}')
+                    info.date_time = (1980, 1, 1, 0, 0, 0)
+                    info.compress_type = zipfile.ZIP_DEFLATED
+                    info.create_system = 3
+                    info.external_attr = 0o100644 << 16
+                    output.writestr(info, path.read_bytes())
     elif system == 'macos':
         # Native bsdtar preserves application metadata. The same native gate is rerun
         # after extraction below; lost signing/stapling data cannot produce a stable kit.
@@ -275,8 +281,10 @@ def pack(kit: Path, archive: Path, system: str) -> None:
                 raise ValueError('Linked or special kit entry rejected')
             info.uid = info.gid = 0; info.uname = info.gname = ''; info.mtime = 0
             return info
-        with tarfile.open(archive, 'w:gz', format=tarfile.USTAR_FORMAT) as output:
-            output.add(kit, arcname=kit.name, filter=clean)
+        with archive.open('xb') as raw:
+            with gzip.GzipFile(filename='', mode='wb', fileobj=raw, mtime=0) as compressed:
+                with tarfile.open(fileobj=compressed, mode='w', format=tarfile.USTAR_FORMAT) as output:
+                    output.add(kit, arcname=kit.name, filter=clean)
 
 
 def gate(args, bundle: Path) -> dict:

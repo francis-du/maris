@@ -5,11 +5,13 @@ All payloads here are labeled non-executable fixtures. No release, network or au
 from pathlib import Path
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import tarfile
 import tempfile
 import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -49,6 +51,26 @@ class ReleaseKits(unittest.TestCase):
             self.assertEqual(combine(root, output), 'candidate')
             self.assertEqual(len(output.read_text().splitlines()), 10)
             self.assertIn('channel\tcandidate', output.read_text())
+
+    def test_portable_release_pack_is_byte_reproducible_across_wall_time_and_source_mtime(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            kit = root / 'Maris-1.2.3-fixture-arm64'
+            (kit / 'Maris/bin').mkdir(parents=True)
+            payload = kit / 'Maris/bin/maris'
+            payload.write_bytes(b'deterministic portable package fixture')
+            for system, suffix in [('linux', '.tar.gz'), ('windows', '.zip')]:
+                first = root / f'first-{system}{suffix}'
+                second = root / f'second-{system}{suffix}'
+                pack(kit, first, system)
+                time.sleep(1.05)
+                os.utime(payload, (1_700_000_000, 1_700_000_123))
+                pack(kit, second, system)
+                self.assertEqual(
+                    first.read_bytes(),
+                    second.read_bytes(),
+                    f'{system} release bytes depend on wall time or source mtime',
+                )
 
     @unittest.skipUnless(sys.platform == 'darwin', 'Native Apple archive metadata requires macOS')
     def test_native_mac_kit_keeps_payload_metadata_inside_the_package_root(self):
