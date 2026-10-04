@@ -247,7 +247,6 @@ class ToolchainRequirements(unittest.TestCase):
                 os.environ,
                 PATH=str(root) + os.pathsep + os.environ['PATH'],
                 GH_FIXTURE=str(root),
-                GH_TOKEN= [REDACTED]
                 GH_REPO='francis-du/maris',
                 RELEASE_TAG='v1.2.3',
             )
