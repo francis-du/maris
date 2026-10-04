@@ -23,6 +23,7 @@ jobs:
       publish: ${{ steps.release.outputs.publish }}
       tag: ${{ steps.release.outputs.tag }}
       cleanup: ${{ steps.assets.outputs.cleanup }}
+      mode: ${{ steps.assets.outputs.mode }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -206,11 +207,17 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout release-source bootstrap for a fresh publication
+        if: needs.publish.outputs.mode == 'fresh'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Prove the public package with the exact bootstrap source that produced it.
-          # This avoids deleting valid assets because main moved while publication ran.
           ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - name: Checkout the current public bootstrap when revalidating existing assets
+        if: needs.publish.outputs.mode == 'reuse'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
       - name: Install from the public Release with install.sh
         if: runner.os != 'Windows'
