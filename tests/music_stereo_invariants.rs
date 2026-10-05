@@ -101,7 +101,6 @@ fn bass_assist_preserves_pure_side_without_creating_center_energy() {
     );
 }
 
-
 #[test]
 fn bass_assist_preserves_proportional_stereo_pan() {
     let mut profile = MusicProfile {
@@ -133,7 +132,6 @@ fn bass_assist_preserves_proportional_stereo_pan() {
     );
 }
 
-
 #[test]
 fn bass_assist_extreme_drive_stays_linked_and_bounded() {
     let base = MusicProfile {
@@ -160,8 +158,7 @@ fn bass_assist_extreme_drive_stays_linked_and_bounded() {
         assert!(output.iter().all(|sample| sample.is_finite()));
         if i >= 96_000 {
             if output[1].abs() > 1e-4 {
-                maximum_ratio_error =
-                    maximum_ratio_error.max((output[0] / output[1] - 5.0).abs());
+                maximum_ratio_error = maximum_ratio_error.max((output[0] / output[1] - 5.0).abs());
             }
             for channel in 0..2 {
                 maximum_residual =
