@@ -943,3 +943,57 @@ fn crossfeed_keeps_low_frequency_ratio_without_attenuating_direct_highs() {
         );
     }
 }
+
+
+#[test]
+fn level_match_does_not_undo_explicit_balance() {
+    let render = |balance: f64, level_match: bool| {
+        let music = MusicProfile {
+            balance,
+            level_match,
+            adaptive: maris::music::AdaptiveEq {
+                enabled: false,
+                strength: 0.0,
+            },
+            ..MusicProfile::default()
+        };
+        let mut processor = Processor::new(
+            Settings::compile(&Profile::default(), 48_000)
+                .unwrap()
+                .with_music(&music, 48_000)
+                .unwrap(),
+        );
+        let mut power = [0.0_f64; 2];
+        for i in 0..384_000 {
+            let x =
+                (0.08 * (std::f64::consts::TAU * 997.0 * i as f64 / 48_000.0).sin()) as f32;
+            let output = processor.process([x, x]);
+            if i > 288_000 {
+                for channel in 0..2 {
+                    power[channel] += f64::from(output[channel]).powi(2);
+                }
+            }
+        }
+        power
+    };
+
+    for balance in [-1.0, -0.75, -0.5, 0.5, 0.75, 1.0] {
+        let unmatched = render(balance, false);
+        let matched = render(balance, true);
+        for channel in 0..2 {
+            if unmatched[channel] <= 1e-12 {
+                assert!(
+                    matched[channel] <= 1e-12,
+                    "Level Match revived a balance-muted channel at balance {balance:+.2}"
+                );
+                continue;
+            }
+            let delta_db = 10.0 * (matched[channel] / unmatched[channel]).log10();
+            assert!(
+                delta_db.abs() < 0.1,
+                "Level Match changed explicit balance gain by {delta_db:.3} dB at balance {balance:+.2}, channel {channel}"
+            );
+        }
+    }
+}
+
