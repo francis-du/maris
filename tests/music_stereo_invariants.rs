@@ -132,3 +132,49 @@ fn bass_assist_preserves_proportional_stereo_pan() {
         "Bass Assist shifted fixed stereo pan: max ratio error {maximum_ratio_error:.4}"
     );
 }
+
+
+#[test]
+fn bass_assist_extreme_drive_stays_linked_and_bounded() {
+    let base = MusicProfile {
+        level_match: false,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        ..MusicProfile::default()
+    };
+    let mut enabled = base.clone();
+    enabled.bass_assist.enabled = true;
+    enabled.bass_assist.amount = 1.0;
+    let mut dry = maris::music::Processor::new(base.compile(48_000).unwrap());
+    let mut wet = maris::music::Processor::new(enabled.compile(48_000).unwrap());
+
+    let mut maximum_ratio_error = 0.0_f64;
+    let mut maximum_residual = 0.0_f64;
+    for i in 0..144_000 {
+        let x = 8.0 * (std::f64::consts::TAU * 65.0 * i as f64 / 48_000.0).sin();
+        let frame = [x, x * 0.2];
+        let reference = dry.process(frame);
+        let output = wet.process(frame);
+        assert!(output.iter().all(|sample| sample.is_finite()));
+        if i >= 96_000 {
+            if output[1].abs() > 1e-4 {
+                maximum_ratio_error =
+                    maximum_ratio_error.max((output[0] / output[1] - 5.0).abs());
+            }
+            for channel in 0..2 {
+                maximum_residual =
+                    maximum_residual.max((output[channel] - reference[channel]).abs());
+            }
+        }
+    }
+    assert!(
+        maximum_ratio_error < 0.05,
+        "extreme Bass Assist drive shifted fixed stereo pan: {maximum_ratio_error:.4}"
+    );
+    assert!(
+        maximum_residual < 0.8,
+        "Bass Assist harmonic residual escaped linked drive bound: {maximum_residual:.4}"
+    );
+}
