@@ -407,19 +407,21 @@ jobs:
           if [ -n "$CLEANUP_ASSETS" ]; then
             IFS=',' read -r -a cleanup <<< "$CLEANUP_ASSETS"
           fi
-          for asset in "${cleanup[@]}"; do
-            allowed=false
-            for expected_asset in "${expected[@]}"; do
-              if [ "$asset" = "$expected_asset" ]; then
-                allowed=true
-                break
+          if [ "${#cleanup[@]}" -gt 0 ]; then
+            for asset in "${cleanup[@]}"; do
+              allowed=false
+              for expected_asset in "${expected[@]}"; do
+                if [ "$asset" = "$expected_asset" ]; then
+                  allowed=true
+                  break
+                fi
+              done
+              if [ "$allowed" != true ]; then
+                echo "Refusing to delete unexpected release asset: $asset" >&2
+                exit 1
+              fi
+              if grep -Fxq -- "$asset" <<< "$existing"; then
+                gh release delete-asset "$RELEASE_TAG" "$asset" --yes
               fi
             done
-            if [ "$allowed" != true ]; then
-              echo "Refusing to delete unexpected release asset: $asset" >&2
-              exit 1
-            fi
-            if grep -Fxq -- "$asset" <<< "$existing"; then
-              gh release delete-asset "$RELEASE_TAG" "$asset" --yes
-            fi
-          done
+          fi
