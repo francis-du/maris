@@ -372,7 +372,7 @@ class ToolchainRequirements(unittest.TestCase):
             block = re.search(
                 rf'      - name: {re.escape(name)}\n'
                 r'(?:        .*\n)*?        run: \|\n((?:          .*\n?)+?)'
-                r'      - name: ',
+                r'(?=      - name: |  public-install-smoke:)',
                 text,
             )
             self.assertIsNotNone(block, name)
