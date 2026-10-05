@@ -1,0 +1,95 @@
+use maris::{
+    dsp::{Processor, Settings},
+    music::MusicProfile,
+    profile::Profile,
+};
+
+fn music(correction_preamp_db: f64) -> MusicProfile {
+    MusicProfile {
+        correction_preamp_db,
+        correction_source: (correction_preamp_db < 0.0)
+            .then(|| "device-switch-regression".into()),
+        level_match: true,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        ..MusicProfile::default()
+    }
+}
+
+#[test]
+fn bidirectional_output_rebind_keeps_loudness_and_makeup_telemetry_smooth() {
+    const RATE: u32 = 48_000;
+    const BLOCK: usize = 480;
+
+    let eq = Profile::default();
+    let deep = Settings::compile(&eq, RATE)
+        .unwrap()
+        .with_music(&music(-24.0), RATE)
+        .unwrap();
+    let flat = Settings::compile(&eq, RATE)
+        .unwrap()
+        .with_music(&music(0.0), RATE)
+        .unwrap();
+    let mut processor = Processor::new(deep);
+    let frame = |index: usize| {
+        let t = index as f64 / RATE as f64;
+        [
+            (0.05
+                * (0.55 * (std::f64::consts::TAU * 83.0 * t).sin()
+                    + 0.45 * (std::f64::consts::TAU * 1_900.0 * t).sin()))
+                as f32,
+            (0.05
+                * (0.52 * (std::f64::consts::TAU * 109.0 * t + 0.3).sin()
+                    + 0.48 * (std::f64::consts::TAU * 2_700.0 * t + 0.7).sin()))
+                as f32,
+        ]
+    };
+
+    let mut index = 0usize;
+    for _ in 0..RATE as usize * 3 {
+        let _ = processor.process(frame(index));
+        index += 1;
+    }
+
+    let mut minimum_delta = f64::INFINITY;
+    let mut maximum_delta = f64::NEG_INFINITY;
+    let mut maximum_makeup_step = 0.0_f64;
+    let mut previous_makeup = processor.level_match_makeup_db();
+
+    for target in [flat, deep, flat, deep] {
+        processor.update(target);
+        for _ in 0..20 {
+            let mut input_power = 0.0_f64;
+            let mut output_power = 0.0_f64;
+            for _ in 0..BLOCK {
+                let input = frame(index);
+                index += 1;
+                let output = processor.process(input);
+                for channel in 0..2 {
+                    input_power += f64::from(input[channel]).powi(2);
+                    output_power += f64::from(output[channel]).powi(2);
+                    assert!(output[channel].is_finite());
+                    assert!(output[channel].abs() <= 0.891_252);
+                }
+                let makeup = processor.level_match_makeup_db();
+                maximum_makeup_step =
+                    maximum_makeup_step.max((makeup - previous_makeup).abs());
+                previous_makeup = makeup;
+            }
+            let delta = 10.0 * (output_power / input_power.max(1e-30)).log10();
+            minimum_delta = minimum_delta.min(delta);
+            maximum_delta = maximum_delta.max(delta);
+        }
+    }
+
+    assert!(
+        minimum_delta > -1.5 && maximum_delta < 1.5,
+        "output rebind changed 10 ms loudness too much: min={minimum_delta:.3} dB max={maximum_delta:.3} dB"
+    );
+    assert!(
+        maximum_makeup_step < 0.08,
+        "output rebind stepped Level Match telemetry by {maximum_makeup_step:.4} dB/sample"
+    );
+}
