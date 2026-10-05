@@ -314,6 +314,61 @@ fn queued_target_after_single_frame_retune_does_not_skip_middle_target() {
 }
 
 #[test]
+fn single_frame_level_match_toggle_aligns_audio_pending_and_makeup_telemetry() {
+    let profile = Profile::default();
+    let base_music = crate::music::MusicProfile {
+        correction_preamp_db: -12.0,
+        correction_source: Some("single-frame telemetry fixture".into()),
+        adaptive: crate::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        level_match: false,
+        ..crate::music::MusicProfile::default()
+    };
+    let mut target_music = base_music.clone();
+    target_music.level_match = true;
+
+    let base = Settings::compile(&profile, 48_000)
+        .unwrap()
+        .with_music(&base_music, 48_000)
+        .unwrap();
+    let mut target = Settings::compile(&profile, 48_000)
+        .unwrap()
+        .with_music(&target_music, 48_000)
+        .unwrap();
+    target.transition_frames = 1;
+
+    let input = [0.05_f32, -0.04_f32];
+    let mut processor = Processor::new(base);
+    processor.update(target);
+    let actual = processor.process(input);
+    assert!(
+        !processor.settings_pending(),
+        "single-frame Level Match toggle remained pending after its audible endpoint"
+    );
+
+    let mut fresh = Processor::new(target);
+    let expected = fresh.process(input);
+    for channel in 0..2 {
+        assert!(
+            (actual[channel] - expected[channel]).abs() < 1e-7,
+            "Level Match audio endpoint lagged its one-frame transition: actual={actual:?} expected={expected:?}"
+        );
+    }
+    let actual_makeup = processor.level_match_makeup_db();
+    let expected_makeup = fresh.level_match_makeup_db();
+    assert!(
+        (actual_makeup - expected_makeup).abs() < 1e-9,
+        "Level Match telemetry lagged the audible endpoint: actual={actual_makeup:.6} expected={expected_makeup:.6} dB"
+    );
+    assert!(
+        actual_makeup > 10.0,
+        "fixture did not expose meaningful static makeup: {actual_makeup:.3} dB"
+    );
+}
+
+#[test]
 fn retune_crossfade_duration_is_sample_rate_invariant() {
     for rate in [44_100_u32, 48_000, 96_000, 192_000] {
         let base = Settings::compile(&Profile::default(), rate).unwrap();
