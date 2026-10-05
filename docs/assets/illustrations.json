@@ -18,7 +18,7 @@
     "src/ui/tui/output_picker.rs": "17c31b68ebdd61ad0d1528a68b59dcb1891713c14ec2e723ffe37b6a55848f8d",
     "src/ui/tui/preset_picker.rs": "3d9a1e30ab64297385843a7bdcb3628754e84647b7c63612a9b2855f1ef30972",
     "src/ui/tui/inspector.rs": "3bb15f7ca65f71d799f46b28a76327a8a2a7dabba321aa43ac91f585898b3a93",
-    "src/dsp/music.rs": "bf9f48a30bc41ed7dc77d689384625cf04e1f2b35fea06d9bdc9065e60ae1b7c",
+    "src/dsp/music.rs": "6817d3d51befb01cdf3577a33b769eb6aef992d21c8bcc0f44f1279bae1663a7",
     "src/presets/mod.rs": "393bd8509d025ce6a6ff9918cc5c6778693fb9a2a9c65f03d70337c7d1cdf27d",
     "src/presets/scenes.rs": "4b4803a821f17e521ecb8699d5905f0f3818aa2412c0eab62074621bd2a8194e",
     "src/i18n/mod.rs": "52dad2f6e7ffeeab6dc852c442e2de5d02be021c628b802bc571fccbf0e6f01f",
