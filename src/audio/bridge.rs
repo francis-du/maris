@@ -433,12 +433,13 @@ impl Renderer {
         }
         let stop = metrics.stopping.load(Ordering::Relaxed);
         let mut peak = [0.0_f32; 2];
+        let mut analysis_dropped = 0_u64;
         for frame in data.chunks_exact_mut(channels) {
             let (input, ready) = source();
             if ready {
                 if let Some(queue) = metrics.analysis_queue.get() {
                     if queue.push(input).is_err() {
-                        metrics.analysis_dropped.fetch_add(1, Ordering::Relaxed);
+                        analysis_dropped += 1;
                     }
                 }
             }
@@ -453,6 +454,11 @@ impl Renderer {
             for c in 0..2 {
                 peak[c] = peak[c].max(processed[c].abs());
             }
+        }
+        if analysis_dropped != 0 {
+            metrics
+                .analysis_dropped
+                .fetch_add(analysis_dropped, Ordering::Relaxed);
         }
         metrics
             .source_started
