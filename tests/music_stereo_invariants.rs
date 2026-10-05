@@ -68,7 +68,6 @@ fn dynamic_eq_applies_equal_transfer_to_proportional_stereo_channels() {
     assert!(observed_reduction, "fixture never activated Dynamic EQ");
 }
 
-
 #[test]
 fn bass_assist_preserves_pure_side_without_creating_center_energy() {
     let mut profile = MusicProfile {
@@ -99,5 +98,37 @@ fn bass_assist_preserves_pure_side_without_creating_center_energy() {
     assert!(
         leakage_db < -60.0,
         "Bass Assist created center energy from pure Side: {leakage_db:.2} dB"
+    );
+}
+
+
+#[test]
+fn bass_assist_preserves_proportional_stereo_pan() {
+    let mut profile = MusicProfile {
+        level_match: false,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        ..MusicProfile::default()
+    };
+    profile.bass_assist.enabled = true;
+    profile.bass_assist.amount = 1.0;
+    let mut processor = maris::music::Processor::new(profile.compile(48_000).unwrap());
+
+    let mut maximum_ratio_error = 0.0_f64;
+    let mut measured = 0usize;
+    for i in 0..144_000 {
+        let x = 0.25 * (std::f64::consts::TAU * 65.0 * i as f64 / 48_000.0).sin();
+        let output = processor.process([x, x * 0.2]);
+        if i >= 96_000 && output[1].abs() > 1e-4 {
+            maximum_ratio_error = maximum_ratio_error.max((output[0] / output[1] - 5.0).abs());
+            measured += 1;
+        }
+    }
+    assert!(measured > 1_000);
+    assert!(
+        maximum_ratio_error < 0.05,
+        "Bass Assist shifted fixed stereo pan: max ratio error {maximum_ratio_error:.4}"
     );
 }
