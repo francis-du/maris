@@ -4,7 +4,10 @@ use maris::music::MusicProfile;
 fn compressor_reenable_starts_from_fresh_envelope_after_disable() {
     let mut enabled = MusicProfile {
         level_match: false,
-        adaptive: maris::music::AdaptiveEq { enabled: false, strength: 0.0 },
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
         ..MusicProfile::default()
     };
     enabled.compressor.enabled = true;
@@ -50,7 +53,10 @@ fn compressor_reenable_starts_from_fresh_envelope_after_disable() {
 fn bass_assist_reenable_starts_from_fresh_filter_history_after_disable() {
     let mut enabled = MusicProfile {
         level_match: false,
-        adaptive: maris::music::AdaptiveEq { enabled: false, strength: 0.0 },
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
         ..MusicProfile::default()
     };
     enabled.bass_assist.enabled = true;
