@@ -4,9 +4,10 @@ mod ablation;
 
 #[test]
 fn each_retained_effect_has_a_distinct_conditioned_contribution() {
-    let report = ablation::report(&[48_000]).unwrap();
+    let rates = [44_100, 48_000, 96_000];
+    let report = ablation::report(&rates).unwrap();
     let results = report["results"].as_array().unwrap();
-    assert_eq!(results.len(), 27);
+    assert_eq!(results.len(), 27 * rates.len());
     for variant in [
         "without_correction",
         "without_preference_tone",
@@ -25,12 +26,19 @@ fn each_retained_effect_has_a_distinct_conditioned_contribution() {
         assert!(row["level_matched_difference_rms"].as_f64().unwrap() < 1e-12);
     }
     // A stereo-width effect has no reason to modify center-only mono content.
-    let mono = results
-        .iter()
-        .find(|row| {
-            row["variant"] == "without_stereo_width" && row["fixture"] == "bass_dominant_mono"
-        })
-        .unwrap();
-    assert!(mono["level_matched_difference_rms"].as_f64().unwrap() < 1e-8);
+    for rate in rates {
+        let mono = results
+            .iter()
+            .find(|row| {
+                row["sample_rate"] == rate
+                    && row["variant"] == "without_stereo_width"
+                    && row["fixture"] == "bass_dominant_mono"
+            })
+            .unwrap();
+        assert!(
+            mono["level_matched_difference_rms"].as_f64().unwrap() < 1e-8,
+            "stereo width changed mono content at {rate} Hz"
+        );
+    }
     assert_eq!(report["subjective_quality_validated"], false);
 }
