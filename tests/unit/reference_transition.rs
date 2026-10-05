@@ -89,11 +89,9 @@ fn rapid_reference_retunes_preserve_limiter_and_latest_target() {
         for _ in 0..48 {
             let output = processor.process(frame(index, 0.08));
             index += 1;
-            assert!(
-                output
-                    .iter()
-                    .all(|sample| sample.is_finite() && sample.abs() <= 0.891_252)
-            );
+            assert!(output
+                .iter()
+                .all(|sample| sample.is_finite() && sample.abs() <= 0.891_252));
             let makeup = processor.level_match_makeup_db();
             maximum_makeup_step = maximum_makeup_step.max((makeup - previous_makeup).abs());
             previous_makeup = makeup;
@@ -108,11 +106,9 @@ fn rapid_reference_retunes_preserve_limiter_and_latest_target() {
     for _ in 0..RATE as usize {
         let output = processor.process(frame(index, 0.08));
         index += 1;
-        assert!(
-            output
-                .iter()
-                .all(|sample| sample.is_finite() && sample.abs() <= 0.891_252)
-        );
+        assert!(output
+            .iter()
+            .all(|sample| sample.is_finite() && sample.abs() <= 0.891_252));
     }
     assert!(
         !processor.settings_pending(),
