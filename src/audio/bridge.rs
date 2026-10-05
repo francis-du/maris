@@ -590,5 +590,8 @@ mod loudness_transition_tests;
 #[path = "../../tests/unit/output_transition.rs"]
 mod output_transition_tests;
 #[cfg(test)]
+#[path = "../../tests/unit/reference_transition.rs"]
+mod reference_transition_tests;
+#[cfg(test)]
 #[path = "../../tests/unit/output_render.rs"]
 mod tests;
