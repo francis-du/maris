@@ -67,3 +67,37 @@ fn dynamic_eq_applies_equal_transfer_to_proportional_stereo_channels() {
     }
     assert!(observed_reduction, "fixture never activated Dynamic EQ");
 }
+
+
+#[test]
+fn bass_assist_preserves_pure_side_without_creating_center_energy() {
+    let mut profile = MusicProfile {
+        level_match: false,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        ..MusicProfile::default()
+    };
+    profile.bass_assist.enabled = true;
+    profile.bass_assist.amount = 1.0;
+    let mut processor = maris::music::Processor::new(profile.compile(48_000).unwrap());
+
+    let mut mid_power = 0.0_f64;
+    let mut side_power = 0.0_f64;
+    for i in 0..144_000 {
+        let x = 0.2 * (std::f64::consts::TAU * 65.0 * i as f64 / 48_000.0).sin();
+        let output = processor.process([x, -x]);
+        if i >= 96_000 {
+            let mid = (output[0] + output[1]) * 0.5;
+            let side = (output[0] - output[1]) * 0.5;
+            mid_power += mid * mid;
+            side_power += side * side;
+        }
+    }
+    let leakage_db = 10.0 * (mid_power.max(1e-30) / side_power.max(1e-30)).log10();
+    assert!(
+        leakage_db < -60.0,
+        "Bass Assist created center energy from pure Side: {leakage_db:.2} dB"
+    );
+}
