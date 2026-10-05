@@ -27,3 +27,30 @@ fn renderer_reports_actual_limiter_reduction_not_only_the_ceiling() {
     );
     assert!(loud.iter().all(|sample| sample.abs() <= 0.891252));
 }
+
+
+#[test]
+fn limiter_release_time_is_sample_rate_invariant() {
+    let mut observed_ms = Vec::new();
+    for rate in [44_100_u32, 48_000, 96_000, 192_000] {
+        let settings = Settings::compile(&crate::profile::Profile::default(), rate).unwrap();
+        let mut processor = crate::dsp::Processor::new(settings);
+        let _ = processor.process([2.0, -2.0]);
+        assert!(processor.limiter_reduction_db() > 5.0);
+
+        let mut frames = 0_u32;
+        while processor.limiter_reduction_db() > 0.1 && frames < rate {
+            let _ = processor.process([0.0, 0.0]);
+            frames += 1;
+        }
+        assert!(frames < rate, "limiter did not release at {rate} Hz");
+        observed_ms.push(frames as f64 * 1000.0 / f64::from(rate));
+    }
+    let min = observed_ms.iter().copied().fold(f64::INFINITY, f64::min);
+    let max = observed_ms.iter().copied().fold(0.0_f64, f64::max);
+    assert!(
+        max - min < 0.1,
+        "limiter release changed with sample rate: {observed_ms:?}"
+    );
+}
+
