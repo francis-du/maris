@@ -174,11 +174,13 @@ fn strip_peaks_are_batched_per_block_without_changing_interval_maxima() {
             ready_frames += 1;
             let secondary = f.secondary.pop().unwrap();
             expected[0] = expected[0].max(f64::from(primary[0].abs().max(primary[1].abs())));
-            expected[1] =
-                expected[1].max(f64::from(secondary[0].abs().max(secondary[1].abs())));
+            expected[1] = expected[1].max(f64::from(secondary[0].abs().max(secondary[1].abs())));
         }
     }
-    assert!(ready_frames > 0, "fixture never crossed the real capture reserve");
+    assert!(
+        ready_frames > 0,
+        "fixture never crossed the real capture reserve"
+    );
     assert_eq!(f.peaks[0].load(Ordering::Relaxed), 0);
     assert_eq!(f.peaks[1].load(Ordering::Relaxed), 0);
     f.graph.end_block();
