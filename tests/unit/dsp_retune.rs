@@ -458,3 +458,58 @@ fn retune_crossfade_duration_is_sample_rate_invariant() {
         );
     }
 }
+
+#[test]
+fn retunes_never_release_existing_limiter_attenuation() {
+    let base = Settings::compile(&Profile::default(), 48_000).unwrap();
+    let mut processor = Processor::new(base);
+    for _ in 0..4_096 {
+        let _ = processor.process([4.0, -4.0]);
+    }
+    let engaged = processor.limiter_reduction_db();
+    assert!(
+        engaged > 5.0,
+        "fixture did not engage limiter: {engaged:.3} dB"
+    );
+
+    let first = Settings::compile(
+        &Profile {
+            stereo_width: 0.5,
+            crossfeed: 0.25,
+            ..Profile::default()
+        },
+        48_000,
+    )
+    .unwrap();
+    let second = Settings::compile(
+        &Profile {
+            stereo_width: 1.5,
+            crossfeed: 0.0,
+            ..Profile::default()
+        },
+        48_000,
+    )
+    .unwrap();
+
+    let before_first = processor.limiter_reduction_db();
+    processor.update(first);
+    assert!(
+        (processor.limiter_reduction_db() - before_first).abs() < 1e-12,
+        "starting a retune released limiter attenuation"
+    );
+
+    let _ = processor.process([0.1, -0.1]);
+    let after_one_frame = processor.limiter_reduction_db();
+    assert!(
+        after_one_frame > 1.0,
+        "first retune frame released limiter attenuation too aggressively: {after_one_frame:.3} dB"
+    );
+
+    let before_queued = processor.limiter_reduction_db();
+    processor.update(second);
+    assert!(
+        (processor.limiter_reduction_db() - before_queued).abs() < 1e-12,
+        "queueing a retune released limiter attenuation"
+    );
+}
+
