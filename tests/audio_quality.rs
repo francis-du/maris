@@ -876,3 +876,66 @@ fn gain_only_identity_has_no_added_distortion_or_crosstalk() {
     }
     assert!(10.0_f64 * (residual / signal).log10() < -120.0);
 }
+
+#[test]
+fn crossfeed_preserves_mono_and_direct_high_frequency_level() {
+    let profile = Profile {
+        crossfeed: 0.3,
+        ..Profile::default()
+    };
+    for hz in [70.0, 1_000.0, 8_000.0] {
+        let mut processor = Processor::new(Settings::compile(&profile, 48_000).unwrap());
+        for i in 0..96_000 {
+            let x = (0.1 * (std::f64::consts::TAU * hz * i as f64 / 48_000.0).sin()) as f32;
+            let y = processor.process([x, x]);
+            if i > 48_000 {
+                assert!(
+                    (y[0] - x).abs() < 1e-6 && (y[1] - x).abs() < 1e-6,
+                    "crossfeed colored mono at {hz} Hz: input={x} output={y:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn crossfeed_keeps_low_frequency_ratio_without_attenuating_direct_highs() {
+    let amount = 0.3;
+    let profile = Profile {
+        crossfeed: amount,
+        ..Profile::default()
+    };
+    let mut low = Processor::new(Settings::compile(&profile, 48_000).unwrap());
+    let mut left_power = 0.0_f64;
+    let mut right_power = 0.0_f64;
+    for i in 0..96_000 {
+        let x = (0.1 * (std::f64::consts::TAU * 70.0 * i as f64 / 48_000.0).sin()) as f32;
+        let y = low.process([x, 0.0]);
+        if i > 48_000 {
+            left_power += f64::from(y[0]).powi(2);
+            right_power += f64::from(y[1]).powi(2);
+        }
+    }
+    let ratio = (right_power / left_power).sqrt();
+    assert!(
+        (ratio - amount).abs() < 0.02,
+        "crossfeed low-frequency cross-ear ratio changed: {ratio:.4}"
+    );
+
+    let mut high = Processor::new(Settings::compile(&profile, 48_000).unwrap());
+    let mut input_power = 0.0_f64;
+    let mut output_power = 0.0_f64;
+    for i in 0..96_000 {
+        let x = (0.1 * (std::f64::consts::TAU * 8_000.0 * i as f64 / 48_000.0).sin()) as f32;
+        let y = high.process([x, 0.0]);
+        if i > 48_000 {
+            input_power += f64::from(x).powi(2);
+            output_power += f64::from(y[0]).powi(2);
+        }
+    }
+    let direct_delta_db = 10.0 * (output_power / input_power).log10();
+    assert!(
+        direct_delta_db.abs() < 0.15,
+        "crossfeed attenuated direct high frequencies by {direct_delta_db:.3} dB"
+    );
+}
