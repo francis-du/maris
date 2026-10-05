@@ -230,13 +230,17 @@ pub fn device_ids() -> Result<Vec<u32>> {
 pub fn output_stream_ids(device: u32) -> Result<Vec<u32>> {
     unsafe { property_vec_u32_scope(device, b"stm#", b"outp") }
 }
+fn scoped_output_stream_supported(stream_count: usize, channels: u32) -> bool {
+    stream_count == 1 && (1..=2).contains(&channels)
+}
+
 pub fn single_stereo_output_device_uid(device: u32) -> Result<Option<String>> {
     let streams = output_stream_ids(device)?;
     if streams.len() != 1 {
         return Ok(None);
     }
     let format: Format = unsafe { property(streams[0], b"sfmt")? };
-    if !(1..=2).contains(&format.channels) {
+    if !scoped_output_stream_supported(streams.len(), format.channels) {
         return Ok(None);
     }
     Ok(Some(device_uid(device)?))
@@ -510,5 +514,25 @@ pub fn append(array: &AnyObject, value: &AnyObject) {
     // SAFETY: callers supply NSMutableArray and a live object; the array retains it.
     unsafe {
         let _: () = msg_send![array, addObject: value];
+    }
+}
+
+#[cfg(test)]
+mod scoped_output_tests {
+    use super::scoped_output_stream_supported;
+
+    #[test]
+    fn scoped_output_requires_exactly_one_mono_or_stereo_stream() {
+        for channels in [1, 2] {
+            assert!(scoped_output_stream_supported(1, channels));
+        }
+        for stream_count in [0, 2, 3] {
+            for channels in [1, 2, 6, 8] {
+                assert!(!scoped_output_stream_supported(stream_count, channels));
+            }
+        }
+        for channels in [0, 3, 4, 6, 8, 16] {
+            assert!(!scoped_output_stream_supported(1, channels));
+        }
     }
 }
