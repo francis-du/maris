@@ -180,6 +180,61 @@ fn single_frame_retune_endpoint_is_sample_rate_invariant() {
 }
 
 #[test]
+fn discontinuity_during_queued_retune_preserves_latest_target_and_progress() {
+    let base = Settings::compile(&Profile::default(), 48_000).unwrap();
+    let middle_profile = Profile {
+        stereo_width: 0.6,
+        ..Profile::default()
+    };
+    let final_profile = Profile {
+        stereo_width: 0.0,
+        ..Profile::default()
+    };
+    let mut middle = Settings::compile(&middle_profile, 48_000).unwrap();
+    let mut final_target = Settings::compile(&final_profile, 48_000).unwrap();
+    middle.transition_frames = 64;
+    final_target.transition_frames = 64;
+
+    let mut processor = Processor::new(base);
+    processor.update(middle);
+    for _ in 0..17 {
+        let _ = processor.process([0.1, -0.1]);
+    }
+    processor.update(final_target);
+    assert!(processor.settings_pending());
+    let remaining_before_reset = processor.remaining;
+
+    processor.reset_history();
+    assert_eq!(
+        processor.remaining, remaining_before_reset,
+        "discontinuity restarted or shortened the in-flight retune"
+    );
+    assert!(
+        processor.pending.is_some(),
+        "discontinuity dropped the queued latest target"
+    );
+
+    for _ in 0..160 {
+        let _ = processor.process([0.1, -0.1]);
+    }
+    assert!(
+        !processor.settings_pending(),
+        "queued retune did not settle after discontinuity"
+    );
+
+    let input = [0.1_f32, -0.1_f32];
+    let actual = processor.process(input);
+    let mut fresh = Processor::new(final_target);
+    let expected = fresh.process(input);
+    for channel in 0..2 {
+        assert!(
+            (actual[channel] - expected[channel]).abs() < 1e-7,
+            "discontinuity lost the queued final target: actual={actual:?} expected={expected:?}"
+        );
+    }
+}
+
+#[test]
 fn retune_crossfade_duration_is_sample_rate_invariant() {
     for rate in [44_100_u32, 48_000, 96_000, 192_000] {
         let base = Settings::compile(&Profile::default(), rate).unwrap();
