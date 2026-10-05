@@ -65,6 +65,7 @@ pub struct Processor {
     target: Settings,
     remaining: u32,
     duck_gain: f64,
+    duck_mix: [f64; MAX_STRIPS],
 }
 impl Processor {
     pub fn new(config: MixerConfig, rate: u32) -> Result<Self> {
@@ -76,6 +77,7 @@ impl Processor {
             target: settings,
             remaining: 0,
             duck_gain: 1.0,
+            duck_mix: settings.ducks.map(|duck| if duck { 1.0 } else { 0.0 }),
         }
     }
     /// The caller compiles and validates before queueing. No ownership or allocation crosses here.
@@ -104,10 +106,18 @@ impl Processor {
                     }
                 }
             }
+            for (mix, target) in self.duck_mix.iter_mut().zip(self.target.ducks) {
+                let target = if target { 1.0 } else { 0.0 };
+                *mix += (target - *mix) * fraction;
+            }
             self.current.count = self.current.count.max(self.target.count);
             self.remaining -= 1;
             if self.remaining == 0 {
                 self.current = self.target;
+                self.duck_mix = self
+                    .target
+                    .ducks
+                    .map(|duck| if duck { 1.0 } else { 0.0 });
             }
         }
         let mut trigger = 0.0_f64;
@@ -137,11 +147,7 @@ impl Processor {
         self.duck_gain = coefficient * self.duck_gain + (1.0 - coefficient) * target;
         let mut buses = [[0.0; 2]; BUS_COUNT];
         for (i, frame) in clean.iter().enumerate().take(self.current.count) {
-            let duck = if self.target.ducks[i] {
-                self.duck_gain
-            } else {
-                1.0
-            };
+            let duck = 1.0 + (self.duck_gain - 1.0) * self.duck_mix[i];
             for (bus, out) in buses.iter_mut().enumerate() {
                 for channel in 0..2 {
                     out[channel] += frame[channel] * self.current.routes[i][bus][channel] * duck;

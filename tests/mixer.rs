@@ -1,5 +1,5 @@
 use maris::{
-    mixer::{self, Ducking, MixerConfig, MixerStrip, Processor},
+    mixer::{self, engine::Settings as MixerSettings, Ducking, MixerConfig, MixerStrip, Processor},
     store::Store,
 };
 
@@ -69,6 +69,63 @@ fn voice_trigger_ducks_only_marked_background_strips() {
     }
     assert!(last[0][0] < 0.3);
     assert!(last[0][0] > 0.2);
+}
+
+#[test]
+fn changing_duck_targets_crossfades_instead_of_stepping_an_already_ducked_strip() {
+    let mut music = strip("music", [1.0, 0.0]);
+    music.duck_target = true;
+    let mut voice = strip("voice", [0.0, 1.0]);
+    voice.voice_trigger = true;
+    let mut config = MixerConfig {
+        strips: vec![music, voice],
+        ducking: Ducking {
+            enabled: true,
+            threshold_dbfs: -40.0,
+            attenuation_db: 18.0,
+            attack_ms: 1.0,
+            release_ms: 300.0,
+        },
+        ..MixerConfig::default()
+    };
+    let mut mixer = Processor::new(config.clone(), 48_000).unwrap();
+    let input = [[0.2, 0.2], [0.2, 0.2]];
+    let mut before = 0.0_f32;
+    for _ in 0..4_800 {
+        before = mixer.process(&input)[0][0];
+    }
+    assert!(before < 0.04, "ducking did not settle before retune: {before}");
+
+    config.strips[0].duck_target = false;
+    mixer.update(MixerSettings::compile(&config, 48_000).unwrap());
+    let first = mixer.process(&input)[0][0];
+    assert!(
+        (first - before).abs() < 0.002,
+        "removing duck target stepped the strip: before={before} first={first}"
+    );
+    let mut last = first;
+    for _ in 0..1_200 {
+        last = mixer.process(&input)[0][0];
+    }
+    assert!(
+        (last - 0.2).abs() < 0.002,
+        "duck-target crossfade did not reach the unducked level: {last}"
+    );
+
+    config.strips[0].duck_target = true;
+    mixer.update(MixerSettings::compile(&config, 48_000).unwrap());
+    let return_first = mixer.process(&input)[0][0];
+    assert!(
+        (return_first - last).abs() < 0.002,
+        "adding duck target stepped the strip: before={last} first={return_first}"
+    );
+    for _ in 0..1_200 {
+        last = mixer.process(&input)[0][0];
+    }
+    assert!(
+        last < 0.04,
+        "duck-target crossfade did not return to the settled ducked level: {last}"
+    );
 }
 
 #[test]
