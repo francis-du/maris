@@ -4,7 +4,7 @@ mod ablation;
 
 #[test]
 fn each_retained_effect_has_a_distinct_conditioned_contribution() {
-    let rates = [44_100, 48_000, 96_000];
+    let rates = [44_100, 48_000, 96_000, 192_000];
     let report = ablation::report(&rates).unwrap();
     let results = report["results"].as_array().unwrap();
     assert_eq!(results.len(), 33 * rates.len());
