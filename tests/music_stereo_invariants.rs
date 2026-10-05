@@ -4,7 +4,10 @@ use maris::music::MusicProfile;
 fn linked_compressor_preserves_stereo_ratio_under_one_sided_pressure() {
     let mut profile = MusicProfile {
         level_match: false,
-        adaptive: maris::music::AdaptiveEq { enabled: false, strength: 0.0 },
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
         ..MusicProfile::default()
     };
     profile.compressor.enabled = true;
@@ -29,7 +32,10 @@ fn linked_compressor_preserves_stereo_ratio_under_one_sided_pressure() {
         }
         compressed |= output[0].abs() + 1e-6 < input[0].abs();
     }
-    assert!(compressed, "fixture never entered compressor gain reduction");
+    assert!(
+        compressed,
+        "fixture never entered compressor gain reduction"
+    );
 }
 
 #[test]
@@ -37,7 +43,10 @@ fn dynamic_eq_applies_equal_transfer_to_proportional_stereo_channels() {
     let profile = MusicProfile {
         softness: 1.0,
         level_match: false,
-        adaptive: maris::music::AdaptiveEq { enabled: true, strength: 1.0 },
+        adaptive: maris::music::AdaptiveEq {
+            enabled: true,
+            strength: 1.0,
+        },
         ..MusicProfile::default()
     };
     let mut processor = maris::music::Processor::new(profile.compile(48_000).unwrap());
