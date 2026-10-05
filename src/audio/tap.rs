@@ -600,6 +600,7 @@ unsafe extern "C" fn capture(
     } else {
         left
     };
+    let mut dropped = 0_u64;
     for i in 0..count {
         let frame = unsafe {
             let l = *left.add(i * channels);
@@ -616,8 +617,16 @@ unsafe extern "C" fn capture(
             ]
         };
         if capture.queue.push(frame).is_err() {
-            capture.metrics.overruns.fetch_add(1, Ordering::Relaxed);
+            dropped += 1;
         }
+    }
+    if dropped != 0 {
+        // Keep the real-time failure path bounded: one atomic update per callback
+        // instead of one contended atomic operation for every dropped frame.
+        capture
+            .metrics
+            .overruns
+            .fetch_add(dropped, Ordering::Relaxed);
     }
     capture
         .metrics
