@@ -45,12 +45,15 @@ fn render(
     frames: &[[f32; 2]],
 ) -> Result<(Vec<[f32; 2]>, f64)> {
     let mut processor = Processor::new(Settings::compile(eq, rate)?.with_music(music, rate)?);
-    // Settle detectors using the same input before measuring every independent chain.
-    for frame in frames.iter().take(rate as usize / 4) {
+    // Warm stateful detectors on the beginning of one continuous program, then measure
+    // only the continuation. Replaying the input from frame zero after warm-up creates an
+    // artificial phase/envelope discontinuity that can exaggerate stateful-effect deltas.
+    let settle = (rate as usize / 4).min(frames.len());
+    for frame in &frames[..settle] {
         std::hint::black_box(processor.process(*frame));
     }
     let began = Instant::now();
-    let result: Vec<_> = frames
+    let result: Vec<_> = frames[settle..]
         .iter()
         .map(|frame| processor.process(*frame))
         .collect();
@@ -161,7 +164,7 @@ pub fn report(rates: &[u32]) -> Result<Value> {
                     .zip(output.iter().flatten())
                     .map(|(a, b)| (f64::from(*a) - f64::from(*b) * scale).powi(2))
                     .sum::<f64>()
-                    / (frames.len() * 2) as f64)
+                    / (reference.len() * 2) as f64)
                     .sqrt();
                 let peak = output
                     .iter()
