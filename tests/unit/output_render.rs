@@ -234,6 +234,23 @@ fn replacement_output_observes_capture_gaps_without_inheriting_old_output_errors
 }
 
 #[test]
+fn analysis_queue_overflow_counts_each_dropped_frame_without_per_frame_atomic_updates() {
+    let metrics = Arc::new(Metrics::default());
+    let analysis = Arc::new(ArrayQueue::new(1));
+    assert!(metrics.analysis_queue.set(analysis.clone()).is_ok());
+    let mut renderer = Renderer::new(
+        settings(),
+        48_000,
+        Arc::new(ArrayQueue::new(8)),
+        metrics.clone(),
+    );
+    let mut data = [0.0_f32; 8];
+    renderer.render(&mut data, 2, || ([0.1, -0.1], true));
+    assert_eq!(analysis.len(), 1);
+    assert_eq!(metrics.analysis_dropped.load(Ordering::Relaxed), 3);
+}
+
+#[test]
 fn prepared_replacement_proves_callback_readiness_without_consuming_or_publishing() {
     let metrics = Arc::new(Metrics::default());
     metrics.output_quarantined.store(true, Ordering::Release);
