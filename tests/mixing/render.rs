@@ -30,6 +30,7 @@ struct Fixture {
     changes: Arc<ArrayQueue<render::Update>>,
     revision: Arc<AtomicU64>,
     meters: [Arc<Metrics>; 2],
+    peaks: [Arc<AtomicU64>; 2],
 }
 impl Fixture {
     fn new(config: &MixerConfig) -> Self {
@@ -48,6 +49,13 @@ impl Fixture {
         let changes = Arc::new(ArrayQueue::new(2));
         let revision = Arc::new(AtomicU64::new(u64::MAX));
         let meters = std::array::from_fn(|_| Arc::new(Metrics::default()));
+        let peaks = std::array::from_fn(|index| {
+            inputs[index]
+                .as_ref()
+                .expect("fixture input")
+                .peak
+                .clone()
+        });
         let initial = render::Update::compile(config, 1, 48000).unwrap();
         changes.push(initial).ok().unwrap();
         let graph = render::Graph::new(render::GraphConfig {
@@ -69,6 +77,7 @@ impl Fixture {
             changes,
             revision,
             meters,
+            peaks,
         }
     }
     fn fill(&self, frames: impl Iterator<Item = [[f32; 2]; 2]>) {
@@ -154,6 +163,31 @@ fn each_source_is_consumed_once_and_output_buses_remain_independent() {
     }
     assert_eq!(f.sources[0].len(), f.sources[1].len());
     assert_eq!(f.meters[1].overruns.load(Ordering::Relaxed), 0);
+}
+
+#[test]
+fn strip_peaks_are_batched_per_block_without_changing_interval_maxima() {
+    let mut f = Fixture::new(&config());
+    f.fill(
+        [
+            [[0.10, -0.05], [0.20, -0.10]],
+            [[0.35, -0.30], [0.15, -0.40]],
+            [[0.12, -0.09], [0.05, -0.03]],
+        ]
+        .into_iter(),
+    );
+    f.graph.begin_block();
+    for _ in 0..3 {
+        let _ = f.graph.frame();
+        let _ = f.secondary.pop();
+    }
+    assert_eq!(f.peaks[0].load(Ordering::Relaxed), 0);
+    assert_eq!(f.peaks[1].load(Ordering::Relaxed), 0);
+    f.graph.end_block();
+    let first = f64::from_bits(f.peaks[0].load(Ordering::Relaxed));
+    let second = f64::from_bits(f.peaks[1].load(Ordering::Relaxed));
+    assert!((first - 0.35).abs() < 1e-6, "first strip peak changed: {first}");
+    assert!((second - 0.40).abs() < 1e-6, "second strip peak changed: {second}");
 }
 
 #[test]

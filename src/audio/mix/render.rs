@@ -128,6 +128,7 @@ pub(super) struct Graph {
     updates: Arc<ArrayQueue<Update>>,
     revision: Arc<AtomicU64>,
     pending_revision: Option<u64>,
+    pending_input_peaks: [f64; MAX_STRIPS],
     pending_send_overruns: [u64; BUS_COUNT],
     observed_callback_epoch: u64,
 }
@@ -163,6 +164,7 @@ impl Graph {
             updates,
             revision,
             pending_revision: None,
+            pending_input_peaks: [0.0; MAX_STRIPS],
             pending_send_overruns: [0; BUS_COUNT],
             observed_callback_epoch: 0,
         })
@@ -205,6 +207,14 @@ impl Graph {
         }
     }
     pub fn end_block(&mut self) {
+        for index in 0..self.inputs.len() {
+            let peak = std::mem::take(&mut self.pending_input_peaks[index]);
+            if peak != 0.0 {
+                if let Some(input) = &self.inputs[index] {
+                    input.peak.fetch_max(peak.to_bits(), Ordering::Relaxed);
+                }
+            }
+        }
         for bus in 0..BUS_COUNT {
             let dropped = std::mem::take(&mut self.pending_send_overruns[bus]);
             if dropped != 0 {
@@ -239,7 +249,7 @@ impl Graph {
                 ready |= source_ready;
                 frames[index] = self.processors[index].frame(frame, source_ready, false);
                 let peak = frames[index][0].abs().max(frames[index][1].abs()) as f64;
-                input.peak.fetch_max(peak.to_bits(), Ordering::Relaxed);
+                self.pending_input_peaks[index] = self.pending_input_peaks[index].max(peak);
             }
         }
         let mut mixed = self.matrix.process_unlimited(&frames[..self.inputs.len()]);
