@@ -863,11 +863,13 @@ fn rapid_effect_dezipper_is_sample_rate_invariant() {
                 (0.08
                     * (0.52 * (std::f64::consts::TAU * 83.0 * t).sin()
                         + 0.28 * (std::f64::consts::TAU * 997.0 * t).sin()
-                        + 0.20 * (std::f64::consts::TAU * 8_300.0 * t).sin())) as f32,
+                        + 0.20 * (std::f64::consts::TAU * 8_300.0 * t).sin()))
+                    as f32,
                 (0.08
                     * (0.49 * (std::f64::consts::TAU * 109.0 * t + 0.3).sin()
                         + 0.30 * (std::f64::consts::TAU * 1_499.0 * t + 0.7).sin()
-                        + 0.21 * (std::f64::consts::TAU * 7_700.0 * t + 1.1).sin())) as f32,
+                        + 0.21 * (std::f64::consts::TAU * 7_700.0 * t + 1.1).sin()))
+                    as f32,
             ]
         };
         let mut index = 0usize;
@@ -896,4 +898,3 @@ fn rapid_effect_dezipper_is_sample_rate_invariant() {
         );
     }
 }
-
