@@ -36,6 +36,29 @@ def digest(path: Path) -> str:
     return hasher.hexdigest()
 
 
+def release_output_directory(path: Path, root: Path = ROOT) -> Path:
+    """Create a fixed release output directory without following workspace symlink escapes."""
+    root = root.resolve()
+    path = path.absolute()
+    try:
+        relative = path.relative_to(root)
+    except ValueError as error:
+        raise ValueError('Release output directory must stay inside the source checkout') from error
+    current = root
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            raise ValueError('Linked release output directory rejected')
+        if current.exists() and not current.is_dir():
+            raise ValueError('Release output path contains a non-directory component')
+    path.mkdir(parents=True, exist_ok=True)
+    try:
+        path.resolve().relative_to(root)
+    except ValueError as error:
+        raise ValueError('Release output directory escaped the source checkout') from error
+    return path
+
+
 def _tar_entry_size(field: bytes) -> int:
     if field[0] & 0x80:
         return int.from_bytes(field, 'big', signed=True)
@@ -485,8 +508,9 @@ def main() -> None:
     version = re.search(r'^version = "([0-9.]+)"$', (ROOT / 'Cargo.toml').read_text(), re.M).group(1)
     stem = f'Maris-{version}-{system}-{arch}'
     channel = 'candidate' if args.candidate else 'stable'
-    destination = ROOT / 'dist' / ('online-candidate' if args.candidate else 'online-approved')
-    destination.mkdir(parents=True, exist_ok=True)
+    destination = release_output_directory(
+        ROOT / 'dist' / ('online-candidate' if args.candidate else 'online-approved')
+    )
     archive = destination / (stem + ('.zip' if system == 'windows' else '.tar.gz'))
     record_path = destination / (stem + '.release.json')
     if archive.is_symlink() or record_path.is_symlink() or record_path.exists():
