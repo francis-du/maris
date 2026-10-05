@@ -127,6 +127,7 @@ pub(super) struct Graph {
     send_metrics: [Arc<Metrics>; BUS_COUNT],
     updates: Arc<ArrayQueue<Update>>,
     revision: Arc<AtomicU64>,
+    pending_revision: Option<u64>,
     observed_callback_epoch: u64,
 }
 impl Graph {
@@ -160,6 +161,7 @@ impl Graph {
             send_metrics,
             updates,
             revision,
+            pending_revision: None,
             observed_callback_epoch: 0,
         })
     }
@@ -180,7 +182,24 @@ impl Graph {
                 }
             }
             self.settings = update.strips;
-            self.revision.store(update.revision, Ordering::Release);
+            self.pending_revision = Some(update.revision);
+            self.commit_revision_if_settled();
+        }
+    }
+    fn processing_pending(&self) -> bool {
+        self.matrix.settings_pending()
+            || self
+                .processors
+                .iter()
+                .zip(&self.inputs)
+                .any(|(processor, input)| input.is_some() && processor.settings_pending())
+    }
+    fn commit_revision_if_settled(&mut self) {
+        if self.processing_pending() {
+            return;
+        }
+        if let Some(revision) = self.pending_revision.take() {
+            self.revision.store(revision, Ordering::Release);
         }
     }
     pub fn frame(&mut self) -> ([f32; 2], bool) {
@@ -226,6 +245,7 @@ impl Graph {
                 }
             }
         }
+        self.commit_revision_if_settled();
         (mixed[self.primary].map(|v| v as f32), ready)
     }
 }

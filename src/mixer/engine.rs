@@ -2,7 +2,7 @@
 use super::{MixerConfig, BUS_COUNT, CEILING, MAX_STRIPS};
 use anyhow::{ensure, Result};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct Settings {
     routes: [[[f64; 2]; BUS_COUNT]; MAX_STRIPS],
     triggers: [bool; MAX_STRIPS],
@@ -80,8 +80,14 @@ impl Processor {
     }
     /// The caller compiles and validates before queueing. No ownership or allocation crosses here.
     pub fn update(&mut self, settings: Settings) {
+        if settings == self.target {
+            return;
+        }
         self.target = settings;
         self.remaining = settings.ramp_frames;
+    }
+    pub(crate) fn settings_pending(&self) -> bool {
+        self.remaining > 0
     }
     pub fn process(&mut self, inputs: &[[f32; 2]]) -> [[f32; 2]; BUS_COUNT] {
         self.process_unlimited(inputs)

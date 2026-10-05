@@ -33,7 +33,7 @@ struct Fixture {
 }
 impl Fixture {
     fn new(config: &MixerConfig) -> Self {
-        let sources = std::array::from_fn(|_| Arc::new(ArrayQueue::new(8192)));
+        let sources = std::array::from_fn(|_| Arc::new(ArrayQueue::new(16_384)));
         let inputs = sources
             .iter()
             .map(|queue| {
@@ -220,10 +220,21 @@ fn live_gain_and_mute_changes_acknowledge_at_a_block_boundary_and_slew() {
         .unwrap();
     assert_eq!(f.revision.load(Ordering::Acquire), 1);
     f.graph.begin_block();
-    assert_eq!(f.revision.load(Ordering::Acquire), 2);
+    assert_eq!(
+        f.revision.load(Ordering::Acquire),
+        1,
+        "mixer revision advanced before its gain ramp finished"
+    );
     let mut previous = 0.101;
     for i in 0..1300 {
         let (a, _) = f.graph.frame();
+        if i < 1199 {
+            assert_eq!(
+                f.revision.load(Ordering::Acquire),
+                1,
+                "mixer revision advanced during its gain ramp at frame {i}"
+            );
+        }
         let b = f.secondary.pop().unwrap();
         assert!(a[0] <= previous + 1e-6);
         assert!((previous - a[0]).abs() < 0.002);
@@ -233,6 +244,57 @@ fn live_gain_and_mute_changes_acknowledge_at_a_block_boundary_and_slew() {
         }
         previous = a[0];
     }
+    assert_eq!(
+        f.revision.load(Ordering::Acquire),
+        2,
+        "mixer revision did not advance after the audible ramp completed"
+    );
+}
+
+#[test]
+fn strip_eq_revision_waits_for_the_strip_dsp_crossfade() {
+    let mut config = config();
+    let mut f = Fixture::new(&config);
+    f.fill((0..9000).map(|i| {
+        let x = 0.15 * (i as f32 * std::f32::consts::TAU * 1000.0 / 48000.0).sin();
+        [[x, x], [x, x]]
+    }));
+    f.graph.begin_block();
+    for _ in 0..1500 {
+        f.graph.frame();
+        f.secondary.pop();
+    }
+    assert_eq!(f.revision.load(Ordering::Acquire), 1);
+
+    let mut eq = crate::profile::Profile::default();
+    eq.bands[5].gain_db = -6.0;
+    config.strips[0].eq = Some(eq);
+    f.changes
+        .push(render::Update::compile(&config, 2, 48000).unwrap())
+        .ok()
+        .unwrap();
+    f.graph.begin_block();
+    assert_eq!(
+        f.revision.load(Ordering::Acquire),
+        1,
+        "strip EQ revision advanced before the DSP crossfade started"
+    );
+    for i in 0..1199 {
+        f.graph.frame();
+        f.secondary.pop();
+        assert_eq!(
+            f.revision.load(Ordering::Acquire),
+            1,
+            "strip EQ revision advanced during DSP crossfade at frame {i}"
+        );
+    }
+    f.graph.frame();
+    f.secondary.pop();
+    assert_eq!(
+        f.revision.load(Ordering::Acquire),
+        2,
+        "strip EQ revision did not advance when the DSP crossfade completed"
+    );
 }
 
 #[test]
