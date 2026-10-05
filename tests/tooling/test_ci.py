@@ -382,7 +382,11 @@ class ToolchainRequirements(unittest.TestCase):
             _, found, body = step.partition('        run: |\n')
             self.assertTrue(found, name)
             scripts.append('\n'.join(line[10:] for line in body.splitlines()))
-        self.assertEqual(scripts[0], scripts[1], 'pre/post release identity checks must stay identical')
+        self.assertEqual(
+            scripts[0].splitlines(),
+            scripts[1].splitlines(),
+            'pre/post release identity checks must stay identical',
+        )
 
         expected = [
             'Maris-1.2.3-macos-x86_64.tar.gz',
