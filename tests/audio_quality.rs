@@ -1046,7 +1046,6 @@ fn rapid_balance_changes_do_not_click_or_leave_makeup() {
     );
 }
 
-
 #[test]
 fn level_match_convergence_time_is_sample_rate_invariant() {
     let mut observed_ms = Vec::new();
@@ -1068,8 +1067,7 @@ fn level_match_convergence_time_is_sample_rate_invariant() {
 
         let mut settled = Processor::new(settings);
         for i in 0..(rate * 4) {
-            let x =
-                (0.05 * (std::f64::consts::TAU * 70.0 * i as f64 / rate as f64).sin()) as f32;
+            let x = (0.05 * (std::f64::consts::TAU * 70.0 * i as f64 / rate as f64).sin()) as f32;
             let _ = settled.process([x, x]);
         }
         let target_db = settled.level_match_makeup_db();
@@ -1086,7 +1084,10 @@ fn level_match_convergence_time_is_sample_rate_invariant() {
                 break;
             }
         }
-        assert!(frames < rate * 4, "Level Match did not converge at {rate} Hz");
+        assert!(
+            frames < rate * 4,
+            "Level Match did not converge at {rate} Hz"
+        );
         observed_ms.push(frames as f64 * 1000.0 / f64::from(rate));
     }
 
@@ -1107,4 +1108,3 @@ fn level_match_convergence_time_is_sample_rate_invariant() {
         "Level Match convergence time changed with sample rate: {observed_ms:?}"
     );
 }
-
