@@ -225,6 +225,7 @@ where
         &config.config(),
         move |data: &[T], _| {
             let frame_count = data.len() / channels;
+            let mut dropped = 0_u64;
             for frame in data.chunks_exact(channels) {
                 let left = f32::from_sample(frame[0]);
                 let right = if channels == 1 {
@@ -233,8 +234,11 @@ where
                     f32::from_sample(frame[1])
                 };
                 if queue.push([left, right]).is_err() {
-                    metrics.overruns.fetch_add(1, Ordering::Relaxed);
+                    dropped += 1;
                 }
+            }
+            if dropped != 0 {
+                metrics.overruns.fetch_add(dropped, Ordering::Relaxed);
             }
             metrics
                 .captured_frames
