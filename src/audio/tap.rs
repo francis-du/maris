@@ -195,24 +195,33 @@ impl TapCapture {
         // When one unambiguous stereo output stream is known, bind capture to that
         // stream instead of asking CoreAudio to perform a global stereo mixdown.
         let description: Retained<AnyObject> = unsafe {
-            let allocated: Allocated<AnyObject> = msg_send![class, alloc];
-            match (selected, output) {
-                (true, Some((device_uid, stream))) => {
-                    let device_uid = NSString::from_str(device_uid);
+            let scoped: Option<Retained<AnyObject>> = if let Some((device_uid, stream)) = output {
+                let allocated: Allocated<AnyObject> = msg_send![class, alloc];
+                let device_uid = NSString::from_str(device_uid);
+                if selected {
                     msg_send![allocated,
                         initWithProcesses: &*listed,
                         andDeviceUID: &*device_uid,
                         withStream: stream as isize]
-                }
-                (false, Some((device_uid, stream))) => {
-                    let device_uid = NSString::from_str(device_uid);
+                } else {
                     msg_send![allocated,
                         initExcludingProcesses: &*listed,
                         andDeviceUID: &*device_uid,
                         withStream: stream as isize]
                 }
-                (true, None) => msg_send![allocated, initStereoMixdownOfProcesses: &*listed],
-                (false, None) => {
+            } else {
+                None
+            };
+            if let Some(description) = scoped {
+                description
+            } else {
+                // An available scoped selector can still reject a specific device/stream
+                // and return nil. Do not let objc2 unwrap that into a panic; fall back to
+                // the established global tap, which is valid across the supported range.
+                let allocated: Allocated<AnyObject> = msg_send![class, alloc];
+                if selected {
+                    msg_send![allocated, initStereoMixdownOfProcesses: &*listed]
+                } else {
                     msg_send![allocated, initStereoGlobalTapButExcludeProcesses: &*listed]
                 }
             }
