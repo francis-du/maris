@@ -243,7 +243,10 @@ fn discontinuity_preserves_limiter_attenuation_and_avoids_recovery_blast() {
         let _ = processor.process([4.0, -4.0]);
     }
     let before = processor.limiter_reduction_db();
-    assert!(before > 5.0, "fixture did not engage limiter strongly: {before:.3} dB");
+    assert!(
+        before > 5.0,
+        "fixture did not engage limiter strongly: {before:.3} dB"
+    );
 
     processor.reset_history();
     let after_reset = processor.limiter_reduction_db();
