@@ -1045,3 +1045,66 @@ fn rapid_balance_changes_do_not_click_or_leave_makeup() {
         processor.level_match_makeup_db()
     );
 }
+
+
+#[test]
+fn level_match_convergence_time_is_sample_rate_invariant() {
+    let mut observed_ms = Vec::new();
+    let mut observed_target_db = Vec::new();
+    for rate in [44_100_u32, 48_000, 96_000, 192_000] {
+        let music = MusicProfile {
+            highpass_hz: Some(120.0),
+            level_match: true,
+            adaptive: maris::music::AdaptiveEq {
+                enabled: false,
+                strength: 0.0,
+            },
+            ..MusicProfile::default()
+        };
+        let settings = Settings::compile(&Profile::default(), rate)
+            .unwrap()
+            .with_music(&music, rate)
+            .unwrap();
+
+        let mut settled = Processor::new(settings);
+        for i in 0..(rate * 4) {
+            let x =
+                (0.05 * (std::f64::consts::TAU * 70.0 * i as f64 / rate as f64).sin()) as f32;
+            let _ = settled.process([x, x]);
+        }
+        let target_db = settled.level_match_makeup_db();
+        observed_target_db.push(target_db);
+
+        let mut processor = Processor::new(settings);
+        let mut frames = 0_u32;
+        while frames < rate * 4 {
+            let x =
+                (0.05 * (std::f64::consts::TAU * 70.0 * frames as f64 / rate as f64).sin()) as f32;
+            let _ = processor.process([x, x]);
+            frames += 1;
+            if processor.level_match_makeup_db() >= target_db * 0.9 {
+                break;
+            }
+        }
+        assert!(frames < rate * 4, "Level Match did not converge at {rate} Hz");
+        observed_ms.push(frames as f64 * 1000.0 / f64::from(rate));
+    }
+
+    let target_min = observed_target_db
+        .iter()
+        .copied()
+        .fold(f64::INFINITY, f64::min);
+    let target_max = observed_target_db.iter().copied().fold(0.0_f64, f64::max);
+    assert!(
+        target_max - target_min < 0.02,
+        "Level Match settled to different makeup across rates: {observed_target_db:?}"
+    );
+
+    let time_min = observed_ms.iter().copied().fold(f64::INFINITY, f64::min);
+    let time_max = observed_ms.iter().copied().fold(0.0_f64, f64::max);
+    assert!(
+        time_max - time_min < 0.2,
+        "Level Match convergence time changed with sample rate: {observed_ms:?}"
+    );
+}
+
