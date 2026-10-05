@@ -28,7 +28,6 @@ fn renderer_reports_actual_limiter_reduction_not_only_the_ceiling() {
     assert!(loud.iter().all(|sample| sample.abs() <= 0.891252));
 }
 
-
 #[test]
 fn limiter_release_time_is_sample_rate_invariant() {
     let mut observed_ms = Vec::new();
@@ -53,4 +52,3 @@ fn limiter_release_time_is_sample_rate_invariant() {
         "limiter release changed with sample rate: {observed_ms:?}"
     );
 }
-
