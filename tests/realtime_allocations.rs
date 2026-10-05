@@ -1,5 +1,8 @@
 use maris::{
     dsp::{Processor, Settings},
+    mixer::{
+        engine::Settings as MixerSettings, MixerConfig, MixerStrip, Processor as MixerProcessor,
+    },
     music::MusicProfile,
     profile::Profile,
 };
@@ -177,5 +180,55 @@ fn rapid_queued_retunes_do_not_heap_allocate() {
     assert_eq!(
         allocations, 0,
         "rapid/reversed/queued retunes allocated on the callback path"
+    );
+}
+
+#[test]
+fn mixer_route_updates_and_ramps_do_not_heap_allocate() {
+    let mut base = MixerConfig {
+        strips: vec![
+            MixerStrip {
+                id: "music".into(),
+                sends: [1.0, 0.0],
+                ..MixerStrip::default()
+            },
+            MixerStrip {
+                id: "voice".into(),
+                sends: [1.0, 0.0],
+                ..MixerStrip::default()
+            },
+        ],
+        ..MixerConfig::default()
+    };
+    let base_settings = MixerSettings::compile(&base, 48_000).unwrap();
+
+    base.strips[0].gain_db = -6.0;
+    base.strips[1].solo = true;
+    let solo_settings = MixerSettings::compile(&base, 48_000).unwrap();
+
+    base.strips[1].solo = false;
+    base.strips[0].mute = true;
+    let mute_settings = MixerSettings::compile(&base, 48_000).unwrap();
+
+    let mut processor = MixerProcessor::compiled(base_settings);
+    let inputs = [[0.2_f32, -0.2_f32], [0.1_f32, 0.1_f32]];
+    let allocations = allocations_during(|| {
+        processor.update(solo_settings);
+        for _ in 0..1_200 {
+            std::hint::black_box(processor.process(&inputs));
+        }
+        processor.update(mute_settings);
+        for _ in 0..1_200 {
+            std::hint::black_box(processor.process(&inputs));
+        }
+        processor.update(base_settings);
+        for _ in 0..1_200 {
+            std::hint::black_box(processor.process(&inputs));
+        }
+    });
+
+    assert_eq!(
+        allocations, 0,
+        "mixer mute/solo/gain ramps allocated on the audio path"
     );
 }
