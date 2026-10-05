@@ -239,6 +239,43 @@ jobs:
         run: |
           echo "Existing release assets could not be safely verified." >&2
           exit 1
+      - name: Revalidate release identity before upload
+        if: steps.release.outputs.publish == 'true' && steps.assets.outputs.failed != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          actual="$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq '.sha')"
+          if [[ ! "$actual" =~ ^[a-f0-9]{40}$ ]]; then
+            echo "Could not resolve $RELEASE_TAG to one commit; refusing publication without deleting existing assets." >&2
+            exit 1
+          fi
+          if [ "$actual" = "$SOURCE_SHA" ]; then
+            exit 0
+          fi
+          version="${RELEASE_TAG#v}"
+          existing="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
+          expected=(
+            "Maris-$version-macos-x86_64.tar.gz"
+            "Maris-$version-macos-arm64.tar.gz"
+            "Maris-$version-linux-x86_64.tar.gz"
+            "Maris-$version-linux-arm64.tar.gz"
+            "Maris-$version-windows-x86_64.zip"
+            "Maris-$version-windows-arm64.zip"
+            "maris-release.tsv"
+            "SHA256SUMS"
+          )
+          for asset in "${expected[@]}"; do
+            if grep -Fxq -- "$asset" <<< "$existing"; then
+              gh release delete-asset "$RELEASE_TAG" "$asset" --yes
+            fi
+          done
+          echo "Release tag $RELEASE_TAG moved from successful build $SOURCE_SHA to $actual; installer assets were removed." >&2
+          exit 1
       - name: Upload installer-consumable assets to GitHub Release
         if: steps.release.outputs.publish == 'true' && steps.assets.outputs.failed != 'true' && steps.assets.outputs.mode != 'reuse'
         env:
@@ -246,6 +283,43 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: gh release upload "$RELEASE_TAG" .release-publish/*
+      - name: Revalidate release identity after upload
+        if: steps.release.outputs.publish == 'true' && steps.assets.outputs.failed != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          actual="$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq '.sha')"
+          if [[ ! "$actual" =~ ^[a-f0-9]{40}$ ]]; then
+            echo "Could not resolve $RELEASE_TAG to one commit; refusing publication without deleting existing assets." >&2
+            exit 1
+          fi
+          if [ "$actual" = "$SOURCE_SHA" ]; then
+            exit 0
+          fi
+          version="${RELEASE_TAG#v}"
+          existing="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
+          expected=(
+            "Maris-$version-macos-x86_64.tar.gz"
+            "Maris-$version-macos-arm64.tar.gz"
+            "Maris-$version-linux-x86_64.tar.gz"
+            "Maris-$version-linux-arm64.tar.gz"
+            "Maris-$version-windows-x86_64.zip"
+            "Maris-$version-windows-arm64.zip"
+            "maris-release.tsv"
+            "SHA256SUMS"
+          )
+          for asset in "${expected[@]}"; do
+            if grep -Fxq -- "$asset" <<< "$existing"; then
+              gh release delete-asset "$RELEASE_TAG" "$asset" --yes
+            fi
+          done
+          echo "Release tag $RELEASE_TAG moved from successful build $SOURCE_SHA to $actual; installer assets were removed." >&2
+          exit 1
 
   public-install-smoke:
     needs: publish

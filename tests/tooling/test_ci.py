@@ -364,6 +364,87 @@ class ToolchainRequirements(unittest.TestCase):
                 'failed': 'true', 'cleanup': 'false', 'cleanup_assets': '',
             })
 
+    @unittest.skipUnless(BASH, 'Bash release identity execution required')
+    def test_release_identity_is_revalidated_before_and_after_upload(self):
+        text = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
+        scripts = []
+        for name in ('Revalidate release identity before upload', 'Revalidate release identity after upload'):
+            block = re.search(
+                rf'      - name: {re.escape(name)}\n'
+                r'(?:        .*\n)*?        run: \|\n((?:          .*\n?)+?)'
+                r'      - name: ',
+                text,
+            )
+            self.assertIsNotNone(block, name)
+            scripts.append('\n'.join(line[10:] for line in block[1].splitlines()))
+        self.assertEqual(scripts[0], scripts[1], 'pre/post release identity checks must stay identical')
+
+        expected = [
+            'Maris-1.2.3-macos-x86_64.tar.gz',
+            'Maris-1.2.3-macos-arm64.tar.gz',
+            'Maris-1.2.3-linux-x86_64.tar.gz',
+            'Maris-1.2.3-linux-arm64.tar.gz',
+            'Maris-1.2.3-windows-x86_64.zip',
+            'Maris-1.2.3-windows-arm64.zip',
+            'maris-release.tsv',
+            'SHA256SUMS',
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            gh = root / 'gh'
+            gh.write_text(
+                '#!/bin/sh\n'
+                'set -eu\n'
+                'if [ "$1" = api ]; then printf "%s\\n" "$GH_COMMIT"; exit 0; fi\n'
+                'if [ "$1:$2" = release:view ]; then cat "$GH_FIXTURE/assets"; exit 0; fi\n'
+                'if [ "$1:$2" = release:delete-asset ]; then\n'
+                '  printf "%s\\n" "$4" >> "$GH_FIXTURE/deleted"\n'
+                '  [ "${FAIL_ASSET:-}" != "$4" ] || exit 23\n'
+                '  exit 0\n'
+                'fi\n'
+                'exit 97\n',
+                encoding='utf-8',
+                newline='\n',
+            )
+            gh.chmod(0o755)
+            (root / 'assets').write_text(
+                '\n'.join(expected + ['manual-release-notes.txt']) + '\n',
+                encoding='utf-8',
+            )
+            source = 'a' * 40
+            environment = dict(
+                os.environ,
+                PATH=str(root) + os.pathsep + os.environ['PATH'],
+                GH_FIXTURE=str(root),
+                GH_REPO='francis-du/maris',
+                RELEASE_TAG='v1.2.3',
+                SOURCE_SHA=source,
+                GH_COMMIT=source,
+            )
+            result = subprocess.run(
+                [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', scripts[0]],
+                env=environment, capture_output=True, text=True, encoding='utf-8', timeout=10,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertFalse((root / 'deleted').exists())
+
+            environment['GH_COMMIT'] = 'd' * 40
+            result = subprocess.run(
+                [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', scripts[0]],
+                env=environment, capture_output=True, text=True, encoding='utf-8', timeout=10,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual((root / 'deleted').read_text().splitlines(), expected)
+
+            (root / 'deleted').unlink()
+            environment['GH_COMMIT'] = 'not-a-commit'
+            result = subprocess.run(
+                [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', scripts[0]],
+                env=environment, capture_output=True, text=True, encoding='utf-8', timeout=10,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse((root / 'deleted').exists())
+
     @unittest.skipUnless(BASH, 'Bash release cleanup execution required')
     def test_failed_public_install_cleanup_deletes_only_installer_assets_and_surfaces_errors(self):
         text = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
