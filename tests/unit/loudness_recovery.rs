@@ -260,3 +260,66 @@ fn discontinuity_during_effect_retune_preserves_target_limiter_and_safe_recovery
         "effect retune target was lost or stalled across discontinuity"
     );
 }
+
+#[test]
+fn pending_retune_recovery_obeys_output_envelope_slope() {
+    const RATE: u32 = 48_000;
+    let base = Settings::compile(&Profile::default(), RATE).unwrap();
+    let target = Settings::compile(
+        &Profile {
+            stereo_width: 0.5,
+            ..Profile::default()
+        },
+        RATE,
+    )
+    .unwrap()
+    .with_transition_ms(RATE, 120);
+    let mut render = RenderState::new(base, RATE);
+
+    for _ in 0..(RATE / 20) {
+        let _ = render.frame([0.5, -0.25], true, false);
+    }
+    render.processor.update(target);
+    for _ in 0..(RATE / 500) {
+        let _ = render.frame([0.5, -0.25], true, false);
+    }
+    assert!(render.processor.settings_pending());
+
+    let mut previous = render.previous;
+    let max_step = 2.0 / (RATE as f32 * 0.025);
+    for _ in 0..16 {
+        let y = render.frame([0.0, 0.0], false, false);
+        for channel in 0..2 {
+            assert!(
+                (y[channel] - previous[channel]).abs() <= max_step,
+                "gap concealment exceeded output envelope slope"
+            );
+        }
+        previous = y;
+    }
+
+    for _ in 0..(RATE / 20) {
+        let y = render.frame([-0.5, 0.25], true, false);
+        for channel in 0..2 {
+            assert!(
+                (y[channel] - previous[channel]).abs() <= max_step,
+                "recovery with pending retune exceeded output envelope slope: previous={previous:?} current={y:?}"
+            );
+            assert!(y[channel].is_finite() && y[channel].abs() <= 0.891252);
+        }
+        previous = y;
+    }
+    assert!(
+        render.processor.settings_pending(),
+        "120 ms retune finished before the 50 ms recovery window elapsed"
+    );
+    for _ in 0..(RATE / 10) {
+        let y = render.frame([-0.5, 0.25], true, false);
+        assert!(y.iter().all(|v| v.is_finite() && v.abs() <= 0.891252));
+    }
+    assert!(
+        !render.processor.settings_pending(),
+        "pending retune did not finish after sufficient recovery audio"
+    );
+}
+
