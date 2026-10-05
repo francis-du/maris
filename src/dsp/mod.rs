@@ -219,13 +219,23 @@ impl Chain {
         // Do not carry state across a bypass boundary or that frozen history can
         // reappear when processing is re-enabled after an arbitrary dry interval.
         if !self.settings.bypass && !settings.bypass {
-            next.low = self.low;
-            for channel in 0..2 {
-                for i in 0..10 {
-                    if settings.coefficients[i] == self.settings.coefficients[i] {
+            // An IIR stage's state is only reusable when its complete upstream feed is
+            // unchanged. Once one earlier stage (or the pre-EQ gain) changes, every
+            // downstream stage must start fresh even if its own coefficients match.
+            let same_gain = self.settings.gain == settings.gain;
+            let mut prefix_unchanged = same_gain;
+            for i in 0..10 {
+                prefix_unchanged &= settings.coefficients[i] == self.settings.coefficients[i];
+                if prefix_unchanged {
+                    for channel in 0..2 {
                         next.states[channel][i] = self.states[channel][i];
                     }
                 }
+            }
+            // Crossfeed's lowpass is fed after the full EQ cascade and stereo-width
+            // transform, so its history is valid only when that entire feed is stable.
+            if prefix_unchanged && self.settings.width == settings.width {
+                next.low = self.low;
             }
         }
         next
@@ -539,3 +549,7 @@ impl Processor {
         output
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/dsp_retune.rs"]
+mod retune_tests;

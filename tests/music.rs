@@ -119,6 +119,44 @@ fn compressor_is_optional_and_reduces_loud_material() {
     assert!(!MusicProfile::default().compressor.enabled);
 }
 #[test]
+fn retune_resets_unchanged_downstream_filter_state_when_upstream_filter_changes() {
+    let filter = |frequency_hz, gain_db| maris::tone::Filter {
+        kind: maris::tone::Kind::Peak,
+        frequency_hz,
+        gain_db,
+        q: 2.0,
+    };
+    let base = MusicProfile {
+        correction: vec![filter(500.0, 6.0), filter(4_000.0, 6.0)],
+        correction_source: Some("serial-state fixture".into()),
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        level_match: false,
+        ..MusicProfile::default()
+    };
+    let mut target = base.clone();
+    target.correction[0].gain_db = -6.0;
+
+    let mut trained = maris::music::Processor::new(base.compile(48_000).unwrap());
+    let _ = trained.process([0.5, 0.5]);
+    let target_settings = target.compile(48_000).unwrap();
+    let mut retuned = trained.retune(target_settings);
+    let mut fresh = maris::music::Processor::new(target_settings);
+    let actual = retuned.process([0.0, 0.0]);
+    let expected = fresh.process([0.0, 0.0]);
+    for channel in 0..2 {
+        assert!(
+            (actual[channel] - expected[channel]).abs() < 1e-12,
+            "unchanged downstream biquad leaked stale state after upstream retune: actual={} fresh={}",
+            actual[channel],
+            expected[channel]
+        );
+    }
+}
+
+#[test]
 fn retune_does_not_carry_compressor_envelope_into_a_different_compressor() {
     let mut old = MusicProfile {
         level_match: false,

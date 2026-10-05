@@ -539,12 +539,19 @@ impl Processor {
             next.program_power = self.program_power;
         }
         if state_continuous {
-            for c in 0..2 {
-                for i in 0..MAX_FILTERS {
-                    if self.settings.filters[i] == settings.filters[i] {
+            // Preserve only the unchanged prefix of the serial tone/correction
+            // cascade. A matching downstream biquad still has stale state if an
+            // earlier stage or the pre-filter gain changed its historical input.
+            let mut filter_prefix_unchanged = self.settings.gain == settings.gain;
+            for i in 0..MAX_FILTERS {
+                filter_prefix_unchanged &= self.settings.filters[i] == settings.filters[i];
+                if filter_prefix_unchanged {
+                    for c in 0..2 {
                         next.states[c][i] = self.states[c][i];
                     }
                 }
+            }
+            for c in 0..2 {
                 for i in 0..ADAPTIVE_BANDS {
                     if adaptive_detector_feed_unchanged
                         && self.settings.adaptive[i] == settings.adaptive[i]
