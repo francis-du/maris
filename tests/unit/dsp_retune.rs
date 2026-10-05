@@ -118,6 +118,37 @@ fn rapid_crossfeed_reversals_stay_continuous_and_settle_on_latest_target() {
 }
 
 #[test]
+fn completed_single_frame_retune_is_already_audibly_at_target() {
+    let base = Settings::compile(&Profile::default(), 48_000).unwrap();
+    let target_profile = Profile {
+        stereo_width: 0.0,
+        ..Profile::default()
+    };
+    let mut target = Settings::compile(&target_profile, 48_000).unwrap();
+    target.transition_frames = 1;
+
+    let mut processor = Processor::new(base);
+    processor.update(target);
+    assert!(processor.settings_pending());
+
+    let input = [0.1_f32, -0.1_f32];
+    let actual = processor.process(input);
+    assert!(
+        !processor.settings_pending(),
+        "single-frame retune remained pending after its only transition frame"
+    );
+
+    let mut fresh = Processor::new(target);
+    let expected = fresh.process(input);
+    for channel in 0..2 {
+        assert!(
+            (actual[channel] - expected[channel]).abs() < 1e-7,
+            "retune reported complete before the audible target was reached: actual={actual:?} expected={expected:?}"
+        );
+    }
+}
+
+#[test]
 fn retune_crossfade_duration_is_sample_rate_invariant() {
     for rate in [44_100_u32, 48_000, 96_000, 192_000] {
         let base = Settings::compile(&Profile::default(), rate).unwrap();
