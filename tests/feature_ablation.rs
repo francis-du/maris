@@ -57,5 +57,31 @@ fn each_retained_effect_has_a_distinct_conditioned_contribution() {
             }
         }
     }
+    for rate in rates {
+        let high = results
+            .iter()
+            .find(|row| {
+                row["sample_rate"] == rate
+                    && row["variant"] == "without_virtual_bass"
+                    && row["fixture"] == "treble_pulses_mono"
+            })
+            .unwrap();
+        assert!(
+            high["level_matched_difference_rms"].as_f64().unwrap() < 1e-5,
+            "virtual bass leaked into treble-only content at {rate} Hz"
+        );
+        let bass = results
+            .iter()
+            .find(|row| {
+                row["sample_rate"] == rate
+                    && row["variant"] == "without_virtual_bass"
+                    && row["fixture"] == "bass_dominant_mono"
+            })
+            .unwrap();
+        assert!(
+            bass["level_matched_difference_rms"].as_f64().unwrap() > 1e-3,
+            "virtual bass lost its intended low-frequency contribution at {rate} Hz"
+        );
+    }
     assert_eq!(report["subjective_quality_validated"], false);
 }
