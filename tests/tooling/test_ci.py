@@ -370,14 +370,16 @@ class ToolchainRequirements(unittest.TestCase):
         text = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
         scripts = []
         for name in ('Revalidate release identity before upload', 'Revalidate release identity after upload'):
-            block = re.search(
-                rf'      - name: {re.escape(name)}\n'
-                r'(?:        .*\n)*?        run: \|\n((?:          .*\n?)+?)'
-                r'(?=      - name: |  public-install-smoke:)',
-                text,
-            )
-            self.assertIsNotNone(block, name)
-            scripts.append('\n'.join(line[10:] for line in block[1].splitlines()))
+            marker = f'      - name: {name}\n'
+            _, found, tail = text.partition(marker)
+            self.assertTrue(found, name)
+            step, separator, _ = tail.partition('      - name: ')
+            if not separator:
+                step, separator, _ = tail.partition('  public-install-smoke:')
+            self.assertTrue(separator, name)
+            _, found, body = step.partition('        run: |\n')
+            self.assertTrue(found, name)
+            scripts.append('\n'.join(line[10:] for line in body.splitlines()))
         self.assertEqual(scripts[0], scripts[1], 'pre/post release identity checks must stay identical')
 
         expected = [
