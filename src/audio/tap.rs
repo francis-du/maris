@@ -202,11 +202,23 @@ impl TapCapture {
         // macOS 14.5 despite earlier SDK availability annotations. Probe the Objective-C
         // runtime so the supported 14.2-14.4 range safely retains the global-tap fallback.
         let output = output.filter(|_| scoped_initializer_supported(class, selected));
+        let global_description = || -> Result<Retained<AnyObject>> {
+            // SAFETY: the global initializers and argument types follow CATapDescription.h.
+            unsafe {
+                let allocated: Allocated<AnyObject> = msg_send![class, alloc];
+                let description: Option<Retained<AnyObject>> = if selected {
+                    msg_send![allocated, initStereoMixdownOfProcesses: &*listed]
+                } else {
+                    msg_send![allocated, initStereoGlobalTapButExcludeProcesses: &*listed]
+                };
+                description.context("macOS did not create a global audio tap description")
+            }
+        };
         // SAFETY: selectors and NSInteger/BOOL types follow CATapDescription.h and the
         // scoped selectors are sent only after the runtime confirms their availability.
         // When one unambiguous stereo output stream is known, bind capture to that
         // stream instead of asking CoreAudio to perform a global stereo mixdown.
-        let (description, scoped_output): (Retained<AnyObject>, bool) = unsafe {
+        let (mut description, scoped_output): (Retained<AnyObject>, bool) = unsafe {
             let scoped: Option<Retained<AnyObject>> = if let Some((device_uid, stream)) = output {
                 let allocated: Allocated<AnyObject> = msg_send![class, alloc];
                 let device_uid = NSString::from_str(device_uid);
@@ -224,34 +236,28 @@ impl TapCapture {
             } else {
                 None
             };
-            if let Some(description) = scoped {
-                (description, true)
-            } else {
-                // An available scoped selector can still reject a specific device/stream
-                // and return nil. Do not let objc2 unwrap that into a panic; fall back to
-                // the established global tap, which is valid across the supported range.
-                let allocated: Allocated<AnyObject> = msg_send![class, alloc];
-                let description = if selected {
-                    msg_send![allocated, initStereoMixdownOfProcesses: &*listed]
-                } else {
-                    msg_send![allocated, initStereoGlobalTapButExcludeProcesses: &*listed]
-                };
-                (description, false)
+            match scoped {
+                Some(description) => (description, true),
+                None => (global_description()?, false),
             }
         };
-        unsafe {
-            let name = if selected {
-                "Maris Application Audio"
-            } else {
-                "Maris System Audio"
-            };
-            let _: () = msg_send![&description, setName: &*NSString::from_str(name)];
-            let _: () = msg_send![&description, setPrivate: true];
-            // `exclusive` means all processes except those listed. Included-process taps must keep it false.
-            let _: () = msg_send![&description, setExclusive: !selected];
-            // CATapMutedWhenTapped = 2. Untapped applications regain their normal playback automatically.
-            let _: () = msg_send![&description, setMuteBehavior: 2_isize];
-        }
+        let configure_description = |description: &Retained<AnyObject>| {
+            // SAFETY: setters and argument types follow CATapDescription.h.
+            unsafe {
+                let name = if selected {
+                    "Maris Application Audio"
+                } else {
+                    "Maris System Audio"
+                };
+                let _: () = msg_send![description, setName: &*NSString::from_str(name)];
+                let _: () = msg_send![description, setPrivate: true];
+                // Exclusive means all processes except those listed. Included-process taps keep it false.
+                let _: () = msg_send![description, setExclusive: !selected];
+                // CATapMutedWhenTapped = 2. Untapped applications regain normal playback automatically.
+                let _: () = msg_send![description, setMuteBehavior: 2_isize];
+            }
+        };
+        configure_description(&description);
         let mut result = Self {
             api,
             tap: 0,
@@ -268,10 +274,20 @@ impl TapCapture {
             scoped_output,
             rate: 0,
         };
-        ca::check(
-            unsafe { (api.create)(&*description, &mut result.tap) },
-            "Request system-audio permission",
-        )?;
+        let mut create_status = unsafe { (api.create)(&*description, &mut result.tap) };
+        if create_status != 0 && scoped_output {
+            // Some devices accept the scoped description but reject process-tap creation.
+            // Keep the established global path as a compatibility fallback.
+            if result.tap != 0 {
+                let _ = unsafe { (api.destroy)(result.tap) };
+                result.tap = 0;
+            }
+            description = global_description()?;
+            configure_description(&description);
+            result.scoped_output = false;
+            create_status = unsafe { (api.create)(&*description, &mut result.tap) };
+        }
+        ca::check(create_status, "Request system-audio permission")?;
         ensure!(result.tap != 0, "macOS did not create an audio tap");
         let format: ca::Format = unsafe { ca::property(result.tap, b"tfmt")? };
         ensure!(
