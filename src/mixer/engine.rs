@@ -114,10 +114,7 @@ impl Processor {
             self.remaining -= 1;
             if self.remaining == 0 {
                 self.current = self.target;
-                self.duck_mix = self
-                    .target
-                    .ducks
-                    .map(|duck| if duck { 1.0 } else { 0.0 });
+                self.duck_mix = self.target.ducks.map(|duck| if duck { 1.0 } else { 0.0 });
             }
         }
         let mut trigger = 0.0_f64;
