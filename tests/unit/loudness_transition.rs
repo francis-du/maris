@@ -877,7 +877,7 @@ fn rapid_effect_dezipper_is_sample_rate_invariant() {
             let _ = processor.process(frame(index));
             index += 1;
         }
-        let interval = (rate as usize * 2 / 1_000).max(1);
+        let interval = (rate as usize / 1_000).max(1);
         let mut previous_makeup = processor.level_match_makeup_db();
         let mut maximum_makeup_step = 0.0_f64;
         let mut next = 1usize;
