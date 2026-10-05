@@ -124,7 +124,15 @@ pub(super) struct TapCapture {
     output_configuration: Option<(u32, OutputConfiguration)>,
     expected_default_output: Option<u32>,
     listeners: Vec<(u32, ca::Address)>,
+    scoped_output: bool,
     pub rate: u32,
+}
+fn tap_mode(scoped_output: bool) -> &'static str {
+    if scoped_output {
+        "device_stream"
+    } else {
+        "global_mixdown"
+    }
 }
 fn scoped_initializer_supported(class: &AnyClass, selected: bool) -> bool {
     if selected {
@@ -166,6 +174,10 @@ impl TapCapture {
         Self::prepare_scope(queue, metrics, Some(processes), Some((device_uid, 0)))
     }
 
+    pub fn capture_mode(&self) -> &'static str {
+        tap_mode(self.scoped_output)
+    }
+
     fn prepare_scope(
         queue: Arc<ArrayQueue<[f32; 2]>>,
         metrics: Arc<Metrics>,
@@ -194,7 +206,7 @@ impl TapCapture {
         // scoped selectors are sent only after the runtime confirms their availability.
         // When one unambiguous stereo output stream is known, bind capture to that
         // stream instead of asking CoreAudio to perform a global stereo mixdown.
-        let description: Retained<AnyObject> = unsafe {
+        let (description, scoped_output): (Retained<AnyObject>, bool) = unsafe {
             let scoped: Option<Retained<AnyObject>> = if let Some((device_uid, stream)) = output {
                 let allocated: Allocated<AnyObject> = msg_send![class, alloc];
                 let device_uid = NSString::from_str(device_uid);
@@ -213,17 +225,18 @@ impl TapCapture {
                 None
             };
             if let Some(description) = scoped {
-                description
+                (description, true)
             } else {
                 // An available scoped selector can still reject a specific device/stream
                 // and return nil. Do not let objc2 unwrap that into a panic; fall back to
                 // the established global tap, which is valid across the supported range.
                 let allocated: Allocated<AnyObject> = msg_send![class, alloc];
-                if selected {
+                let description = if selected {
                     msg_send![allocated, initStereoMixdownOfProcesses: &*listed]
                 } else {
                     msg_send![allocated, initStereoGlobalTapButExcludeProcesses: &*listed]
-                }
+                };
+                (description, false)
             }
         };
         unsafe {
@@ -252,6 +265,7 @@ impl TapCapture {
             output_configuration: None,
             expected_default_output: None,
             listeners: Vec::with_capacity(12),
+            scoped_output,
             rate: 0,
         };
         ca::check(
@@ -609,6 +623,12 @@ mod topology_tests {
         let class = AnyClass::get(c"NSObject").expect("NSObject is always available");
         assert!(!scoped_initializer_supported(class, true));
         assert!(!scoped_initializer_supported(class, false));
+    }
+
+    #[test]
+    fn tap_mode_distinguishes_device_stream_from_global_mixdown() {
+        assert_eq!(tap_mode(true), "device_stream");
+        assert_eq!(tap_mode(false), "global_mixdown");
     }
 
     #[test]
