@@ -482,9 +482,13 @@ impl Processor {
         // loudness may recover that reserve. The linked limiter below remains authoritative
         // for actual sample-peak safety.
         let settings = measurement_settings;
-        let reference = input.map(|sample| {
+        let balance_gains = settings.music.level_reference_gains();
+        let reference = std::array::from_fn(|channel| {
+            let sample = input[channel];
             if sample.is_finite() {
-                (sample as f64).clamp(-16.0, 16.0) * settings.level_target_gain
+                (sample as f64).clamp(-16.0, 16.0)
+                    * settings.level_target_gain
+                    * balance_gains[channel]
             } else {
                 0.0
             }
