@@ -171,6 +171,37 @@ class ReleaseKits(unittest.TestCase):
                 'macOS native archive depends on directory entry insertion order',
             )
 
+    @unittest.skipUnless(sys.platform == 'darwin', 'Native Apple archive metadata requires macOS')
+    def test_native_mac_pack_is_independent_of_xattr_insertion_order(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            stem = 'Maris-1.2.3-macos-arm64'
+            attributes = [
+                ('com.maris.alpha', 'alpha'),
+                ('com.maris.beta', 'beta'),
+                ('com.maris.gamma', 'gamma'),
+            ]
+            archives = []
+            for parent_name, order in [('forward', attributes), ('reverse', list(reversed(attributes)))]:
+                kit = root / parent_name / stem
+                app = kit / 'Maris.app'
+                app.mkdir(parents=True)
+                (app / 'payload.txt').write_text('same payload\n', encoding='utf-8')
+                (kit / '.maris-release').write_text('fixture\n', encoding='utf-8')
+                for key, value in order:
+                    subprocess.run(
+                        ['/usr/bin/xattr', '-w', key, value, str(app)],
+                        check=True, capture_output=True, timeout=10,
+                    )
+                archive = root / f'{parent_name}.tar.gz'
+                pack(kit, archive, 'macos')
+                archives.append(archive)
+            self.assertEqual(
+                archives[0].read_bytes(),
+                archives[1].read_bytes(),
+                'macOS native archive depends on xattr insertion order',
+            )
+
     def test_pax_time_normalizer_preserves_non_time_records_and_rejects_malformed_lengths(self):
         def record(key, value):
             body = f' {key}={value}\n'.encode()
