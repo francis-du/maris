@@ -31,20 +31,24 @@ fn each_retained_effect_has_a_distinct_conditioned_contribution() {
     for row in results.iter().filter(|row| row["variant"] == "reference") {
         assert!(row["level_matched_difference_rms"].as_f64().unwrap() < 1e-12);
     }
-    // A stereo-width effect has no reason to modify center-only mono content.
+    // Stereo-width and crossfeed should preserve center-only mono content.
     for rate in rates {
-        let mono = results
-            .iter()
-            .find(|row| {
-                row["sample_rate"] == rate
-                    && row["variant"] == "without_stereo_width"
-                    && row["fixture"] == "bass_dominant_mono"
-            })
-            .unwrap();
-        assert!(
-            mono["level_matched_difference_rms"].as_f64().unwrap() < 1e-8,
-            "stereo width changed mono content at {rate} Hz"
-        );
+        for variant in ["without_stereo_width", "without_crossfeed"] {
+            for fixture in ["bass_dominant_mono", "treble_pulses_mono"] {
+                let mono = results
+                    .iter()
+                    .find(|row| {
+                        row["sample_rate"] == rate
+                            && row["variant"] == variant
+                            && row["fixture"] == fixture
+                    })
+                    .unwrap();
+                assert!(
+                    mono["level_matched_difference_rms"].as_f64().unwrap() < 1e-8,
+                    "{variant} changed mono content at {rate} Hz on {fixture}"
+                );
+            }
+        }
     }
     assert_eq!(report["subjective_quality_validated"], false);
 }
