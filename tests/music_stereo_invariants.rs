@@ -175,3 +175,71 @@ fn bass_assist_extreme_drive_stays_linked_and_bounded() {
         "Bass Assist harmonic residual escaped linked drive bound: {maximum_residual:.4}"
     );
 }
+
+
+#[test]
+fn bass_assist_does_not_create_cross_channel_bass() {
+    let mut profile = MusicProfile {
+        level_match: false,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        ..MusicProfile::default()
+    };
+    profile.bass_assist.enabled = true;
+    profile.bass_assist.amount = 1.0;
+    let mut processor = maris::music::Processor::new(profile.compile(48_000).unwrap());
+
+    let mut left_power = 0.0_f64;
+    let mut right_power = 0.0_f64;
+    for i in 0..144_000 {
+        let x = 0.25 * (std::f64::consts::TAU * 65.0 * i as f64 / 48_000.0).sin();
+        let output = processor.process([x, 0.0]);
+        if i >= 96_000 {
+            left_power += output[0] * output[0];
+            right_power += output[1] * output[1];
+        }
+    }
+    let leakage_db = 10.0 * (right_power.max(1e-30) / left_power.max(1e-30)).log10();
+    assert!(
+        leakage_db < -100.0,
+        "Bass Assist leaked bass across channels: {leakage_db:.2} dB"
+    );
+}
+
+#[test]
+fn bass_assist_linking_does_not_modulate_unrelated_opposite_highs() {
+    let base = MusicProfile {
+        level_match: false,
+        adaptive: maris::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        ..MusicProfile::default()
+    };
+    let mut enabled = base.clone();
+    enabled.bass_assist.enabled = true;
+    enabled.bass_assist.amount = 1.0;
+    let mut dry = maris::music::Processor::new(base.compile(48_000).unwrap());
+    let mut wet = maris::music::Processor::new(enabled.compile(48_000).unwrap());
+
+    let mut error_power = 0.0_f64;
+    let mut reference_power = 0.0_f64;
+    for i in 0..144_000 {
+        let t = i as f64 / 48_000.0;
+        let left = 0.3 * (std::f64::consts::TAU * 65.0 * t).sin();
+        let right = 0.08 * (std::f64::consts::TAU * 2_000.0 * t).sin();
+        let output = wet.process([left, right]);
+        let reference = dry.process([left, right]);
+        if i >= 96_000 {
+            error_power += (output[1] - reference[1]).powi(2);
+            reference_power += reference[1].powi(2);
+        }
+    }
+    let error_db = 10.0 * (error_power.max(1e-30) / reference_power.max(1e-30)).log10();
+    assert!(
+        error_db < -60.0,
+        "left-channel bass modulated unrelated right-channel highs: {error_db:.2} dB"
+    );
+}
