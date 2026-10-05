@@ -94,7 +94,10 @@ fn changing_duck_targets_crossfades_instead_of_stepping_an_already_ducked_strip(
     for _ in 0..4_800 {
         before = mixer.process(&input)[0][0];
     }
-    assert!(before < 0.04, "ducking did not settle before retune: {before}");
+    assert!(
+        before < 0.04,
+        "ducking did not settle before retune: {before}"
+    );
 
     config.strips[0].duck_target = false;
     mixer.update(MixerSettings::compile(&config, 48_000).unwrap());
