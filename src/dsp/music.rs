@@ -672,7 +672,10 @@ impl Processor {
                 .process(dry[channel], settings.source_highpass);
             self.bass_source_lowpass[channel].process(highpassed, settings.source_lowpass)
         });
-        let linked_drive = low[0].abs().max(low[1].abs()).clamp(0.0, 1.5);
+        let low_peak = low[0].abs().max(low[1].abs());
+        let drive_scale = if low_peak > 1.5 { 1.5 / low_peak } else { 1.0 };
+        let drive = low.map(|sample| sample * drive_scale);
+        let linked_drive = drive[0].abs().max(drive[1].abs());
         let shape = if linked_drive > 1e-12 {
             let odd = (3.0 * linked_drive).tanh() / 3.0 - linked_drive;
             -1.6 * odd / linked_drive * settings.amount
@@ -681,8 +684,10 @@ impl Processor {
         };
         // A shared nonlinear shape preserves the instantaneous stereo vector: mono stays mono,
         // pure Side stays Side, and fixed pan ratios do not drift as harmonic drive changes.
+        // Clamp the entire vector with one scale so extreme input cannot bypass the original
+        // 1.5 drive bound or alter the L/R proportion.
         for channel in 0..2 {
-            let generated = low[channel] * shape;
+            let generated = drive[channel] * shape;
             let harmonics = self.bass_harmonic_highpass[channel]
                 .process(generated, settings.harmonic_highpass);
             let harmonics = self.bass_harmonic_lowpass[channel]
