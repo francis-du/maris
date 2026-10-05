@@ -668,8 +668,8 @@ impl Processor {
             return wet;
         }
         let low: [f64; 2] = std::array::from_fn(|channel| {
-            let highpassed = self.bass_source_highpass[channel]
-                .process(dry[channel], settings.source_highpass);
+            let highpassed =
+                self.bass_source_highpass[channel].process(dry[channel], settings.source_highpass);
             self.bass_source_lowpass[channel].process(highpassed, settings.source_lowpass)
         });
         let low_peak = low[0].abs().max(low[1].abs());
@@ -688,10 +688,10 @@ impl Processor {
         // 1.5 drive bound or alter the L/R proportion.
         for channel in 0..2 {
             let generated = drive[channel] * shape;
-            let harmonics = self.bass_harmonic_highpass[channel]
-                .process(generated, settings.harmonic_highpass);
-            let harmonics = self.bass_harmonic_lowpass[channel]
-                .process(harmonics, settings.harmonic_lowpass);
+            let harmonics =
+                self.bass_harmonic_highpass[channel].process(generated, settings.harmonic_highpass);
+            let harmonics =
+                self.bass_harmonic_lowpass[channel].process(harmonics, settings.harmonic_lowpass);
             wet[channel] += harmonics * 0.35;
         }
         wet
