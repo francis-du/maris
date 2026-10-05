@@ -455,10 +455,7 @@ impl Settings {
         if !self.enabled || self.reference {
             return [1.0, 1.0];
         }
-        [
-            1.0 - self.balance.max(0.0),
-            1.0 + self.balance.min(0.0),
-        ]
+        [1.0 - self.balance.max(0.0), 1.0 + self.balance.min(0.0)]
     }
 }
 
