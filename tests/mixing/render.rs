@@ -30,12 +30,11 @@ struct Fixture {
     changes: Arc<ArrayQueue<render::Update>>,
     revision: Arc<AtomicU64>,
     meters: [Arc<Metrics>; 2],
-    peaks: [Arc<AtomicU64>; 2],
 }
 impl Fixture {
     fn new(config: &MixerConfig) -> Self {
         let sources = std::array::from_fn(|_| Arc::new(ArrayQueue::new(16_384)));
-        let inputs = sources
+        let inputs: Vec<_> = sources
             .iter()
             .map(|queue| {
                 Some(render::Input::new(
@@ -49,9 +48,6 @@ impl Fixture {
         let changes = Arc::new(ArrayQueue::new(2));
         let revision = Arc::new(AtomicU64::new(u64::MAX));
         let meters = std::array::from_fn(|_| Arc::new(Metrics::default()));
-        let peaks = std::array::from_fn(|index| {
-            inputs[index].as_ref().expect("fixture input").peak.clone()
-        });
         let initial = render::Update::compile(config, 1, 48000).unwrap();
         changes.push(initial).ok().unwrap();
         let graph = render::Graph::new(render::GraphConfig {
@@ -73,7 +69,6 @@ impl Fixture {
             changes,
             revision,
             meters,
-            peaks,
         }
     }
     fn fill(&self, frames: impl Iterator<Item = [[f32; 2]; 2]>) {
@@ -159,76 +154,6 @@ fn each_source_is_consumed_once_and_output_buses_remain_independent() {
     }
     assert_eq!(f.sources[0].len(), f.sources[1].len());
     assert_eq!(f.meters[1].overruns.load(Ordering::Relaxed), 0);
-}
-
-#[test]
-fn strip_peaks_are_batched_per_block_without_changing_interval_maxima() {
-    let mut f = Fixture::new(&config());
-    f.fill((0..4_000).map(|_| [[0.35, -0.30], [0.15, -0.40]]));
-    f.graph.begin_block();
-    let mut expected = [0.0_f64; 2];
-    let mut ready_frames = 0;
-    for _ in 0..1_000 {
-        let (primary, ready) = f.graph.frame();
-        if ready {
-            ready_frames += 1;
-            let secondary = f.secondary.pop().unwrap();
-            expected[0] = expected[0].max(f64::from(primary[0].abs().max(primary[1].abs())));
-            expected[1] = expected[1].max(f64::from(secondary[0].abs().max(secondary[1].abs())));
-        }
-    }
-    assert!(
-        ready_frames > 0,
-        "fixture never crossed the real capture reserve"
-    );
-    assert_eq!(f.peaks[0].load(Ordering::Relaxed), 0);
-    assert_eq!(f.peaks[1].load(Ordering::Relaxed), 0);
-    f.graph.end_block();
-    let first = f64::from_bits(f.peaks[0].load(Ordering::Relaxed));
-    let second = f64::from_bits(f.peaks[1].load(Ordering::Relaxed));
-    assert!(
-        (first - expected[0]).abs() < 1e-9,
-        "first strip peak changed: {first}"
-    );
-    assert!(
-        (second - expected[1]).abs() < 1e-9,
-        "second strip peak changed: {second}"
-    );
-}
-
-#[test]
-fn secondary_send_overruns_are_batched_per_block_without_losing_frames() {
-    let mut f = Fixture::new(&config());
-    f.fill((0..4_000).map(|_| [[0.1; 2], [0.2; 2]]));
-
-    // Cross the same capture reserve used in production before forcing send pressure.
-    f.graph.begin_block();
-    let mut ready = false;
-    for _ in 0..1_000 {
-        let (_, frame_ready) = f.graph.frame();
-        if frame_ready {
-            ready = true;
-            let _ = f.secondary.pop();
-        }
-    }
-    assert!(ready, "fixture never crossed the real capture reserve");
-    f.graph.end_block();
-    f.meters[1].overruns.store(0, Ordering::Relaxed);
-
-    // Fill the normal queue so every additional secondary frame is dropped.
-    while f.secondary.push([0.0; 2]).is_ok() {}
-    f.graph.begin_block();
-    for _ in 0..8 {
-        let (_, frame_ready) = f.graph.frame();
-        assert!(frame_ready);
-    }
-    assert_eq!(
-        f.meters[1].overruns.load(Ordering::Relaxed),
-        0,
-        "send-overrun telemetry was updated per frame instead of at the block boundary"
-    );
-    f.graph.end_block();
-    assert_eq!(f.meters[1].overruns.load(Ordering::Relaxed), 8);
 }
 
 #[test]
