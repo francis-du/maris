@@ -509,6 +509,19 @@ class ToolchainRequirements(unittest.TestCase):
             self.assertEqual((root / 'deleted').read_text().splitlines(), [expected[0], expected[-1]])
 
             (root / 'deleted').unlink()
+            environment['CLEANUP_ASSETS'] = ''
+            result = subprocess.run(
+                [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script],
+                env=environment,
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                timeout=10,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertFalse((root / 'deleted').exists())
+
+            environment['CLEANUP_ASSETS'] = ','.join([expected[0], expected[-1]])
             environment['FAIL_ASSET'] = expected[0]
             result = subprocess.run(
                 [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script],
