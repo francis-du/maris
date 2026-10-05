@@ -944,7 +944,6 @@ fn crossfeed_keeps_low_frequency_ratio_without_attenuating_direct_highs() {
     }
 }
 
-
 #[test]
 fn level_match_does_not_undo_explicit_balance() {
     let render = |balance: f64, level_match: bool| {
@@ -965,8 +964,7 @@ fn level_match_does_not_undo_explicit_balance() {
         );
         let mut power = [0.0_f64; 2];
         for i in 0..384_000 {
-            let x =
-                (0.08 * (std::f64::consts::TAU * 997.0 * i as f64 / 48_000.0).sin()) as f32;
+            let x = (0.08 * (std::f64::consts::TAU * 997.0 * i as f64 / 48_000.0).sin()) as f32;
             let output = processor.process([x, x]);
             if i > 288_000 {
                 for channel in 0..2 {
@@ -996,7 +994,6 @@ fn level_match_does_not_undo_explicit_balance() {
         }
     }
 }
-
 
 #[test]
 fn rapid_balance_changes_do_not_click_or_leave_makeup() {
