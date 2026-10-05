@@ -672,12 +672,11 @@ impl Processor {
                 self.bass_source_highpass[channel].process(dry[channel], settings.source_highpass);
             let low = self.bass_source_lowpass[channel].process(low, settings.source_lowpass);
             let drive = low.clamp(-1.5, 1.5);
-            // tanh residual removes the linear term and leaves mostly odd harmonics;
-            // |x| contributes an even-harmonic component. The following band-pass removes
-            // DC and most of the original fundamental before the signal is mixed back.
+            // Use an odd-symmetric nonlinearity so polarity and stereo geometry are preserved:
+            // pure Side input must not create a new Mid component. The following band-pass
+            // removes most of the original fundamental before the harmonics are mixed back.
             let odd = (3.0 * drive).tanh() / 3.0 - drive;
-            let even = drive.abs();
-            let generated = (-1.6 * odd + 0.12 * even) * settings.amount;
+            let generated = -1.6 * odd * settings.amount;
             let harmonics =
                 self.bass_harmonic_highpass[channel].process(generated, settings.harmonic_highpass);
             let harmonics =
