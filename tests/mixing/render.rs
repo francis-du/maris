@@ -177,17 +177,25 @@ fn strip_peaks_are_batched_per_block_without_changing_interval_maxima() {
         .into_iter(),
     );
     f.graph.begin_block();
+    let mut expected = [0.0_f64; 2];
     for _ in 0..3 {
-        let _ = f.graph.frame();
-        let _ = f.secondary.pop();
+        let (primary, ready) = f.graph.frame();
+        assert!(ready);
+        let secondary = f.secondary.pop().unwrap();
+        expected[0] = expected[0].max(f64::from(primary[0].abs().max(primary[1].abs())));
+        expected[1] =
+            expected[1].max(f64::from(secondary[0].abs().max(secondary[1].abs())));
     }
     assert_eq!(f.peaks[0].load(Ordering::Relaxed), 0);
     assert_eq!(f.peaks[1].load(Ordering::Relaxed), 0);
     f.graph.end_block();
     let first = f64::from_bits(f.peaks[0].load(Ordering::Relaxed));
     let second = f64::from_bits(f.peaks[1].load(Ordering::Relaxed));
-    assert!((first - 0.35).abs() < 1e-6, "first strip peak changed: {first}");
-    assert!((second - 0.40).abs() < 1e-6, "second strip peak changed: {second}");
+    assert!((first - expected[0]).abs() < 1e-9, "first strip peak changed: {first}");
+    assert!(
+        (second - expected[1]).abs() < 1e-9,
+        "second strip peak changed: {second}"
+    );
 }
 
 #[test]
