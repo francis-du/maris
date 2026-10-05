@@ -260,4 +260,3 @@ fn discontinuity_during_effect_retune_preserves_target_limiter_and_safe_recovery
         "effect retune target was lost or stalled across discontinuity"
     );
 }
-
