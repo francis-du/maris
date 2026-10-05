@@ -823,3 +823,77 @@ fn effect_toggle_rate_does_not_reintroduce_level_match_zipper() {
     }
 }
 
+#[test]
+fn rapid_effect_dezipper_is_sample_rate_invariant() {
+    let profile = Profile::default();
+    for rate in [44_100_u32, 48_000, 96_000, 192_000] {
+        let make = |compressor: bool, bass_assist: bool, adaptive: bool| {
+            let mut music = MusicProfile {
+                level_match: true,
+                adaptive: AdaptiveEq {
+                    enabled: adaptive,
+                    strength: if adaptive { 1.0 } else { 0.0 },
+                },
+                compressor: Compressor {
+                    enabled: compressor,
+                    threshold_db: -30.0,
+                    ratio: 4.0,
+                    ..Compressor::default()
+                },
+                ..MusicProfile::default()
+            };
+            music.bass_assist.enabled = bass_assist;
+            music.bass_assist.amount = if bass_assist { 0.8 } else { 0.0 };
+            Settings::compile(&profile, rate)
+                .unwrap()
+                .with_music(&music, rate)
+                .unwrap()
+                .with_transition_ms(rate, 120)
+        };
+        let settings = [
+            make(false, false, false),
+            make(true, false, false),
+            make(false, true, false),
+            make(false, false, true),
+        ];
+        let mut processor = Processor::new(settings[0]);
+        let frame = |index: usize| {
+            let t = index as f64 / rate as f64;
+            [
+                (0.08
+                    * (0.52 * (std::f64::consts::TAU * 83.0 * t).sin()
+                        + 0.28 * (std::f64::consts::TAU * 997.0 * t).sin()
+                        + 0.20 * (std::f64::consts::TAU * 8_300.0 * t).sin())) as f32,
+                (0.08
+                    * (0.49 * (std::f64::consts::TAU * 109.0 * t + 0.3).sin()
+                        + 0.30 * (std::f64::consts::TAU * 1_499.0 * t + 0.7).sin()
+                        + 0.21 * (std::f64::consts::TAU * 7_700.0 * t + 1.1).sin())) as f32,
+            ]
+        };
+        let mut index = 0usize;
+        for _ in 0..rate as usize {
+            let _ = processor.process(frame(index));
+            index += 1;
+        }
+        let interval = (rate as usize * 2 / 1_000).max(1);
+        let mut previous_makeup = processor.level_match_makeup_db();
+        let mut maximum_makeup_step = 0.0_f64;
+        let mut next = 1usize;
+        for sample_index in 0..rate as usize / 4 {
+            if sample_index % interval == 0 {
+                processor.update(settings[next]);
+                next = (next + 1) % settings.len();
+            }
+            let _ = processor.process(frame(index));
+            index += 1;
+            let makeup = processor.level_match_makeup_db();
+            maximum_makeup_step = maximum_makeup_step.max((makeup - previous_makeup).abs());
+            previous_makeup = makeup;
+        }
+        assert!(
+            maximum_makeup_step < 0.08,
+            "{rate} Hz rapid effect updates stepped Level Match by {maximum_makeup_step:.4} dB/sample"
+        );
+    }
+}
+
