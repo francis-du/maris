@@ -164,23 +164,21 @@ fn each_source_is_consumed_once_and_output_buses_remain_independent() {
 #[test]
 fn strip_peaks_are_batched_per_block_without_changing_interval_maxima() {
     let mut f = Fixture::new(&config());
-    f.fill(
-        [
-            [[0.10, -0.05], [0.20, -0.10]],
-            [[0.35, -0.30], [0.15, -0.40]],
-            [[0.12, -0.09], [0.05, -0.03]],
-        ]
-        .into_iter(),
-    );
+    f.fill((0..4_000).map(|_| [[0.35, -0.30], [0.15, -0.40]]));
     f.graph.begin_block();
     let mut expected = [0.0_f64; 2];
-    for _ in 0..3 {
+    let mut ready_frames = 0;
+    for _ in 0..1_000 {
         let (primary, ready) = f.graph.frame();
-        assert!(ready);
-        let secondary = f.secondary.pop().unwrap();
-        expected[0] = expected[0].max(f64::from(primary[0].abs().max(primary[1].abs())));
-        expected[1] = expected[1].max(f64::from(secondary[0].abs().max(secondary[1].abs())));
+        if ready {
+            ready_frames += 1;
+            let secondary = f.secondary.pop().unwrap();
+            expected[0] = expected[0].max(f64::from(primary[0].abs().max(primary[1].abs())));
+            expected[1] =
+                expected[1].max(f64::from(secondary[0].abs().max(secondary[1].abs())));
+        }
     }
+    assert!(ready_frames > 0, "fixture never crossed the real capture reserve");
     assert_eq!(f.peaks[0].load(Ordering::Relaxed), 0);
     assert_eq!(f.peaks[1].load(Ordering::Relaxed), 0);
     f.graph.end_block();
@@ -199,12 +197,28 @@ fn strip_peaks_are_batched_per_block_without_changing_interval_maxima() {
 #[test]
 fn secondary_send_overruns_are_batched_per_block_without_losing_frames() {
     let mut f = Fixture::new(&config());
+    f.fill((0..4_000).map(|_| [[0.1; 2], [0.2; 2]]));
+
+    // Cross the same capture reserve used in production before forcing send pressure.
+    f.graph.begin_block();
+    let mut ready = false;
+    for _ in 0..1_000 {
+        let (_, frame_ready) = f.graph.frame();
+        if frame_ready {
+            ready = true;
+            let _ = f.secondary.pop();
+        }
+    }
+    assert!(ready, "fixture never crossed the real capture reserve");
+    f.graph.end_block();
+    f.meters[1].overruns.store(0, Ordering::Relaxed);
+
     // Fill the normal queue so every additional secondary frame is dropped.
     while f.secondary.push([0.0; 2]).is_ok() {}
-    f.fill((0..8).map(|_| [[0.1; 2], [0.2; 2]]));
     f.graph.begin_block();
     for _ in 0..8 {
-        let _ = f.graph.frame();
+        let (_, frame_ready) = f.graph.frame();
+        assert!(frame_ready);
     }
     assert_eq!(
         f.meters[1].overruns.load(Ordering::Relaxed),
