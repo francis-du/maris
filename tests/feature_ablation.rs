@@ -8,19 +8,25 @@ fn each_retained_effect_has_a_distinct_conditioned_contribution() {
     let report = ablation::report(&rates).unwrap();
     let results = report["results"].as_array().unwrap();
     assert_eq!(results.len(), 27 * rates.len());
-    for variant in [
-        "without_correction",
-        "without_preference_tone",
-        "without_dynamic_eq",
-        "without_virtual_bass",
-        "without_compression",
-        "without_stereo_width",
-        "without_profile_eq",
-        "without_crossfeed",
-    ] {
-        assert!(results.iter().filter(|row| row["variant"] == variant)
-            .any(|row| row["level_matched_difference_rms"].as_f64().unwrap() > 1e-6),
-            "No measurable conditioned contribution for {variant}; review rather than silently retain it");
+    for rate in rates {
+        for variant in [
+            "without_correction",
+            "without_preference_tone",
+            "without_dynamic_eq",
+            "without_virtual_bass",
+            "without_compression",
+            "without_stereo_width",
+            "without_profile_eq",
+            "without_crossfeed",
+        ] {
+            assert!(
+                results
+                    .iter()
+                    .filter(|row| row["sample_rate"] == rate && row["variant"] == variant)
+                    .any(|row| row["level_matched_difference_rms"].as_f64().unwrap() > 1e-6),
+                "No measurable conditioned contribution for {variant} at {rate} Hz; review rather than silently retain it"
+            );
+        }
     }
     for row in results.iter().filter(|row| row["variant"] == "reference") {
         assert!(row["level_matched_difference_rms"].as_f64().unwrap() < 1e-12);
