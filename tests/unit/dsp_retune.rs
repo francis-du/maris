@@ -117,7 +117,6 @@ fn rapid_crossfeed_reversals_stay_continuous_and_settle_on_latest_target() {
     }
 }
 
-
 #[test]
 fn retune_crossfade_duration_is_sample_rate_invariant() {
     for rate in [44_100_u32, 48_000, 96_000, 192_000] {
@@ -143,4 +142,3 @@ fn retune_crossfade_duration_is_sample_rate_invariant() {
         );
     }
 }
-
