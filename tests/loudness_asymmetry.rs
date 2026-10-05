@@ -24,10 +24,7 @@ fn settled_delta_db(left_scale: f32, right_scale: f32) -> f64 {
         let rendered = processor.process(frame);
         if i >= 288_000 {
             input += frame.iter().map(|v| f64::from(*v).powi(2)).sum::<f64>();
-            output += rendered
-                .iter()
-                .map(|v| f64::from(*v).powi(2))
-                .sum::<f64>();
+            output += rendered.iter().map(|v| f64::from(*v).powi(2)).sum::<f64>();
         }
     }
     10.0 * (output / input).log10()
@@ -56,8 +53,7 @@ fn large_level_step_stays_peak_safe_for_asymmetric_program() {
     );
     for i in 0..240_000 {
         let amplitude = if i < 192_000 { 0.008 } else { 0.95 };
-        let x =
-            (amplitude * (std::f64::consts::TAU * 997.0 * i as f64 / 48_000.0).sin()) as f32;
+        let x = (amplitude * (std::f64::consts::TAU * 997.0 * i as f64 / 48_000.0).sin()) as f32;
         for sample in processor.process([x, x * 0.07]) {
             assert!(sample.is_finite());
             assert!(sample.abs() <= 0.891_252, "peak escaped ceiling: {sample}");
