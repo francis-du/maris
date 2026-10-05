@@ -7,8 +7,7 @@ use maris::{
 fn music(correction_preamp_db: f64) -> MusicProfile {
     MusicProfile {
         correction_preamp_db,
-        correction_source: (correction_preamp_db < 0.0)
-            .then(|| "device-switch-regression".into()),
+        correction_source: (correction_preamp_db < 0.0).then(|| "device-switch-regression".into()),
         level_match: true,
         adaptive: maris::music::AdaptiveEq {
             enabled: false,
@@ -169,8 +168,7 @@ fn output_rebind_preserves_limiter_safety_state() {
                 .iter()
                 .all(|sample| sample.is_finite() && sample.abs() <= 0.891_252));
             let makeup = processor.level_match_makeup_db();
-            maximum_makeup_step =
-                maximum_makeup_step.max((makeup - previous_makeup).abs());
+            maximum_makeup_step = maximum_makeup_step.max((makeup - previous_makeup).abs());
             previous_makeup = makeup;
         }
     }
