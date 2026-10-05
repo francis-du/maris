@@ -66,7 +66,7 @@ def _tar_entry_size(field: bytes) -> int:
     return int(value or b'0', 8)
 
 
-def _pax_without_volatile_times(payload: bytes) -> bytes:
+def _pax_without_volatile_metadata(payload: bytes) -> bytes:
     records = []
     cursor = 0
     while cursor < len(payload):
@@ -83,7 +83,9 @@ def _pax_without_volatile_times(payload: bytes) -> bytes:
         equals = payload.find(b'=', space + 1, end - 1)
         if equals < 0:
             raise ValueError('Malformed native pax key/value record')
-        if payload[space + 1:equals] not in (b'atime', b'ctime', b'mtime'):
+        if payload[space + 1:equals] not in (
+            b'atime', b'ctime', b'mtime', b'uid', b'gid', b'uname', b'gname'
+        ):
             records.append(payload[cursor:end])
         cursor = end
     return b''.join(records)
@@ -134,7 +136,7 @@ def _normalize_pax_times(path: Path) -> None:
                     raise ValueError('Truncated native pax entry')
                 if header[156:157] in (b'x', b'g'):
                     payload = body[:size]
-                    normalized = _pax_without_volatile_times(payload)
+                    normalized = _pax_without_volatile_metadata(payload)
                     if not normalized:
                         continue
                     output.write(_tar_header_with_size(header, len(normalized)))

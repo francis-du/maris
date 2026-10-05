@@ -17,7 +17,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from release_bundle import _normalize_pax_times, _pax_without_volatile_times, _tar_header_with_size, combine, inspect_kit, pack, release_output_directory, TARGETS
+from release_bundle import _normalize_pax_times, _pax_without_volatile_metadata, _tar_header_with_size, combine, inspect_kit, pack, release_output_directory, TARGETS
 from package_smoke import extract
 from test_online import fixture
 
@@ -184,11 +184,15 @@ class ReleaseKits(unittest.TestCase):
             record('ctime', '1791116074.416274307'),
             record('LIBARCHIVE.xattr.com.example', 'cGF5bG9hZA'),
             record('mtime', '1791116073'),
+            record('uid', '501'),
+            record('gid', '20'),
+            record('uname', 'runner'),
+            record('gname', 'staff'),
             record('path', 'Maris.app/Contents/MacOS/maris'),
         ])
-        normalized = _pax_without_volatile_times(payload)
-        self.assertNotIn(b'ctime=', normalized)
-        self.assertNotIn(b'mtime=', normalized)
+        normalized = _pax_without_volatile_metadata(payload)
+        for removed in (b'ctime=', b'mtime=', b'uid=', b'gid=', b'uname=', b'gname='):
+            self.assertNotIn(removed, normalized)
         self.assertIn(b'LIBARCHIVE.xattr.com.example=cGF5bG9hZA', normalized)
         self.assertIn(b'path=Maris.app/Contents/MacOS/maris', normalized)
 
@@ -201,7 +205,7 @@ class ReleaseKits(unittest.TestCase):
         ]:
             if malformed:
                 with self.subTest(malformed=malformed), self.assertRaises(ValueError):
-                    _pax_without_volatile_times(malformed)
+                    _pax_without_volatile_metadata(malformed)
 
     def test_tar_header_rewrite_normalizes_mtime_and_recomputes_checksum(self):
         header = bytearray(512)
