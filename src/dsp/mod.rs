@@ -443,8 +443,9 @@ impl Processor {
         } else {
             1.0 - self.remaining as f64 / self.total as f64
         };
-        let static_makeup = static_level_match_gain(&self.active.settings) * (1.0 - t)
-            + static_level_match_gain(&self.next.settings) * t;
+        let active_static = static_level_match_gain(&self.active.settings).max(1e-12);
+        let next_static = static_level_match_gain(&self.next.settings).max(1e-12);
+        let static_makeup = (active_static.ln() * (1.0 - t) + next_static.ln() * t).exp();
         let transition_gain = if self.remaining == 0 {
             self.match_gain
         } else {
