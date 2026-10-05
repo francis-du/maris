@@ -145,10 +145,9 @@ impl Settings {
             match_meter: (-1.0 / (rate as f64 * 1.5)).exp(),
             match_slew: (-1.0 / (rate as f64 * 0.25)).exp(),
             // Retunes already have an audible crossfade, but detector-driven target gain can
-            // still move sharply inside that envelope. A faster 10 ms slew prevents per-frame
-            // gain jumps without making a 120 ms settings transition wait on the 250 ms
-            // steady-state matcher.
-            match_transition_slew: (-1.0 / (rate as f64 * 0.010)).exp(),
+            // still move sharply inside that envelope. A 0.1 ms dezipper prevents hard
+            // per-frame gain jumps without adding perceptible delay to a 120 ms retune.
+            match_transition_slew: (-1.0 / (rate as f64 * 0.0001)).exp(),
             // Approximate the BS.1770 K-weighting detector with the standard pre-filter
             // and RLB corner parameters, compiled through the existing allocation-free
             // RBJ biquads. This keeps the audio callback real-time safe while making Level
