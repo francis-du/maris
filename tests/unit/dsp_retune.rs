@@ -235,6 +235,32 @@ fn discontinuity_during_queued_retune_preserves_latest_target_and_progress() {
 }
 
 #[test]
+fn discontinuity_preserves_limiter_attenuation_and_avoids_recovery_blast() {
+    let settings = Settings::compile(&Profile::default(), 48_000).unwrap();
+    let mut processor = Processor::new(settings);
+
+    for _ in 0..4_096 {
+        let _ = processor.process([4.0, -4.0]);
+    }
+    let before = processor.limiter_reduction_db();
+    assert!(before > 5.0, "fixture did not engage limiter strongly: {before:.3} dB");
+
+    processor.reset_history();
+    let after_reset = processor.limiter_reduction_db();
+    assert!(
+        (after_reset - before).abs() < 1e-9,
+        "discontinuity released limiter attenuation: before={before:.3} dB after={after_reset:.3} dB"
+    );
+
+    let quiet = processor.process([0.1, -0.1]);
+    let fresh = Processor::new(settings).process([0.1, -0.1]);
+    assert!(
+        quiet[0].abs() < fresh[0].abs() && quiet[1].abs() < fresh[1].abs(),
+        "first post-discontinuity frame escaped preserved limiter attenuation: quiet={quiet:?} fresh={fresh:?}"
+    );
+}
+
+#[test]
 fn retune_crossfade_duration_is_sample_rate_invariant() {
     for rate in [44_100_u32, 48_000, 96_000, 192_000] {
         let base = Settings::compile(&Profile::default(), rate).unwrap();
