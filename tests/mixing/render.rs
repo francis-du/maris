@@ -252,6 +252,85 @@ fn live_gain_and_mute_changes_acknowledge_at_a_block_boundary_and_slew() {
 }
 
 #[test]
+fn rapid_solo_reversal_stays_continuous_and_commits_only_latest_revision() {
+    let mut config = config();
+    config.strips[1].sends = [1.0, 0.0];
+    let mut f = Fixture::new(&config);
+    f.fill((0..9000).map(|_| [[0.1, 0.1], [0.2, 0.2]]));
+    f.graph.begin_block();
+    for _ in 0..1500 {
+        let _ = f.graph.frame();
+        f.secondary.pop();
+    }
+    assert_eq!(f.revision.load(Ordering::Acquire), 1);
+
+    config.strips[1].solo = true;
+    f.changes
+        .push(render::Update::compile(&config, 2, 48_000).unwrap())
+        .ok()
+        .unwrap();
+    f.graph.begin_block();
+    let mut previous = f.graph.frame().0[0];
+    f.secondary.pop();
+    assert_eq!(f.revision.load(Ordering::Acquire), 1);
+
+    for _ in 0..300 {
+        let current = f.graph.frame().0[0];
+        f.secondary.pop();
+        assert!(
+            (current - previous).abs() < 0.002,
+            "solo ramp stepped before reversal: previous={previous} current={current}"
+        );
+        previous = current;
+    }
+
+    config.strips[1].solo = false;
+    f.changes
+        .push(render::Update::compile(&config, 3, 48_000).unwrap())
+        .ok()
+        .unwrap();
+    f.graph.begin_block();
+    let first_reversed = f.graph.frame().0[0];
+    f.secondary.pop();
+    assert!(
+        (first_reversed - previous).abs() < 0.002,
+        "reversing solo stepped the rendered bus: previous={previous} current={first_reversed}"
+    );
+    assert_eq!(
+        f.revision.load(Ordering::Acquire),
+        1,
+        "obsolete solo revision was acknowledged before the reversed ramp settled"
+    );
+
+    previous = first_reversed;
+    for i in 0..1198 {
+        let current = f.graph.frame().0[0];
+        f.secondary.pop();
+        assert!(
+            (current - previous).abs() < 0.002,
+            "reversed solo ramp stepped at frame {i}: previous={previous} current={current}"
+        );
+        assert_eq!(
+            f.revision.load(Ordering::Acquire),
+            1,
+            "revision advanced before the latest reversed ramp settled at frame {i}"
+        );
+        previous = current;
+    }
+    let settled = f.graph.frame().0[0];
+    f.secondary.pop();
+    assert!(
+        (settled - 0.3).abs() < 0.001,
+        "solo reversal did not return to the original mix: {settled}"
+    );
+    assert_eq!(
+        f.revision.load(Ordering::Acquire),
+        3,
+        "renderer did not commit the newest revision after the reversal settled"
+    );
+}
+
+#[test]
 fn strip_eq_revision_waits_for_the_strip_dsp_crossfade() {
     let mut config = config();
     let mut f = Fixture::new(&config);
