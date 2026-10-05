@@ -369,6 +369,71 @@ fn single_frame_level_match_toggle_aligns_audio_pending_and_makeup_telemetry() {
 }
 
 #[test]
+fn queued_single_frame_level_match_telemetry_reports_each_audible_endpoint_in_order() {
+    let profile = Profile::default();
+    let make_music = |correction_preamp_db: f64, level_match: bool| crate::music::MusicProfile {
+        correction_preamp_db,
+        correction_source: Some("queued telemetry fixture".into()),
+        adaptive: crate::music::AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        level_match,
+        ..crate::music::MusicProfile::default()
+    };
+    let base_music = make_music(-6.0, false);
+    let middle_music = make_music(-6.0, true);
+    let final_music = make_music(-12.0, true);
+
+    let base = Settings::compile(&profile, 48_000)
+        .unwrap()
+        .with_music(&base_music, 48_000)
+        .unwrap();
+    let mut middle = Settings::compile(&profile, 48_000)
+        .unwrap()
+        .with_music(&middle_music, 48_000)
+        .unwrap();
+    let mut final_target = Settings::compile(&profile, 48_000)
+        .unwrap()
+        .with_music(&final_music, 48_000)
+        .unwrap();
+    middle.transition_frames = 1;
+    final_target.transition_frames = 1;
+
+    let input = [0.05_f32, -0.04_f32];
+    let mut expected_middle = Processor::new(middle);
+    let _ = expected_middle.process(input);
+    let middle_makeup = expected_middle.level_match_makeup_db();
+    let mut expected_final = Processor::new(final_target);
+    let _ = expected_final.process(input);
+    let final_makeup = expected_final.level_match_makeup_db();
+    assert!(
+        middle_makeup > 5.0 && final_makeup > 11.0,
+        "fixture did not create distinct makeup endpoints: middle={middle_makeup:.3} final={final_makeup:.3} dB"
+    );
+
+    let mut processor = Processor::new(base);
+    processor.update(middle);
+    processor.update(final_target);
+
+    let _ = processor.process(input);
+    let first_makeup = processor.level_match_makeup_db();
+    assert!(
+        (first_makeup - middle_makeup).abs() < 1e-9,
+        "queued final target leaked into telemetry before becoming audible: first={first_makeup:.6} middle={middle_makeup:.6} dB"
+    );
+    assert!(processor.settings_pending());
+
+    let _ = processor.process(input);
+    let second_makeup = processor.level_match_makeup_db();
+    assert!(
+        (second_makeup - final_makeup).abs() < 1e-9,
+        "final queued telemetry did not align with its audible frame: second={second_makeup:.6} final={final_makeup:.6} dB"
+    );
+    assert!(!processor.settings_pending());
+}
+
+#[test]
 fn retune_crossfade_duration_is_sample_rate_invariant() {
     for rate in [44_100_u32, 48_000, 96_000, 192_000] {
         let base = Settings::compile(&Profile::default(), rate).unwrap();
