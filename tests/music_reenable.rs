@@ -101,7 +101,10 @@ fn dynamic_eq_reenable_starts_from_fresh_detector_history_after_disable() {
     let enabled = MusicProfile {
         softness: 1.0,
         level_match: false,
-        adaptive: maris::music::AdaptiveEq { enabled: true, strength: 1.0 },
+        adaptive: maris::music::AdaptiveEq {
+            enabled: true,
+            strength: 1.0,
+        },
         ..MusicProfile::default()
     };
     let mut disabled = enabled.clone();
