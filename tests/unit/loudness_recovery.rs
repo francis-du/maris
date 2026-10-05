@@ -116,8 +116,7 @@ fn combined_level_match_and_limiter_state_recovers_without_blast() {
     );
 
     for i in 0..4_096 {
-        let x =
-            (4.0 * (std::f64::consts::TAU * 1_000.0 * i as f64 / f64::from(RATE)).sin()) as f32;
+        let x = (4.0 * (std::f64::consts::TAU * 1_000.0 * i as f64 / f64::from(RATE)).sin()) as f32;
         let _ = render.frame([x, -x], true, false);
     }
     let limiter_before = render.processor.limiter_reduction_db();
