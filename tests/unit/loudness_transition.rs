@@ -898,3 +898,91 @@ fn rapid_effect_dezipper_is_sample_rate_invariant() {
         );
     }
 }
+
+#[test]
+fn one_millisecond_effect_updates_do_not_pump_short_window_loudness() {
+    const RATE: u32 = 48_000;
+    const WINDOW: usize = 240;
+    let profile = Profile::default();
+    let make = |compressor: bool, bass_assist: bool, adaptive: bool| {
+        let mut music = MusicProfile {
+            level_match: true,
+            adaptive: AdaptiveEq {
+                enabled: adaptive,
+                strength: if adaptive { 1.0 } else { 0.0 },
+            },
+            compressor: Compressor {
+                enabled: compressor,
+                threshold_db: -30.0,
+                ratio: 4.0,
+                ..Compressor::default()
+            },
+            ..MusicProfile::default()
+        };
+        music.bass_assist.enabled = bass_assist;
+        music.bass_assist.amount = if bass_assist { 0.8 } else { 0.0 };
+        Settings::compile(&profile, RATE)
+            .unwrap()
+            .with_music(&music, RATE)
+            .unwrap()
+            .with_transition_ms(RATE, 120)
+    };
+    let settings = [
+        make(false, false, false),
+        make(true, false, false),
+        make(false, true, false),
+        make(false, false, true),
+    ];
+    let frame = |index: usize| {
+        let t = index as f64 / RATE as f64;
+        [
+            (0.08
+                * (0.52 * (std::f64::consts::TAU * 83.0 * t).sin()
+                    + 0.28 * (std::f64::consts::TAU * 997.0 * t).sin()
+                    + 0.20 * (std::f64::consts::TAU * 8_300.0 * t).sin()))
+                as f32,
+            (0.08
+                * (0.49 * (std::f64::consts::TAU * 109.0 * t + 0.3).sin()
+                    + 0.30 * (std::f64::consts::TAU * 1_499.0 * t + 0.7).sin()
+                    + 0.21 * (std::f64::consts::TAU * 7_700.0 * t + 1.1).sin()))
+                as f32,
+        ]
+    };
+    let mut processor = Processor::new(settings[0]);
+    let mut index = 0usize;
+    for _ in 0..RATE as usize {
+        let _ = processor.process(frame(index));
+        index += 1;
+    }
+
+    let interval = RATE as usize / 1_000;
+    let mut next = 1usize;
+    let mut minimum_delta = f64::INFINITY;
+    let mut maximum_delta = f64::NEG_INFINITY;
+    for _ in 0..100 {
+        let mut input_power = 0.0_f64;
+        let mut output_power = 0.0_f64;
+        for offset in 0..WINDOW {
+            let absolute = index + offset;
+            if absolute % interval == 0 {
+                processor.update(settings[next]);
+                next = (next + 1) % settings.len();
+            }
+            let input = frame(index);
+            index += 1;
+            let output = processor.process(input);
+            for channel in 0..2 {
+                input_power += f64::from(input[channel]).powi(2);
+                output_power += f64::from(output[channel]).powi(2);
+            }
+        }
+        let delta = 10.0 * (output_power / input_power.max(1e-30)).log10();
+        minimum_delta = minimum_delta.min(delta);
+        maximum_delta = maximum_delta.max(delta);
+    }
+    assert!(
+        minimum_delta > -2.0 && maximum_delta < 2.0,
+        "1 ms effect updates pumped 5 ms loudness: min={minimum_delta:.3} dB max={maximum_delta:.3} dB"
+    );
+}
+
