@@ -331,6 +331,96 @@ fn rapid_solo_reversal_stays_continuous_and_commits_only_latest_revision() {
 }
 
 #[test]
+fn rapid_pan_reversal_stays_continuous_and_does_not_touch_other_bus() {
+    let mut config = config();
+    let mut f = Fixture::new(&config);
+    f.fill((0..9_000).map(|_| [[0.1, 0.1], [0.2, 0.2]]));
+    f.graph.begin_block();
+    for _ in 0..1_500 {
+        let _ = f.graph.frame();
+        f.secondary.pop();
+    }
+    assert_eq!(f.revision.load(Ordering::Acquire), 1);
+
+    config.strips[0].pan = 1.0;
+    f.changes
+        .push(render::Update::compile(&config, 2, 48_000).unwrap())
+        .ok()
+        .unwrap();
+    f.graph.begin_block();
+
+    let mut previous = f.graph.frame().0;
+    let other = f.secondary.pop().unwrap();
+    assert!((other[0] - 0.2).abs() < 0.0001 && (other[1] - 0.2).abs() < 0.0001);
+    for _ in 0..300 {
+        let current = f.graph.frame().0;
+        let other = f.secondary.pop().unwrap();
+        for channel in 0..2 {
+            assert!(
+                (current[channel] - previous[channel]).abs() < 0.001,
+                "pan ramp stepped before reversal: previous={previous:?} current={current:?}"
+            );
+        }
+        assert!((other[0] - 0.2).abs() < 0.0001 && (other[1] - 0.2).abs() < 0.0001);
+        previous = current;
+    }
+
+    config.strips[0].pan = -1.0;
+    f.changes
+        .push(render::Update::compile(&config, 3, 48_000).unwrap())
+        .ok()
+        .unwrap();
+    f.graph.begin_block();
+    let first_reversed = f.graph.frame().0;
+    let other = f.secondary.pop().unwrap();
+    for channel in 0..2 {
+        assert!(
+            (first_reversed[channel] - previous[channel]).abs() < 0.001,
+            "reversing pan stepped the rendered bus: previous={previous:?} current={first_reversed:?}"
+        );
+    }
+    assert!((other[0] - 0.2).abs() < 0.0001 && (other[1] - 0.2).abs() < 0.0001);
+    assert_eq!(
+        f.revision.load(Ordering::Acquire),
+        1,
+        "obsolete pan revision was acknowledged before the reversed ramp settled"
+    );
+
+    previous = first_reversed;
+    for i in 0..1_198 {
+        let current = f.graph.frame().0;
+        let other = f.secondary.pop().unwrap();
+        for channel in 0..2 {
+            assert!(
+                (current[channel] - previous[channel]).abs() < 0.001,
+                "reversed pan ramp stepped at frame {i}: previous={previous:?} current={current:?}"
+            );
+        }
+        assert!((other[0] - 0.2).abs() < 0.0001 && (other[1] - 0.2).abs() < 0.0001);
+        assert_eq!(
+            f.revision.load(Ordering::Acquire),
+            1,
+            "pan revision advanced before the latest ramp settled at frame {i}"
+        );
+        previous = current;
+    }
+
+    let settled = f.graph.frame().0;
+    let other = f.secondary.pop().unwrap();
+    let expected = 0.1 * std::f32::consts::SQRT_2;
+    assert!(
+        (settled[0] - expected).abs() < 0.0001 && settled[1].abs() < 0.0001,
+        "pan reversal did not settle on hard-left equal-power target: {settled:?}"
+    );
+    assert!((other[0] - 0.2).abs() < 0.0001 && (other[1] - 0.2).abs() < 0.0001);
+    assert_eq!(
+        f.revision.load(Ordering::Acquire),
+        3,
+        "renderer did not commit the newest pan revision after the ramp settled"
+    );
+}
+
+#[test]
 fn same_block_updates_coalesce_to_latest_revision_without_intermediate_audio() {
     let mut config = config();
     config.strips[1].sends = [1.0, 0.0];
