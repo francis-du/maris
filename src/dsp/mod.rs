@@ -437,6 +437,9 @@ impl Processor {
         let residual_makeup = 1.0 + (transition_gain - 1.0) * self.level_match_blend();
         20.0 * (static_makeup * residual_makeup).max(1e-12).log10()
     }
+    pub fn limiter_reduction_db(&self) -> f64 {
+        -20.0 * self.limiter_gain.clamp(1e-12, 1.0).log10()
+    }
     pub fn process(&mut self, input: [f32; 2]) -> [f32; 2] {
         let match_blend = self.level_match_blend();
         let transitioning = self.remaining > 0;

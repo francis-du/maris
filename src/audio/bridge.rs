@@ -468,6 +468,10 @@ impl Renderer {
             (self.render.processor.level_match_makeup_db() as f32).to_bits(),
             Ordering::Relaxed,
         );
+        metrics.limiter_reduction.store(
+            (self.render.processor.limiter_reduction_db() as f32).to_bits(),
+            Ordering::Relaxed,
+        );
         metrics
             .settings_transitioning
             .store(self.render.settings_pending(), Ordering::Relaxed);
@@ -563,6 +567,9 @@ pub(super) fn handoff_output<T>(
     Ok(())
 }
 
+#[cfg(test)]
+#[path = "../../tests/unit/limiter_telemetry.rs"]
+mod limiter_telemetry_tests;
 #[cfg(test)]
 #[path = "../../tests/unit/loudness_transition.rs"]
 mod loudness_transition_tests;

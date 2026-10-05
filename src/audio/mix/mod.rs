@@ -630,6 +630,9 @@ impl Session {
         status["level_match_makeup_db"] = json!(f32::from_bits(
             metrics.level_match_makeup.load(Ordering::Relaxed)
         ));
+        status["limiter_reduction_db"] = json!(f32::from_bits(
+            metrics.limiter_reduction.load(Ordering::Relaxed)
+        ));
         status["settings_pending"] = json!(
             self.outputs
                 .iter()
