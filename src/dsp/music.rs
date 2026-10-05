@@ -667,20 +667,26 @@ impl Processor {
         if !settings.enabled || settings.amount <= 0.0 {
             return wet;
         }
+        let low: [f64; 2] = std::array::from_fn(|channel| {
+            let highpassed = self.bass_source_highpass[channel]
+                .process(dry[channel], settings.source_highpass);
+            self.bass_source_lowpass[channel].process(highpassed, settings.source_lowpass)
+        });
+        let linked_drive = low[0].abs().max(low[1].abs()).clamp(0.0, 1.5);
+        let shape = if linked_drive > 1e-12 {
+            let odd = (3.0 * linked_drive).tanh() / 3.0 - linked_drive;
+            -1.6 * odd / linked_drive * settings.amount
+        } else {
+            0.0
+        };
+        // A shared nonlinear shape preserves the instantaneous stereo vector: mono stays mono,
+        // pure Side stays Side, and fixed pan ratios do not drift as harmonic drive changes.
         for channel in 0..2 {
-            let low =
-                self.bass_source_highpass[channel].process(dry[channel], settings.source_highpass);
-            let low = self.bass_source_lowpass[channel].process(low, settings.source_lowpass);
-            let drive = low.clamp(-1.5, 1.5);
-            // Use an odd-symmetric nonlinearity so polarity and stereo geometry are preserved:
-            // pure Side input must not create a new Mid component. The following band-pass
-            // removes most of the original fundamental before the harmonics are mixed back.
-            let odd = (3.0 * drive).tanh() / 3.0 - drive;
-            let generated = -1.6 * odd * settings.amount;
-            let harmonics =
-                self.bass_harmonic_highpass[channel].process(generated, settings.harmonic_highpass);
-            let harmonics =
-                self.bass_harmonic_lowpass[channel].process(harmonics, settings.harmonic_lowpass);
+            let generated = low[channel] * shape;
+            let harmonics = self.bass_harmonic_highpass[channel]
+                .process(generated, settings.harmonic_highpass);
+            let harmonics = self.bass_harmonic_lowpass[channel]
+                .process(harmonics, settings.harmonic_lowpass);
             wet[channel] += harmonics * 0.35;
         }
         wet
