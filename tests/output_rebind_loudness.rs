@@ -38,12 +38,10 @@ fn bidirectional_output_rebind_keeps_loudness_and_makeup_telemetry_smooth() {
         [
             (0.05
                 * (0.55 * (std::f64::consts::TAU * 83.0 * t).sin()
-                    + 0.45 * (std::f64::consts::TAU * 1_900.0 * t).sin()))
-                as f32,
+                    + 0.45 * (std::f64::consts::TAU * 1_900.0 * t).sin())) as f32,
             (0.05
                 * (0.52 * (std::f64::consts::TAU * 109.0 * t + 0.3).sin()
-                    + 0.48 * (std::f64::consts::TAU * 2_700.0 * t + 0.7).sin()))
-                as f32,
+                    + 0.48 * (std::f64::consts::TAU * 2_700.0 * t + 0.7).sin())) as f32,
         ]
     };
 
@@ -74,8 +72,7 @@ fn bidirectional_output_rebind_keeps_loudness_and_makeup_telemetry_smooth() {
                     assert!(output[channel].abs() <= 0.891_252);
                 }
                 let makeup = processor.level_match_makeup_db();
-                maximum_makeup_step =
-                    maximum_makeup_step.max((makeup - previous_makeup).abs());
+                maximum_makeup_step = maximum_makeup_step.max((makeup - previous_makeup).abs());
                 previous_makeup = makeup;
             }
             let delta = 10.0 * (output_power / input_power.max(1e-30)).log10();
@@ -94,7 +91,6 @@ fn bidirectional_output_rebind_keeps_loudness_and_makeup_telemetry_smooth() {
     );
 }
 
-
 fn maximum_rebind_makeup_step(rate: u32) -> f64 {
     let eq = Profile::default();
     let deep = Settings::compile(&eq, rate)
@@ -107,8 +103,7 @@ fn maximum_rebind_makeup_step(rate: u32) -> f64 {
         .unwrap();
     let mut processor = Processor::new(deep);
     for i in 0..rate as usize * 2 {
-        let x =
-            (0.05 * (std::f64::consts::TAU * 997.0 * i as f64 / rate as f64).sin()) as f32;
+        let x = (0.05 * (std::f64::consts::TAU * 997.0 * i as f64 / rate as f64).sin()) as f32;
         let _ = processor.process([x, x]);
     }
 
@@ -117,8 +112,7 @@ fn maximum_rebind_makeup_step(rate: u32) -> f64 {
     for target in [flat, deep] {
         processor.update(target);
         for i in 0..rate as usize / 10 {
-            let x =
-                (0.05 * (std::f64::consts::TAU * 997.0 * i as f64 / rate as f64).sin()) as f32;
+            let x = (0.05 * (std::f64::consts::TAU * 997.0 * i as f64 / rate as f64).sin()) as f32;
             let _ = processor.process([x, x]);
             let makeup = processor.level_match_makeup_db();
             maximum_step = maximum_step.max((makeup - previous).abs());
@@ -138,7 +132,6 @@ fn output_rebind_makeup_dezipper_is_sample_rate_invariant() {
         );
     }
 }
-
 
 #[test]
 fn output_rebind_preserves_limiter_safety_state() {
@@ -170,8 +163,7 @@ fn output_rebind_preserves_limiter_safety_state() {
     for target in [flat, deep] {
         processor.update(target);
         for i in 0..RATE as usize / 20 {
-            let x =
-                (0.1 * (std::f64::consts::TAU * 997.0 * i as f64 / RATE as f64).sin()) as f32;
+            let x = (0.1 * (std::f64::consts::TAU * 997.0 * i as f64 / RATE as f64).sin()) as f32;
             let output = processor.process([x, -x]);
             assert!(output
                 .iter()
