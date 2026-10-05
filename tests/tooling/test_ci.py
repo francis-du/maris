@@ -373,10 +373,12 @@ class ToolchainRequirements(unittest.TestCase):
             marker = f'      - name: {name}\n'
             _, found, tail = text.partition(marker)
             self.assertTrue(found, name)
-            step, separator, _ = tail.partition('      - name: ')
-            if not separator:
-                step, separator, _ = tail.partition('  public-install-smoke:')
-            self.assertTrue(separator, name)
+            boundaries = [
+                position for marker in ('      - name: ', '  public-install-smoke:')
+                if (position := tail.find(marker)) >= 0
+            ]
+            self.assertTrue(boundaries, name)
+            step = tail[:min(boundaries)]
             _, found, body = step.partition('        run: |\n')
             self.assertTrue(found, name)
             scripts.append('\n'.join(line[10:] for line in body.splitlines()))
