@@ -226,14 +226,15 @@ class ToolchainRequirements(unittest.TestCase):
     @unittest.skipUnless(BASH, 'Bash release idempotency execution required')
     def test_release_asset_publication_reuses_or_resumes_exact_assets_and_refuses_different_sets(self):
         text = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
-        block = re.search(
-            r'(?s)      - name: Reuse exact existing installer assets without clobbering\n'
-            r'(?:        .*\n)*?        run: \|\n(.*?)'
-            r'      - name: Fail after publishing cleanup intent for invalid existing assets\n',
-            text,
-        )
-        self.assertIsNotNone(block)
-        script = '\n'.join(line[10:] for line in block[1].splitlines())
+        marker = '      - name: Reuse exact existing installer assets without clobbering\n'
+        next_marker = '      - name: Fail after publishing cleanup intent for invalid existing assets\n'
+        _, found, tail = text.partition(marker)
+        self.assertTrue(found)
+        step, found, _ = tail.partition(next_marker)
+        self.assertTrue(found)
+        _, found, body = step.partition('        run: |\n')
+        self.assertTrue(found)
+        script = '\n'.join(line[10:] for line in body.splitlines())
         names = [
             'Maris-1.2.3-macos-x86_64.tar.gz',
             'Maris-1.2.3-macos-arm64.tar.gz',
