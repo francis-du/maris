@@ -116,3 +116,31 @@ fn rapid_crossfeed_reversals_stay_continuous_and_settle_on_latest_target() {
         );
     }
 }
+
+
+#[test]
+fn retune_crossfade_duration_is_sample_rate_invariant() {
+    for rate in [44_100_u32, 48_000, 96_000, 192_000] {
+        let base = Settings::compile(&Profile::default(), rate).unwrap();
+        let target_profile = Profile {
+            crossfeed: 0.3,
+            ..Profile::default()
+        };
+        let target = Settings::compile(&target_profile, rate).unwrap();
+        let mut processor = Processor::new(base);
+        processor.update(target);
+        let expected_frames = rate / 40;
+        for frame in 0..expected_frames {
+            assert!(
+                processor.settings_pending(),
+                "retune finished early at {rate} Hz on frame {frame}/{expected_frames}"
+            );
+            let _ = processor.process([0.05, -0.025]);
+        }
+        assert!(
+            !processor.settings_pending(),
+            "retune exceeded 25 ms at {rate} Hz after {expected_frames} frames"
+        );
+    }
+}
+
