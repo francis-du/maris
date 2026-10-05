@@ -91,6 +91,8 @@ pub fn report(rates: &[u32]) -> Result<Value> {
         air_db: -0.5,
         softness: 0.35,
         width: 1.25,
+        virtual_surround: 0.65,
+        stereo_focus: 0.35,
         level_match: false,
         correction: vec![Filter {
             kind: Kind::Peak,
@@ -115,6 +117,8 @@ pub fn report(rates: &[u32]) -> Result<Value> {
         "without_virtual_bass",
         "without_compression",
         "without_stereo_width",
+        "without_virtual_surround",
+        "without_stereo_focus",
         "without_profile_eq",
         "without_crossfeed",
     ];
@@ -146,6 +150,8 @@ pub fn report(rates: &[u32]) -> Result<Value> {
                     "without_virtual_bass" => music.bass_assist.enabled = false,
                     "without_compression" => music.compressor.enabled = false,
                     "without_stereo_width" => music.width = 1.0,
+                    "without_virtual_surround" => music.virtual_surround = 0.0,
+                    "without_stereo_focus" => music.stereo_focus = 0.0,
                     "without_profile_eq" => {
                         for band in &mut eq.bands {
                             band.gain_db = 0.0;
