@@ -322,4 +322,3 @@ fn pending_retune_recovery_obeys_output_envelope_slope() {
         "pending retune did not finish after sufficient recovery audio"
     );
 }
-
