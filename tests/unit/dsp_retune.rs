@@ -264,6 +264,56 @@ fn discontinuity_preserves_limiter_attenuation_and_avoids_recovery_blast() {
 }
 
 #[test]
+fn queued_target_after_single_frame_retune_does_not_skip_middle_target() {
+    let base = Settings::compile(&Profile::default(), 48_000).unwrap();
+    let middle_profile = Profile {
+        stereo_width: 0.5,
+        ..Profile::default()
+    };
+    let final_profile = Profile {
+        stereo_width: 0.0,
+        ..Profile::default()
+    };
+    let mut middle = Settings::compile(&middle_profile, 48_000).unwrap();
+    let mut final_target = Settings::compile(&final_profile, 48_000).unwrap();
+    middle.transition_frames = 1;
+    final_target.transition_frames = 1;
+
+    let input = [0.1_f32, -0.1_f32];
+    let mut processor = Processor::new(base);
+    processor.update(middle);
+    processor.update(final_target);
+
+    let first = processor.process(input);
+    let mut fresh_middle = Processor::new(middle);
+    let expected_middle = fresh_middle.process(input);
+    for channel in 0..2 {
+        assert!(
+            (first[channel] - expected_middle[channel]).abs() < 1e-7,
+            "queued target skipped the audible middle endpoint: first={first:?} expected={expected_middle:?}"
+        );
+    }
+    assert!(
+        processor.settings_pending(),
+        "queued final target disappeared when the one-frame middle retune completed"
+    );
+
+    let second = processor.process(input);
+    let mut fresh_final = Processor::new(final_target);
+    let expected_final = fresh_final.process(input);
+    for channel in 0..2 {
+        assert!(
+            (second[channel] - expected_final[channel]).abs() < 1e-7,
+            "queued final target did not become audible on the following frame: second={second:?} expected={expected_final:?}"
+        );
+    }
+    assert!(
+        !processor.settings_pending(),
+        "single-frame queued final target remained pending after its audible endpoint"
+    );
+}
+
+#[test]
 fn retune_crossfade_duration_is_sample_rate_invariant() {
     for rate in [44_100_u32, 48_000, 96_000, 192_000] {
         let base = Settings::compile(&Profile::default(), rate).unwrap();
