@@ -176,7 +176,6 @@ fn bass_assist_extreme_drive_stays_linked_and_bounded() {
     );
 }
 
-
 #[test]
 fn bass_assist_does_not_create_cross_channel_bass() {
     let mut profile = MusicProfile {
