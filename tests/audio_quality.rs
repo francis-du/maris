@@ -997,3 +997,54 @@ fn level_match_does_not_undo_explicit_balance() {
     }
 }
 
+
+#[test]
+fn rapid_balance_changes_do_not_click_or_leave_makeup() {
+    let settings = |balance: f64| {
+        let music = MusicProfile {
+            balance,
+            level_match: true,
+            adaptive: maris::music::AdaptiveEq {
+                enabled: false,
+                strength: 0.0,
+            },
+            ..MusicProfile::default()
+        };
+        Settings::compile(&Profile::default(), 48_000)
+            .unwrap()
+            .with_music(&music, 48_000)
+            .unwrap()
+    };
+
+    let mut processor = Processor::new(settings(0.0));
+    let mut previous = [0.0_f32; 2];
+    let mut maximum_step = 0.0_f32;
+    for i in 0..16_000 {
+        match i {
+            2_000 => processor.update(settings(1.0)),
+            3_000 => processor.update(settings(-1.0)),
+            4_000 => processor.update(settings(0.75)),
+            4_500 => processor.update(settings(-0.5)),
+            5_000 => processor.update(settings(0.0)),
+            _ => {}
+        }
+        let t = i as f64 / 48_000.0;
+        let x = (0.08 * (std::f64::consts::TAU * 997.0 * t).sin()) as f32;
+        let output = processor.process([x, x]);
+        if i > 1 {
+            maximum_step = maximum_step
+                .max((output[0] - previous[0]).abs())
+                .max((output[1] - previous[1]).abs());
+        }
+        previous = output;
+    }
+    assert!(
+        maximum_step < 0.02,
+        "rapid balance changes produced a click-sized sample step: {maximum_step}"
+    );
+    assert!(
+        processor.level_match_makeup_db().abs() < 0.05,
+        "rapid balance changes left stale Level Match makeup: {:.3} dB",
+        processor.level_match_makeup_db()
+    );
+}
