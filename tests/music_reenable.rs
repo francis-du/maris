@@ -89,3 +89,46 @@ fn bass_assist_reenable_starts_from_fresh_filter_history_after_disable() {
         }
     }
 }
+
+#[test]
+fn dynamic_eq_reenable_starts_from_fresh_detector_history_after_disable() {
+    let enabled = MusicProfile {
+        softness: 1.0,
+        level_match: false,
+        adaptive: maris::music::AdaptiveEq { enabled: true, strength: 1.0 },
+        ..MusicProfile::default()
+    };
+    let mut disabled = enabled.clone();
+    disabled.adaptive.enabled = false;
+
+    let enabled_settings = enabled.compile(48_000).unwrap();
+    let disabled_settings = disabled.compile(48_000).unwrap();
+    let mut processor = maris::music::Processor::new(enabled_settings);
+    for i in 0..48_000 {
+        let x = 0.35 * (std::f64::consts::TAU * 8_500.0 * i as f64 / 48_000.0).sin();
+        let _ = processor.process([x, x]);
+    }
+
+    processor = processor.retune(disabled_settings);
+    for i in 0..24_000 {
+        let x = 0.04 * (std::f64::consts::TAU * 900.0 * i as f64 / 48_000.0).sin();
+        let y = processor.process([x, x]);
+        assert!((y[0] - x).abs() < 1e-10 && (y[1] - x).abs() < 1e-10);
+    }
+
+    processor = processor.retune(enabled_settings);
+    let mut fresh = maris::music::Processor::new(enabled_settings);
+    for i in 0..4_096 {
+        let x = 0.08 * (std::f64::consts::TAU * 8_500.0 * i as f64 / 48_000.0).sin();
+        let actual = processor.process([x, x]);
+        let expected = fresh.process([x, x]);
+        for channel in 0..2 {
+            assert!(
+                (actual[channel] - expected[channel]).abs() < 1e-9,
+                "re-enabled Dynamic EQ replayed stale detector history: actual={} fresh={}",
+                actual[channel],
+                expected[channel]
+            );
+        }
+    }
+}
