@@ -138,3 +138,52 @@ fn output_rebind_makeup_dezipper_is_sample_rate_invariant() {
         );
     }
 }
+
+
+#[test]
+fn output_rebind_preserves_limiter_safety_state() {
+    const RATE: u32 = 48_000;
+
+    let eq = Profile::default();
+    let deep = Settings::compile(&eq, RATE)
+        .unwrap()
+        .with_music(&music(-24.0), RATE)
+        .unwrap();
+    let flat = Settings::compile(&eq, RATE)
+        .unwrap()
+        .with_music(&music(0.0), RATE)
+        .unwrap();
+    let mut processor = Processor::new(deep);
+
+    for i in 0..24_000 {
+        let x = (4.0 * (std::f64::consts::TAU * 997.0 * i as f64 / RATE as f64).sin()) as f32;
+        let output = processor.process([x, -x]);
+        assert!(output.iter().all(|sample| sample.abs() <= 0.891_252));
+    }
+    assert!(
+        processor.limiter_reduction_db() > 5.0,
+        "fixture did not engage limiter strongly"
+    );
+
+    let mut previous_makeup = processor.level_match_makeup_db();
+    let mut maximum_makeup_step = 0.0_f64;
+    for target in [flat, deep] {
+        processor.update(target);
+        for i in 0..RATE as usize / 20 {
+            let x =
+                (0.1 * (std::f64::consts::TAU * 997.0 * i as f64 / RATE as f64).sin()) as f32;
+            let output = processor.process([x, -x]);
+            assert!(output
+                .iter()
+                .all(|sample| sample.is_finite() && sample.abs() <= 0.891_252));
+            let makeup = processor.level_match_makeup_db();
+            maximum_makeup_step =
+                maximum_makeup_step.max((makeup - previous_makeup).abs());
+            previous_makeup = makeup;
+        }
+    }
+    assert!(
+        maximum_makeup_step < 0.08,
+        "limiter-active output rebind stepped Level Match telemetry by {maximum_makeup_step:.4} dB/sample"
+    );
+}
