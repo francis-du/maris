@@ -183,9 +183,11 @@ jobs:
           add_cleanup_asset() {
             local candidate="$1"
             local asset
-            for asset in "${cleanup_assets[@]}"; do
-              [ "$asset" = "$candidate" ] && return
-            done
+            if [ "${#cleanup_assets[@]}" -gt 0 ]; then
+              for asset in "${cleanup_assets[@]}"; do
+                [ "$asset" = "$candidate" ] && return
+              done
+            fi
             cleanup_assets+=("$candidate")
           }
 
