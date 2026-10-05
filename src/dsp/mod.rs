@@ -405,7 +405,7 @@ impl Processor {
             self.active.adaptive_reduction_db()
         }
     }
-    fn level_match_blend(&self) -> f64 {
+    fn level_match_blend_at(&self, t: f64) -> f64 {
         let active = if self.active.settings.level_match {
             1.0
         } else {
@@ -419,8 +419,15 @@ impl Processor {
         } else {
             0.0
         };
-        let t = 1.0 - self.remaining as f64 / self.total as f64;
         active * (1.0 - t) + next * t
+    }
+    fn level_match_blend(&self) -> f64 {
+        let t = if self.remaining == 0 {
+            1.0
+        } else {
+            1.0 - self.remaining as f64 / self.total as f64
+        };
+        self.level_match_blend_at(t)
     }
     pub(crate) fn settings_pending(&self) -> bool {
         self.remaining > 0 || self.pending.is_some()
@@ -445,12 +452,18 @@ impl Processor {
         -20.0 * self.limiter_gain.clamp(1e-12, 1.0).log10()
     }
     pub fn process(&mut self, input: [f32; 2]) -> [f32; 2] {
-        let match_blend = self.level_match_blend();
         let transitioning = self.remaining > 0;
+        // Each processed transition frame consumes one step. The last transition frame
+        // must be audibly at t=1.0 before settings_pending() can become false.
         let transition_t = if self.remaining == 0 {
             1.0
         } else {
-            1.0 - self.remaining as f64 / self.total as f64
+            1.0 - self.remaining.saturating_sub(1) as f64 / self.total as f64
+        };
+        let match_blend = if transitioning {
+            self.level_match_blend_at(transition_t)
+        } else {
+            self.level_match_blend()
         };
         let active_settings = self.active.settings;
         let mut y = self.active.frame(input);
@@ -459,7 +472,7 @@ impl Processor {
         let mut pending_after_frame = None;
         if self.remaining > 0 {
             let other = self.next.frame(input);
-            let t = 1.0 - self.remaining as f64 / self.total as f64;
+            let t = transition_t;
             // Warm the residual matcher against the incoming chain itself. Measuring
             // the temporary old/new mixture biases the detector toward the outgoing
             // spectrum and carries stale attenuation into the completed retune.
