@@ -269,11 +269,15 @@ impl Chain {
         for (low, sample) in self.low.iter_mut().zip(v) {
             *low += s.lowpass * (sample - *low);
         }
+        // Crossfeed should redistribute only the low-frequency side component.
+        // The previous convex mix divided the entire direct signal by (1 + amount),
+        // which audibly colored mono/center and attenuated high frequencies even though
+        // no high-frequency crossfeed was being added. Use the same low-frequency
+        // isolated-channel cross-ear ratio while preserving mono and direct highs.
+        let cross = s.crossfeed / (1.0 + s.crossfeed);
+        let low_delta = self.low[1] - self.low[0];
         self.music
-            .process([
-                (v[0] + s.crossfeed * self.low[1]) / (1.0 + s.crossfeed),
-                (v[1] + s.crossfeed * self.low[0]) / (1.0 + s.crossfeed),
-            ])
+            .process([v[0] + cross * low_delta, v[1] - cross * low_delta])
             .map(|sample| sample * static_makeup)
     }
     fn adaptive_reduction_db(&self) -> f64 {
