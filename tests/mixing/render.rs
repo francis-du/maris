@@ -331,6 +331,78 @@ fn rapid_solo_reversal_stays_continuous_and_commits_only_latest_revision() {
 }
 
 #[test]
+fn same_block_updates_coalesce_to_latest_revision_without_intermediate_audio() {
+    let mut config = config();
+    config.strips[1].sends = [1.0, 0.0];
+    let mut f = Fixture::new(&config);
+    f.fill((0..7000).map(|_| [[0.1, 0.1], [0.2, 0.2]]));
+    f.graph.begin_block();
+    for _ in 0..1500 {
+        let _ = f.graph.frame();
+        f.secondary.pop();
+    }
+    assert_eq!(f.revision.load(Ordering::Acquire), 1);
+
+    let mut obsolete = config.clone();
+    obsolete.strips[1].solo = true;
+    let mut latest = config.clone();
+    latest.strips[0].solo = true;
+    f.changes
+        .push(render::Update::compile(&obsolete, 2, 48_000).unwrap())
+        .ok()
+        .unwrap();
+    f.changes
+        .push(render::Update::compile(&latest, 3, 48_000).unwrap())
+        .ok()
+        .unwrap();
+
+    f.graph.begin_block();
+    let first = f.graph.frame().0[0];
+    f.secondary.pop();
+    assert!(
+        first < 0.3 && first > 0.299,
+        "latest coalesced target did not begin from the current mix: {first}"
+    );
+    assert_eq!(
+        f.revision.load(Ordering::Acquire),
+        1,
+        "an update was acknowledged before the coalesced ramp settled"
+    );
+
+    let mut previous = first;
+    for i in 0..1198 {
+        let current = f.graph.frame().0[0];
+        f.secondary.pop();
+        assert!(
+            current <= previous + 1e-6,
+            "coalesced latest target reversed direction at frame {i}: previous={previous} current={current}"
+        );
+        assert!(
+            (current - previous).abs() < 0.002,
+            "coalesced latest target stepped at frame {i}: previous={previous} current={current}"
+        );
+        assert_eq!(
+            f.revision.load(Ordering::Acquire),
+            1,
+            "obsolete or latest revision committed before ramp completion at frame {i}"
+        );
+        previous = current;
+    }
+
+    let settled = f.graph.frame().0[0];
+    f.secondary.pop();
+    assert!(
+        (settled - 0.1).abs() < 0.001,
+        "renderer did not settle directly on the newest same-block target: {settled}"
+    );
+    assert_eq!(
+        f.revision.load(Ordering::Acquire),
+        3,
+        "renderer acknowledged an obsolete same-block update instead of the latest revision"
+    );
+}
+
+#[test]
 fn strip_eq_revision_waits_for_the_strip_dsp_crossfade() {
     let mut config = config();
     let mut f = Fixture::new(&config);
