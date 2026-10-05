@@ -93,3 +93,48 @@ fn bidirectional_output_rebind_keeps_loudness_and_makeup_telemetry_smooth() {
         "output rebind stepped Level Match telemetry by {maximum_makeup_step:.4} dB/sample"
     );
 }
+
+
+fn maximum_rebind_makeup_step(rate: u32) -> f64 {
+    let eq = Profile::default();
+    let deep = Settings::compile(&eq, rate)
+        .unwrap()
+        .with_music(&music(-24.0), rate)
+        .unwrap();
+    let flat = Settings::compile(&eq, rate)
+        .unwrap()
+        .with_music(&music(0.0), rate)
+        .unwrap();
+    let mut processor = Processor::new(deep);
+    for i in 0..rate as usize * 2 {
+        let x =
+            (0.05 * (std::f64::consts::TAU * 997.0 * i as f64 / rate as f64).sin()) as f32;
+        let _ = processor.process([x, x]);
+    }
+
+    let mut maximum_step = 0.0_f64;
+    let mut previous = processor.level_match_makeup_db();
+    for target in [flat, deep] {
+        processor.update(target);
+        for i in 0..rate as usize / 10 {
+            let x =
+                (0.05 * (std::f64::consts::TAU * 997.0 * i as f64 / rate as f64).sin()) as f32;
+            let _ = processor.process([x, x]);
+            let makeup = processor.level_match_makeup_db();
+            maximum_step = maximum_step.max((makeup - previous).abs());
+            previous = makeup;
+        }
+    }
+    maximum_step
+}
+
+#[test]
+fn output_rebind_makeup_dezipper_is_sample_rate_invariant() {
+    for rate in [44_100, 48_000, 96_000, 192_000] {
+        let maximum_step = maximum_rebind_makeup_step(rate);
+        assert!(
+            maximum_step < 0.03,
+            "{rate} Hz output rebind stepped Level Match telemetry by {maximum_step:.5} dB/sample"
+        );
+    }
+}
