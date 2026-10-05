@@ -128,6 +128,7 @@ pub(super) struct Graph {
     updates: Arc<ArrayQueue<Update>>,
     revision: Arc<AtomicU64>,
     pending_revision: Option<u64>,
+    pending_send_overruns: [u64; BUS_COUNT],
     observed_callback_epoch: u64,
 }
 impl Graph {
@@ -162,6 +163,7 @@ impl Graph {
             updates,
             revision,
             pending_revision: None,
+            pending_send_overruns: [0; BUS_COUNT],
             observed_callback_epoch: 0,
         })
     }
@@ -202,6 +204,16 @@ impl Graph {
             self.revision.store(revision, Ordering::Release);
         }
     }
+    pub fn end_block(&mut self) {
+        for bus in 0..BUS_COUNT {
+            let dropped = std::mem::take(&mut self.pending_send_overruns[bus]);
+            if dropped != 0 {
+                self.send_metrics[bus]
+                    .overruns
+                    .fetch_add(dropped, Ordering::Relaxed);
+            }
+        }
+    }
     pub fn frame(&mut self) -> ([f32; 2], bool) {
         let callback_epoch = self.send_metrics[self.primary]
             .callback_discontinuities
@@ -238,9 +250,7 @@ impl Graph {
             if ready {
                 if let Some(queue) = &self.sends[bus] {
                     if queue.push(frame.map(|v| v as f32)).is_err() {
-                        self.send_metrics[bus]
-                            .overruns
-                            .fetch_add(1, Ordering::Relaxed);
+                        self.pending_send_overruns[bus] += 1;
                     }
                 }
             }

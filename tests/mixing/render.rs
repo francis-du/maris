@@ -157,6 +157,25 @@ fn each_source_is_consumed_once_and_output_buses_remain_independent() {
 }
 
 #[test]
+fn secondary_send_overruns_are_batched_per_block_without_losing_frames() {
+    let mut f = Fixture::new(&config());
+    // Fill the normal queue so every additional secondary frame is dropped.
+    while f.secondary.push([0.0; 2]).is_ok() {}
+    f.fill((0..8).map(|_| [[0.1; 2], [0.2; 2]]));
+    f.graph.begin_block();
+    for _ in 0..8 {
+        let _ = f.graph.frame();
+    }
+    assert_eq!(
+        f.meters[1].overruns.load(Ordering::Relaxed),
+        0,
+        "send-overrun telemetry was updated per frame instead of at the block boundary"
+    );
+    f.graph.end_block();
+    assert_eq!(f.meters[1].overruns.load(Ordering::Relaxed), 8);
+}
+
+#[test]
 fn configured_bus_delay_is_bounded_and_does_not_delay_the_other_bus() {
     let mut config = config();
     config.buses[1].delay_ms = 1.0;

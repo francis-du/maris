@@ -691,6 +691,7 @@ fn master_typed<T: SizedSample + FromSample<f32>>(
         move |data: &mut [T], _| {
             graph.begin_block();
             renderer.render(data, channels, || graph.frame());
+            graph.end_block();
         },
         move |_| {
             bridge::output_stream_error(&metrics);
