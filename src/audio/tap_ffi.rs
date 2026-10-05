@@ -227,6 +227,20 @@ pub fn default_output() -> Result<u32> {
 pub fn device_ids() -> Result<Vec<u32>> {
     unsafe { property_vec_u32(1, b"dev#") }
 }
+pub fn output_stream_ids(device: u32) -> Result<Vec<u32>> {
+    unsafe { property_vec_u32_scope(device, b"stm#", b"outp") }
+}
+pub fn single_stereo_output_device_uid(device: u32) -> Result<Option<String>> {
+    let streams = output_stream_ids(device)?;
+    if streams.len() != 1 {
+        return Ok(None);
+    }
+    let format: Format = unsafe { property(streams[0], b"sfmt")? };
+    if !(1..=2).contains(&format.channels) {
+        return Ok(None);
+    }
+    Ok(Some(device_uid(device)?))
+}
 pub fn output_device_ids() -> Result<Vec<u32>> {
     let mut result = Vec::new();
     for device in device_ids()? {

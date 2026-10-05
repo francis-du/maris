@@ -7,6 +7,7 @@ use objc2::{
     msg_send,
     rc::{Allocated, Retained},
     runtime::{AnyClass, AnyObject},
+    sel,
 };
 use objc2_foundation::{NSNumber, NSString};
 use std::{
@@ -125,9 +126,25 @@ pub(super) struct TapCapture {
     listeners: Vec<(u32, ca::Address)>,
     pub rate: u32,
 }
+fn scoped_initializer_supported(class: &AnyClass, selected: bool) -> bool {
+    if selected {
+        class.responds_to(sel!(initWithProcesses:andDeviceUID:withStream:))
+    } else {
+        class.responds_to(sel!(initExcludingProcesses:andDeviceUID:withStream:))
+    }
+}
+
 impl TapCapture {
     pub fn prepare(queue: Arc<ArrayQueue<[f32; 2]>>, metrics: Arc<Metrics>) -> Result<Self> {
-        Self::prepare_scope(queue, metrics, None)
+        Self::prepare_scope(queue, metrics, None, None)
+    }
+
+    pub fn prepare_for_output(
+        queue: Arc<ArrayQueue<[f32; 2]>>,
+        metrics: Arc<Metrics>,
+        device_uid: &str,
+    ) -> Result<Self> {
+        Self::prepare_scope(queue, metrics, None, Some((device_uid, 0)))
     }
 
     pub fn prepare_processes(
@@ -136,13 +153,24 @@ impl TapCapture {
         processes: &[u32],
     ) -> Result<Self> {
         validate_processes(processes)?;
-        Self::prepare_scope(queue, metrics, Some(processes))
+        Self::prepare_scope(queue, metrics, Some(processes), None)
+    }
+
+    pub fn prepare_processes_for_output(
+        queue: Arc<ArrayQueue<[f32; 2]>>,
+        metrics: Arc<Metrics>,
+        processes: &[u32],
+        device_uid: &str,
+    ) -> Result<Self> {
+        validate_processes(processes)?;
+        Self::prepare_scope(queue, metrics, Some(processes), Some((device_uid, 0)))
     }
 
     fn prepare_scope(
         queue: Arc<ArrayQueue<[f32; 2]>>,
         metrics: Arc<Metrics>,
         processes: Option<&[u32]>,
+        output: Option<(&str, usize)>,
     ) -> Result<Self> {
         let api = ca::TapApi::load()?;
         let own = ca::own_process()?;
@@ -158,13 +186,35 @@ impl TapCapture {
             ca::append(&listed, &NSNumber::new_u32(own));
             false
         };
-        // SAFETY: selectors and NSInteger/BOOL types follow CATapDescription.h.
+        // Apple's device/stream-scoped initializers were publicly usable only from
+        // macOS 14.5 despite earlier SDK availability annotations. Probe the Objective-C
+        // runtime so the supported 14.2-14.4 range safely retains the global-tap fallback.
+        let output = output.filter(|_| scoped_initializer_supported(class, selected));
+        // SAFETY: selectors and NSInteger/BOOL types follow CATapDescription.h and the
+        // scoped selectors are sent only after the runtime confirms their availability.
+        // When one unambiguous stereo output stream is known, bind capture to that
+        // stream instead of asking CoreAudio to perform a global stereo mixdown.
         let description: Retained<AnyObject> = unsafe {
             let allocated: Allocated<AnyObject> = msg_send![class, alloc];
-            if selected {
-                msg_send![allocated, initStereoMixdownOfProcesses: &*listed]
-            } else {
-                msg_send![allocated, initStereoGlobalTapButExcludeProcesses: &*listed]
+            match (selected, output) {
+                (true, Some((device_uid, stream))) => {
+                    let device_uid = NSString::from_str(device_uid);
+                    msg_send![allocated,
+                        initWithProcesses: &*listed,
+                        andDeviceUID: &*device_uid,
+                        withStream: stream as isize]
+                }
+                (false, Some((device_uid, stream))) => {
+                    let device_uid = NSString::from_str(device_uid);
+                    msg_send![allocated,
+                        initExcludingProcesses: &*listed,
+                        andDeviceUID: &*device_uid,
+                        withStream: stream as isize]
+                }
+                (true, None) => msg_send![allocated, initStereoMixdownOfProcesses: &*listed],
+                (false, None) => {
+                    msg_send![allocated, initStereoGlobalTapButExcludeProcesses: &*listed]
+                }
             }
         };
         unsafe {
@@ -544,6 +594,13 @@ mod tests;
 #[cfg(test)]
 mod topology_tests {
     use super::*;
+
+    #[test]
+    fn unsupported_scoped_tap_initializers_fall_back_before_message_send() {
+        let class = AnyClass::get(c"NSObject").expect("NSObject is always available");
+        assert!(!scoped_initializer_supported(class, true));
+        assert!(!scoped_initializer_supported(class, false));
+    }
 
     #[test]
     fn only_system_device_list_notifications_force_topology_rebuild() {
