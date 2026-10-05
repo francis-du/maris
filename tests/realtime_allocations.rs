@@ -128,3 +128,54 @@ fn music_processor_steady_state_does_not_heap_allocate() {
         "music processing allocated on the callback path"
     );
 }
+
+#[test]
+fn rapid_queued_retunes_do_not_heap_allocate() {
+    let profile = Profile::default();
+    let base_music = MusicProfile::preset("warm").unwrap();
+    let mut second_music = MusicProfile::preset("detail").unwrap();
+    second_music.virtual_surround = 0.6;
+    let mut third_music = MusicProfile::preset("natural").unwrap();
+    third_music.bass_assist.enabled = true;
+    third_music.bass_assist.amount = 0.4;
+
+    let base = Settings::compile(&profile, 48_000)
+        .unwrap()
+        .with_music(&base_music, 48_000)
+        .unwrap();
+    let second = Settings::compile(&profile, 48_000)
+        .unwrap()
+        .with_music(&second_music, 48_000)
+        .unwrap();
+    let third = Settings::compile(&profile, 48_000)
+        .unwrap()
+        .with_music(&third_music, 48_000)
+        .unwrap();
+
+    let mut processor = Processor::new(base);
+    let allocations = allocations_during(|| {
+        processor.update(second);
+        for i in 0..320 {
+            let x = (0.08 * (std::f64::consts::TAU * 1_100.0 * i as f64 / 48_000.0).sin()) as f32;
+            std::hint::black_box(processor.process([x, -x * 0.25]));
+        }
+
+        processor.update(base);
+        for i in 0..240 {
+            let x = (0.08 * (std::f64::consts::TAU * 1_100.0 * i as f64 / 48_000.0).sin()) as f32;
+            std::hint::black_box(processor.process([x, -x * 0.25]));
+        }
+
+        processor.update(second);
+        processor.update(third);
+        for i in 0..4_096 {
+            let x = (0.08 * (std::f64::consts::TAU * 1_100.0 * i as f64 / 48_000.0).sin()) as f32;
+            std::hint::black_box(processor.process([x, -x * 0.25]));
+        }
+    });
+
+    assert_eq!(
+        allocations, 0,
+        "rapid/reversed/queued retunes allocated on the callback path"
+    );
+}
