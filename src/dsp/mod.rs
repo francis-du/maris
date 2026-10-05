@@ -53,6 +53,7 @@ pub struct Settings {
     level_match: bool,
     match_meter: f64,
     match_slew: f64,
+    match_transition_slew: f64,
     match_pre_filter: crate::dsp::tone::Biquad,
     match_rlb_filter: crate::dsp::tone::Biquad,
     crossfeed: f64,
@@ -143,6 +144,11 @@ impl Settings {
             level_match: false,
             match_meter: (-1.0 / (rate as f64 * 1.5)).exp(),
             match_slew: (-1.0 / (rate as f64 * 0.25)).exp(),
+            // Retunes already have an audible crossfade, but detector-driven target gain can
+            // still move sharply inside that envelope. A faster 10 ms slew prevents per-frame
+            // gain jumps without making a 120 ms settings transition wait on the 250 ms
+            // steady-state matcher.
+            match_transition_slew: (-1.0 / (rate as f64 * 0.010)).exp(),
             // Approximate the BS.1770 K-weighting detector with the standard pre-filter
             // and RLB corner parameters, compiled through the existing allocation-free
             // RBJ biquads. This keeps the audio callback real-time safe while making Level
@@ -532,9 +538,8 @@ impl Processor {
                 1.0
             };
             if transitioning {
-                // The settings crossfade already smooths this path; extra gain slew here
-                // only delays loudness correction while the incoming chain is becoming audible.
-                self.match_gain = desired_match;
+                self.match_gain = settings.match_transition_slew * self.match_gain
+                    + (1.0 - settings.match_transition_slew) * desired_match;
             } else {
                 self.match_gain = settings.match_slew * self.match_gain
                     + (1.0 - settings.match_slew) * desired_match;
