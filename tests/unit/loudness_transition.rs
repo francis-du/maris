@@ -962,7 +962,7 @@ fn one_millisecond_effect_updates_do_not_pump_short_window_loudness() {
         let mut output_power = 0.0_f64;
         for offset in 0..WINDOW {
             let absolute = index + offset;
-            if absolute % interval == 0 {
+            if absolute.is_multiple_of(interval) {
                 processor.update(settings[next]);
                 next = (next + 1) % settings.len();
             }
