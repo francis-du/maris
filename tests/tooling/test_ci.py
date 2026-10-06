@@ -198,7 +198,20 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIsNotNone(block)
         script = '\n'.join(line[10:] for line in block[1].splitlines())
         cargo = (ROOT / 'Cargo.toml').read_text(encoding='utf-8')
-        version = re.search(r'^version = "([0-9]+\\.[0-9]+\\.[0-9]+)"            [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script],
+        version = re.search(
+            r'^version = "([0-9]+[.][0-9]+[.][0-9]+)"$',
+            cargo,
+            re.MULTILINE,
+        )
+        self.assertIsNotNone(version)
+        release_tag = f'v{version[1]}'
+        base = dict(
+            os.environ,
+            RELEASE_TAG=release_tag,
+            GITHUB_REF=f'refs/tags/{release_tag}',
+        )
+        result = subprocess.run(
+            [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script],
             cwd=ROOT,
             env=base,
             capture_output=True,
@@ -207,9 +220,11 @@ class ToolchainRequirements(unittest.TestCase):
             timeout=10,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        for tag, ref in [('v999.999.999', 'refs/tags/v999.999.999'),
-                         (f'release-{version[1]}', f'refs/tags/release-{version[1]}'),
-                         (release_tag, 'refs/tags/v999.999.999')]:
+        for tag, ref in [
+            ('v999.999.999', 'refs/tags/v999.999.999'),
+            (f'release-{version[1]}', f'refs/tags/release-{version[1]}'),
+            (release_tag, 'refs/tags/v999.999.999'),
+        ]:
             with self.subTest(tag=tag, ref=ref):
                 environment = dict(base, RELEASE_TAG=tag, GITHUB_REF=ref)
                 result = subprocess.run(
