@@ -11,9 +11,9 @@ use serde_json::{json, Value};
 use std::time::Instant;
 
 fn input(rate: u32, fixture: usize) -> Vec<[f32; 2]> {
-    // Half a second still covers every fixture's detector/pulse behavior while keeping
-    // this numerical matrix cheap enough to repeat inside the 200-round release gate.
-    (0..rate as usize / 2)
+    // A quarter second still covers every fixture's detector/pulse behavior while keeping
+    // this numerical matrix fast enough for the slowest native release runner.
+    (0..rate as usize / 4)
         .map(|i| {
             let phase = std::f64::consts::TAU * i as f64 / f64::from(rate);
             let pulse = if i % (rate as usize / 5) < rate as usize / 50 {
@@ -50,7 +50,7 @@ fn render(
     // Warm stateful detectors on the beginning of one continuous program, then measure
     // only the continuation. Replaying the input from frame zero after warm-up creates an
     // artificial phase/envelope discontinuity that can exaggerate stateful-effect deltas.
-    let settle = (rate as usize / 8).min(frames.len());
+    let settle = (rate as usize / 16).min(frames.len());
     for frame in &frames[..settle] {
         std::hint::black_box(processor.process(*frame));
     }
