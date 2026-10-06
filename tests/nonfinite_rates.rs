@@ -43,8 +43,7 @@ fn nonfinite_frames_cannot_poison_level_match_across_sample_rates() {
         }
 
         for i in 0..rate as usize * 2 {
-            let x =
-                (0.03 * (std::f64::consts::TAU * 997.0 * i as f64 / rate as f64).sin()) as f32;
+            let x = (0.03 * (std::f64::consts::TAU * 997.0 * i as f64 / rate as f64).sin()) as f32;
             let output = processor.process([x, -0.7 * x]);
             assert!(output
                 .iter()
