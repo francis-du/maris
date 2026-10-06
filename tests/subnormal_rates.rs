@@ -59,3 +59,4 @@ fn subnormal_history_cannot_poison_next_program_across_sample_rates() {
         );
     }
 }
+
