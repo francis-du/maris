@@ -57,7 +57,6 @@ fn virtual_surround_still_decorrelates_high_frequency_side() {
     }
 }
 
-
 fn proportional_pan_shift_db(rate: u32, hz: f64) -> f64 {
     let base = MusicProfile {
         level_match: false,
