@@ -129,7 +129,7 @@ pub fn report(rates: &[u32]) -> Result<Value> {
             .enumerate()
         {
             let frames = input(rate, fixture);
-            let (reference, _) = render(&base_eq, &base_music, rate, &frames)?;
+            let (reference, reference_elapsed) = render(&base_eq, &base_music, rate, &frames)?;
             let reference_rms = rms(&reference);
             for removed in names {
                 let mut eq = base_eq.clone();
@@ -160,8 +160,16 @@ pub fn report(rates: &[u32]) -> Result<Value> {
                     "without_crossfeed" => eq.crossfeed = 0.0,
                     _ => {}
                 }
-                let (output, elapsed) = render(&eq, &music, rate, &frames)?;
-                let output_rms = rms(&output);
+                let rendered = if removed == "reference" {
+                    None
+                } else {
+                    Some(render(&eq, &music, rate, &frames)?)
+                };
+                let (output, elapsed) = match rendered.as_ref() {
+                    Some((output, elapsed)) => (output, *elapsed),
+                    None => (&reference, reference_elapsed),
+                };
+                let output_rms = rms(output);
                 // Normalize only the reported numerical difference, never a played audio path.
                 let scale = reference_rms / output_rms.max(1e-12);
                 let difference = (reference
