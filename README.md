@@ -12,7 +12,7 @@ Developed with **Wcode**.
 
 For more detailed setups, the mixer connects multiple inputs to two separate outputs, with volume, EQ and compression for each channel. The command-line and MCP interfaces let other programs read status or make approved changes.
 
-> **CLI/TUI 0.1.0 release preparation.** Native paths are implemented for macOS, Windows and Linux. The first command-line distribution requires exact-source native builds, archive checksums and installation/upgrade evidence. Physical-device and subjective listening acceptance remain unverified; GUI signing uses a separate distribution contract.
+> **CLI/TUI 0.2.0 release preparation.** Native paths are implemented for macOS, Windows and Linux. The first command-line distribution requires exact-source native builds, archive checksums and installation/upgrade evidence. Physical-device and subjective listening acceptance remain unverified; GUI signing uses a separate distribution contract.
 
 ## Install
 
