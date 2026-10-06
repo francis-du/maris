@@ -1,6 +1,6 @@
 # Maris をインストールする
 
-0.1.0 は CLI/TUI のビルド済みアーカイブを配布します。配布者署名済みとは表示しません。導入時にはネイティブ実行形式、公開一覧と SHA-256 を検証し、GUI アプリの署名は別の配布条件として扱います。実機のヘッドフォン・Bluetooth と主観的な聴感の確認は未完了です。プロジェクトのライセンス宣言がなければ、その事実を記録し、独自にオープンソースの許諾を追加しません。
+0.2.0 は CLI/TUI のビルド済みアーカイブを配布します。配布者署名済みとは表示しません。導入時にはネイティブ実行形式、公開一覧と SHA-256 を検証し、GUI アプリの署名は別の配布条件として扱います。実機のヘッドフォン・Bluetooth と主観的な聴感の確認は未完了です。プロジェクトのライセンス宣言がなければ、その事実を記録し、独自にオープンソースの許諾を追加しません。
 
 インストーラーは、このコンピューター用にコンパイルされたアプリをダウンロードします。ソースコードや Rust、Cargo、Xcode、C++ コンパイラーは不要です。ソースからのビルドは開発者が選ぶ別の操作です。ダウンロードに失敗した場合はインストールを止めます。
 
@@ -26,13 +26,13 @@ irm https://maris.francis.run/install.ps1 | iex
 
 ```sh
 bash install.sh --dry-run
-bash install.sh --version v0.1.0 --yes
+bash install.sh --version v0.2.0 --yes
 bash install.sh --prefix "$HOME/Audio Tools" --yes
 ```
 
 ```powershell
 .\install.ps1 -DryRun
-.\install.ps1 -Version v0.1.0 -Yes
+.\install.ps1 -Version v0.2.0 -Yes
 .\install.ps1 -Prefix "$env:LOCALAPPDATA\Programs\Audio Tools" -Yes
 ```
 
