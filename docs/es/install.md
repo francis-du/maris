@@ -1,6 +1,6 @@
 # Instalar Maris
 
-La versión 0.1.0 distribuye archivos CLI/TUI precompilados sin afirmar que tienen firma del editor. El instalador valida el ejecutable nativo, el manifiesto de publicación y SHA-256; la firma de aplicaciones GUI pertenece a otro contrato de distribución. Los auriculares físicos, Bluetooth y la aceptación auditiva subjetiva siguen sin verificar. Si el proyecto no declara licencia, el archivo registra ese estado sin añadir una autorización de código abierto.
+La versión 0.2.0 distribuye archivos CLI/TUI precompilados sin afirmar que tienen firma del editor. El instalador valida el ejecutable nativo, el manifiesto de publicación y SHA-256; la firma de aplicaciones GUI pertenece a otro contrato de distribución. Los auriculares físicos, Bluetooth y la aceptación auditiva subjetiva siguen sin verificar. Si el proyecto no declara licencia, el archivo registra ese estado sin añadir una autorización de código abierto.
 
 El instalador descarga el programa ya compilado para tu equipo. No necesitas el código fuente, Rust, Cargo, Xcode ni un compilador C++. Compilar por tu cuenta es una opción aparte para desarrolladores. Si la descarga falla, la instalación se detiene.
 
@@ -26,13 +26,13 @@ Revisa el script y confía solo en la fuente del proyecto y el editor aprobado. 
 
 ```sh
 bash install.sh --dry-run
-bash install.sh --version v0.1.0 --yes
+bash install.sh --version v0.2.0 --yes
 bash install.sh --prefix "$HOME/Audio Tools" --yes
 ```
 
 ```powershell
 .\install.ps1 -DryRun
-.\install.ps1 -Version v0.1.0 -Yes
+.\install.ps1 -Version v0.2.0 -Yes
 .\install.ps1 -Prefix "$env:LOCALAPPDATA\Programs\Audio Tools" -Yes
 ```
 
