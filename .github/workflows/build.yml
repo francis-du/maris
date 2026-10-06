@@ -11,7 +11,9 @@ permissions:
   contents: read
 concurrency:
   group: artifacts-${{ github.ref }}
-  cancel-in-progress: false
+  # Validation branches are disposable preflight runs; newer source should cancel stale
+  # matrices. Published release/tag builds remain serialized and are never cancelled.
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/heads/release-validation/') }}
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: '0'
