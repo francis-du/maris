@@ -54,17 +54,17 @@ jobs:
             exit 1
           fi
 
-          validation_branch="release-validation/$tag"
           gh api --method GET "repos/$GH_REPO/actions/runs" \
-            -f branch="$validation_branch" \
             -f event=push \
             -f status=success \
             -f per_page=100 > validation-runs.json
           success="$(jq --arg sha "$GITHUB_SHA" \
-            '[.workflow_runs[] | select(.name == "Build application artifacts" and .head_sha == $sha)] | length' \
+            '[.workflow_runs[] | select(.name == "Build application artifacts"
+              and .head_sha == $sha
+              and (.head_branch | startswith("release-validation/")))] | length' \
             validation-runs.json)"
           if [ "$success" -lt 1 ]; then
-            echo "No successful Build application artifacts run for $validation_branch at $GITHUB_SHA" >&2
+            echo "No successful release-validation Build application artifacts run at $GITHUB_SHA" >&2
             exit 1
           fi
 
