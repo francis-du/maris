@@ -1,6 +1,6 @@
 # Installation
 
-Version 0.1.0 distributes CLI/TUI archives. The portable binary is not labeled as publisher-signed. The installer verifies its native executable, release manifest and SHA-256; GUI application signing is a separate distribution contract. Physical headphones/Bluetooth and subjective listening acceptance remain explicitly unverified. If the source has no project license declaration, the archive records that fact without adding an open-source license grant.
+Version 0.2.0 distributes CLI/TUI archives. The portable binary is not labeled as publisher-signed. The installer verifies its native executable, release manifest and SHA-256; GUI application signing is a separate distribution contract. Physical headphones/Bluetooth and subjective listening acceptance remain explicitly unverified. If the source has no project license declaration, the archive records that fact without adding an open-source license grant.
 
 The installer downloads a native package built by GitHub CI. You do not need a source checkout, Rust or a compiler.
 
@@ -29,7 +29,7 @@ To inspect the script first, download [install.sh](https://maris.francis.run/ins
 | Purpose | macOS / Linux | Windows |
 | --- | --- | --- |
 | Show the plan without network or file changes | `bash install.sh --dry-run` | `.\install.ps1 -DryRun` |
-| Install a specific published version | `bash install.sh --version v0.1.0` | `.\install.ps1 -Version v0.1.0` |
+| Install a specific published version | `bash install.sh --version v0.2.0` | `.\install.ps1 -Version v0.2.0` |
 | Choose a user-owned destination | `bash install.sh --prefix "$HOME/Audio Tools"` | `.\install.ps1 -Prefix "$env:LOCALAPPDATA\Programs\Audio Tools"` |
 | Skip the installation question | `bash install.sh --yes` | `.\install.ps1 -Yes` |
 
