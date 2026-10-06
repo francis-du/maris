@@ -1,0 +1,60 @@
+name: Finalize v0.2.0 release source
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/finalize-v020.yml'
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify validated source and retarget empty release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VALIDATED_SHA: 20a4012de804f7cef7df7d18442c7ddd9e2c53b7
+          BUILD_RUN_ID: '37483199427'
+          PUBLISH_RUN_ID: '37491268570'
+          RELEASE_TAG: v0.2.0
+        run: |
+          set -euo pipefail
+
+          build_sha="$(gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN_ID" --jq '.head_sha')"
+          build_conclusion="$(gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN_ID" --jq '.conclusion')"
+          if [ "$build_sha" != "$VALIDATED_SHA" ] || [ "$build_conclusion" != "success" ]; then
+            echo "Validated build identity mismatch: sha=$build_sha conclusion=$build_conclusion" >&2
+            exit 1
+          fi
+
+          release_assets="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets | length')"
+          if [ "$release_assets" != "0" ]; then
+            echo "Refusing to retarget a release that already has assets." >&2
+            exit 1
+          fi
+
+          cargo_version="$(gh api "repos/$GH_REPO/contents/Cargo.toml?ref=$VALIDATED_SHA" --jq '.content' | base64 -d | sed -n 's/^version = "\([^"]*\)"/\1/p' | head -n1)"
+          if [ "v$cargo_version" != "$RELEASE_TAG" ]; then
+            echo "Cargo version/tag mismatch: version=$cargo_version tag=$RELEASE_TAG" >&2
+            exit 1
+          fi
+
+          gh api --method PATCH "repos/$GH_REPO/git/refs/tags/$RELEASE_TAG" \
+            -f sha="$VALIDATED_SHA" \
+            -F force=true >/dev/null
+
+          actual="$(gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
+          if [ "$actual" != "$VALIDATED_SHA" ]; then
+            echo "Tag retarget failed: expected=$VALIDATED_SHA actual=$actual" >&2
+            exit 1
+          fi
+
+          gh api --method POST "repos/$GH_REPO/actions/runs/$PUBLISH_RUN_ID/rerun" >/dev/null
