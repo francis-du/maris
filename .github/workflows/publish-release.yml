@@ -1,0 +1,95 @@
+name: Publish stable release
+
+on:
+  push:
+    branches:
+      - 'release-publish/**'
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: stable-release-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate release source and successful preflight
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          prefix='release-publish/'
+          case "$GITHUB_REF_NAME" in
+            "$prefix"v[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "Publish branch must be release-publish/vX.Y.Z" >&2; exit 1 ;;
+          esac
+          tag="${GITHUB_REF_NAME#$prefix}"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Publish branch must end in vX.Y.Z" >&2
+            exit 1
+          fi
+          version="${tag#v}"
+          cargo_version="$(sed -n 's/^version = "\([0-9][0-9.]*\)"$/\1/p' Cargo.toml | head -n 1)"
+          if [ "$cargo_version" != "$version" ]; then
+            echo "Publish tag $tag does not match Cargo version $cargo_version" >&2
+            exit 1
+          fi
+
+          git fetch --no-tags --depth=1 origin main
+          current_main="$(git rev-parse FETCH_HEAD)"
+          if [ "$GITHUB_SHA" != "$current_main" ]; then
+            echo "release-publish branch must point exactly at current main" >&2
+            exit 1
+          fi
+
+          validation_branch="release-validation/$tag"
+          success="$(gh api "repos/$GH_REPO/actions/runs" \
+            -f branch="$validation_branch" \
+            -f event=push \
+            -f status=success \
+            --jq --arg sha "$GITHUB_SHA" \
+            '[.workflow_runs[] | select(.name == "Build application artifacts" and .head_sha == $sha)] | length')"
+          if [ "$success" -lt 1 ]; then
+            echo "No successful Build application artifacts run for $validation_branch at $GITHUB_SHA" >&2
+            exit 1
+          fi
+
+          git fetch --force --tags origin
+          if git rev-parse "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists" >&2
+            exit 1
+          fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists" >&2
+            exit 1
+          fi
+
+          {
+            echo "RELEASE_TAG=$tag"
+            echo "RELEASE_VERSION=$version"
+          } >> "$GITHUB_ENV"
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" \
+            --target "$GITHUB_SHA" \
+            --title "Maris $RELEASE_VERSION" \
+            --generate-notes \
+            --verify-tag=false
