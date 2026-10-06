@@ -1,6 +1,6 @@
 # 安装 Maris
 
-0.1.0 以 CLI/TUI 预编译归档发行，不宣称程序已获得发行者签名。安装器核对原生可执行文件、正式下载清单与 SHA-256；GUI 应用签名属于另一种发行流程。实体耳机、蓝牙与主观听感仍未完成验收。源码未声明项目许可证时，归档如实记录该状态，不自行添加开源授权。
+0.2.0 以 CLI/TUI 预编译归档发行，不宣称程序已获得发行者签名。安装器核对原生可执行文件、正式下载清单与 SHA-256；GUI 应用签名属于另一种发行流程。实体耳机、蓝牙与主观听感仍未完成验收。源码未声明项目许可证时，归档如实记录该状态，不自行添加开源授权。
 
 安装器下载适合你电脑的安装包，不需要下载源码或安装 Rust、Cargo、Xcode、C++ 编译器。只有开发者主动选择时才会从源码编译；下载失败会停止安装。
 
@@ -26,13 +26,13 @@ irm https://maris.francis.run/install.ps1 | iex
 
 ```sh
 bash install.sh --dry-run
-bash install.sh --version v0.1.0 --yes
+bash install.sh --version v0.2.0 --yes
 bash install.sh --prefix "$HOME/Audio Tools" --yes
 ```
 
 ```powershell
 .\install.ps1 -DryRun
-.\install.ps1 -Version v0.1.0 -Yes
+.\install.ps1 -Version v0.2.0 -Yes
 .\install.ps1 -Prefix "$env:LOCALAPPDATA\Programs\Audio Tools" -Yes
 ```
 
