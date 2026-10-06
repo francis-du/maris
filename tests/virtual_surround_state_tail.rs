@@ -26,11 +26,7 @@ fn assert_state_tail_bounds(rate: u32) {
         let _ = stressed.process([x, -x]);
     }
 
-    let windows = [
-        rate as usize / 100,
-        rate as usize / 20,
-        rate as usize / 10,
-    ];
+    let windows = [rate as usize / 100, rate as usize / 20, rate as usize / 10];
     let mut stressed_power = [[0.0_f64; 2]; 3];
     let mut fresh_power = [[0.0_f64; 2]; 3];
 
