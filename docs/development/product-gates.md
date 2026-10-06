@@ -1,6 +1,6 @@
 # Product checklist
 
-Maris is still in development. This checklist describes full product and GUI acceptance. The scoped CLI/TUI 0.1.0 distribution uses the separate [CLI release contract](releasing.md), which requires native software, packaging and installation evidence while recording physical-device/listening boundaries and unsigned status honestly. It does not mark the following unfinished product checks as complete.
+Maris is still in development. This checklist describes full product and GUI acceptance. The scoped CLI/TUI 0.2.0 distribution uses the separate [CLI release contract](releasing.md), which requires native software, packaging and installation evidence while recording physical-device/listening boundaries and unsigned status honestly. It does not mark the following unfinished product checks as complete.
 
 ## What the app should do
 
