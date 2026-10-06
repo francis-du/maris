@@ -39,9 +39,8 @@ fn subnormal_history_cannot_poison_next_program_across_sample_rates() {
         let mut input_power = 0.0_f64;
         let mut output_power = 0.0_f64;
         for i in 0..rate as usize * 4 {
-            let x = (0.03
-                * (std::f64::consts::TAU * 997.0 * i as f64 / rate as f64).sin())
-                as f32;
+            let x =
+                (0.03 * (std::f64::consts::TAU * 997.0 * i as f64 / rate as f64).sin()) as f32;
             let output = processor.process([x, -x]);
             assert!(output
                 .iter()
