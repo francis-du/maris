@@ -96,7 +96,6 @@ fn virtual_surround_keeps_deep_bass_pan_stable_across_sample_rates() {
     }
 }
 
-
 #[test]
 fn virtual_surround_still_decorrelates_low_mid_side_across_sample_rates() {
     for rate in [44_100, 48_000, 96_000, 192_000] {
