@@ -55,12 +55,14 @@ jobs:
           fi
 
           validation_branch="release-validation/$tag"
-          success="$(gh api "repos/$GH_REPO/actions/runs" \
+          gh api --method GET "repos/$GH_REPO/actions/runs" \
             -f branch="$validation_branch" \
             -f event=push \
             -f status=success \
-            --jq --arg sha "$GITHUB_SHA" \
-            '[.workflow_runs[] | select(.name == "Build application artifacts" and .head_sha == $sha)] | length')"
+            -f per_page=100 > validation-runs.json
+          success="$(jq --arg sha "$GITHUB_SHA" \
+            '[.workflow_runs[] | select(.name == "Build application artifacts" and .head_sha == $sha)] | length' \
+            validation-runs.json)"
           if [ "$success" -lt 1 ]; then
             echo "No successful Build application artifacts run for $validation_branch at $GITHUB_SHA" >&2
             exit 1
@@ -91,5 +93,4 @@ jobs:
           gh release create "$RELEASE_TAG" \
             --target "$GITHUB_SHA" \
             --title "Maris $RELEASE_VERSION" \
-            --generate-notes \
-            --verify-tag=false
+            --generate-notes
