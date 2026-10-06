@@ -1,6 +1,6 @@
 # Maris installieren
 
-Version 0.1.0 verteilt vorkompilierte CLI/TUI-Archive ohne Behauptung einer Herausgebersignatur. Der Installer prüft native Programmdatei, Veröffentlichungsmanifest und SHA-256; GUI-Signaturen gehören zu einem eigenen Verteilungsweg. Physische Kopfhörer, Bluetooth und subjektive Hörabnahme bleiben ungeprüft. Ohne Projektlizenzdeklaration hält das Archiv diesen Status fest, ohne eine Open-Source-Erlaubnis hinzuzufügen.
+Version 0.2.0 verteilt vorkompilierte CLI/TUI-Archive ohne Behauptung einer Herausgebersignatur. Der Installer prüft native Programmdatei, Veröffentlichungsmanifest und SHA-256; GUI-Signaturen gehören zu einem eigenen Verteilungsweg. Physische Kopfhörer, Bluetooth und subjektive Hörabnahme bleiben ungeprüft. Ohne Projektlizenzdeklaration hält das Archiv diesen Status fest, ohne eine Open-Source-Erlaubnis hinzuzufügen.
 
 Der Installer lädt das fertige Programmpaket für deinen Computer. Du brauchst weder den Quellcode noch Rust, Cargo, Xcode oder einen C++-Compiler. Selbst kompilieren ist eine separate Entwickleroption. Wenn der Download fehlschlägt, stoppt die Installation.
 
@@ -26,13 +26,13 @@ Prüfe das Skript und vertraue nur der Projektquelle und dem abgenommenen Heraus
 
 ```sh
 bash install.sh --dry-run
-bash install.sh --version v0.1.0 --yes
+bash install.sh --version v0.2.0 --yes
 bash install.sh --prefix "$HOME/Audio Tools" --yes
 ```
 
 ```powershell
 .\install.ps1 -DryRun
-.\install.ps1 -Version v0.1.0 -Yes
+.\install.ps1 -Version v0.2.0 -Yes
 .\install.ps1 -Prefix "$env:LOCALAPPDATA\Programs\Audio Tools" -Yes
 ```
 
