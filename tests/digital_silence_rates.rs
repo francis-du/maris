@@ -23,8 +23,7 @@ fn digital_silence_releases_residual_makeup_across_sample_rates() {
         );
 
         for i in 0..rate as usize * 4 {
-            let x =
-                (0.02 * (std::f64::consts::TAU * 80.0 * i as f64 / rate as f64).sin()) as f32;
+            let x = (0.02 * (std::f64::consts::TAU * 80.0 * i as f64 / rate as f64).sin()) as f32;
             let _ = processor.process([x, x]);
         }
         let before = processor.level_match_makeup_db();
@@ -73,9 +72,8 @@ fn digital_silence_releases_limiter_state_across_sample_rates() {
         );
 
         for i in 0..(rate as usize / 10).max(4_096) {
-            let x = (4.0
-                * (std::f64::consts::TAU * 1_000.0 * i as f64 / rate as f64).sin())
-                as f32;
+            let x =
+                (4.0 * (std::f64::consts::TAU * 1_000.0 * i as f64 / rate as f64).sin()) as f32;
             let output = processor.process([x, -x]);
             assert!(output
                 .iter()
