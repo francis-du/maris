@@ -53,3 +53,52 @@ fn digital_silence_releases_residual_makeup_across_sample_rates() {
         }
     }
 }
+
+#[test]
+fn digital_silence_releases_limiter_state_across_sample_rates() {
+    for rate in [44_100_u32, 48_000, 96_000, 192_000] {
+        let music = MusicProfile {
+            level_match: true,
+            adaptive: maris::music::AdaptiveEq {
+                enabled: false,
+                strength: 0.0,
+            },
+            ..MusicProfile::default()
+        };
+        let mut processor = Processor::new(
+            Settings::compile(&Profile::default(), rate)
+                .unwrap()
+                .with_music(&music, rate)
+                .unwrap(),
+        );
+
+        for i in 0..(rate as usize / 10).max(4_096) {
+            let x = (4.0
+                * (std::f64::consts::TAU * 1_000.0 * i as f64 / rate as f64).sin())
+                as f32;
+            let output = processor.process([x, -x]);
+            assert!(output
+                .iter()
+                .all(|sample| sample.is_finite() && sample.abs() <= 0.891_252));
+        }
+        let limiter_before = processor.limiter_reduction_db();
+        assert!(
+            limiter_before > 5.0,
+            "{rate} Hz fixture did not establish limiter attenuation: {limiter_before:.3} dB"
+        );
+
+        for _ in 0..rate as usize * 2 {
+            let output = processor.process([0.0, 0.0]);
+            assert!(output.iter().all(|sample| sample.is_finite()));
+        }
+        let limiter_after = processor.limiter_reduction_db();
+        assert!(
+            limiter_after < 0.2,
+            "{rate} Hz valid digital silence did not release limiter: {limiter_after:.3} dB"
+        );
+        assert!(
+            processor.level_match_makeup_db().abs() < 0.2,
+            "{rate} Hz valid digital silence left stale Level Match makeup"
+        );
+    }
+}
