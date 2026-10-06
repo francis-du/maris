@@ -4,7 +4,7 @@
   "audio_started": false,
   "whole_desktop_captured": false,
   "source_sha256": {
-    "Cargo.toml": "490a59fb6bce2e4000d483a717b31d0f9e13306dea4effe3da9a1ecbea3368ea",
+    "Cargo.toml": "91f1ba285450ecdd15f69fa4018cd545bbc3bfb5cd069f372953033d64d536b4",
     "src/ui/desktop/native.rs": "c5932cc6df9aca97e95e979e30d61399d7ff64337556da3b6513fcb82441b335",
     "src/ui/desktop/menu_header.rs": "e76197797c5b66ae0acb5ffe451769a2074172dc27baedc4abcae612f3bca57d",
     "src/ui/desktop/native_mark.rs": "1b721a31705f5690188151921a729b0bd692cb0f90c144ca9482c815e64e91d2",
