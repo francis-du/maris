@@ -101,8 +101,7 @@ fn combined_level_match_and_limiter_state_recovers_without_blast() {
         .unwrap();
     let mut render = RenderState::new(settings, RATE);
     let sample = |index: usize, amplitude: f64| {
-        (amplitude * (std::f64::consts::TAU * 80.0 * index as f64 / f64::from(RATE)).sin())
-            as f32
+        (amplitude * (std::f64::consts::TAU * 80.0 * index as f64 / f64::from(RATE)).sin()) as f32
     };
 
     let mut phase = 0usize;
@@ -117,9 +116,7 @@ fn combined_level_match_and_limiter_state_recovers_without_blast() {
     );
 
     for i in 0..4_096 {
-        let x = (4.0
-            * (std::f64::consts::TAU * 1_000.0 * i as f64 / f64::from(RATE)).sin())
-            as f32;
+        let x = (4.0 * (std::f64::consts::TAU * 1_000.0 * i as f64 / f64::from(RATE)).sin()) as f32;
         let _ = render.frame([x, -x], true, false);
     }
     let limiter_before = render.processor.limiter_reduction_db();
@@ -344,8 +341,7 @@ fn combined_recovery_state_is_sample_rate_invariant() {
             .unwrap();
         let mut render = RenderState::new(settings, rate);
         let low = |index: usize, amplitude: f64| {
-            (amplitude
-                * (std::f64::consts::TAU * 80.0 * index as f64 / f64::from(rate)).sin())
+            (amplitude * (std::f64::consts::TAU * 80.0 * index as f64 / f64::from(rate)).sin())
                 as f32
         };
 
@@ -361,9 +357,8 @@ fn combined_recovery_state_is_sample_rate_invariant() {
         );
 
         for i in 0..(rate as usize / 10).max(4_096) {
-            let x = (4.0
-                * (std::f64::consts::TAU * 1_000.0 * i as f64 / f64::from(rate)).sin())
-                as f32;
+            let x =
+                (4.0 * (std::f64::consts::TAU * 1_000.0 * i as f64 / f64::from(rate)).sin()) as f32;
             let _ = render.frame([x, -x], true, false);
         }
         let limiter_before = render.processor.limiter_reduction_db();
@@ -405,6 +400,70 @@ fn combined_recovery_state_is_sample_rate_invariant() {
             render.processor.limiter_reduction_db() < 0.2,
             "{rate} Hz limiter failed to release after recovery: {:.3} dB",
             render.processor.limiter_reduction_db()
+        );
+    }
+}
+
+#[test]
+fn pending_retune_recovery_envelope_is_sample_rate_invariant() {
+    for rate in [44_100_u32, 48_000, 96_000, 192_000] {
+        let base = Settings::compile(&Profile::default(), rate).unwrap();
+        let target = Settings::compile(
+            &Profile {
+                stereo_width: 0.5,
+                ..Profile::default()
+            },
+            rate,
+        )
+        .unwrap()
+        .with_transition_ms(rate, 120);
+        let mut render = RenderState::new(base, rate);
+
+        for _ in 0..rate / 20 {
+            let _ = render.frame([0.5, -0.25], true, false);
+        }
+        render.processor.update(target);
+        for _ in 0..rate / 500 {
+            let _ = render.frame([0.5, -0.25], true, false);
+        }
+        assert!(render.processor.settings_pending());
+
+        let mut previous = render.previous;
+        let max_step = 2.0 / (rate as f32 * 0.025);
+        for _ in 0..16 {
+            let y = render.frame([0.0, 0.0], false, false);
+            for channel in 0..2 {
+                assert!(
+                    (y[channel] - previous[channel]).abs() <= max_step,
+                    "{rate} Hz gap concealment exceeded output envelope slope"
+                );
+            }
+            previous = y;
+        }
+
+        for _ in 0..rate / 20 {
+            let y = render.frame([-0.5, 0.25], true, false);
+            for channel in 0..2 {
+                assert!(
+                    (y[channel] - previous[channel]).abs() <= max_step,
+                    "{rate} Hz recovery with pending retune exceeded output envelope slope"
+                );
+                assert!(y[channel].is_finite() && y[channel].abs() <= 0.891252);
+            }
+            previous = y;
+        }
+        assert!(
+            render.processor.settings_pending(),
+            "{rate} Hz 120 ms retune finished before the 50 ms recovery window elapsed"
+        );
+
+        for _ in 0..rate / 10 {
+            let y = render.frame([-0.5, 0.25], true, false);
+            assert!(y.iter().all(|v| v.is_finite() && v.abs() <= 0.891252));
+        }
+        assert!(
+            !render.processor.settings_pending(),
+            "{rate} Hz pending retune did not finish after sufficient recovery audio"
         );
     }
 }
