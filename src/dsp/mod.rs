@@ -42,7 +42,7 @@ impl Coefficients {
     }
 }
 
-pub const DSP_REVISION: &str = "music-fidelity-11";
+pub const DSP_REVISION: &str = "music-fidelity-12";
 
 #[derive(Clone, Copy, PartialEq)]
 pub struct Settings {
