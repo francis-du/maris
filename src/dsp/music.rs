@@ -306,7 +306,7 @@ impl MusicProfile {
             stereo_focus: self.stereo_focus,
             surround_highpass: Filter {
                 kind: Kind::HighPass,
-                frequency_hz: 250.0,
+                frequency_hz: 320.0,
                 gain_db: 0.0,
                 q: std::f64::consts::FRAC_1_SQRT_2,
             }
