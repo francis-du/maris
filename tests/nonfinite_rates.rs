@@ -56,4 +56,3 @@ fn nonfinite_frames_cannot_poison_level_match_across_sample_rates() {
         );
     }
 }
-
