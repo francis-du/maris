@@ -150,10 +150,14 @@ impl Settings {
             // still move sharply inside that envelope. A 0.25 ms dezipper prevents per-frame
             // gain jumps while remaining negligible beside a 120 ms settings transition.
             match_transition_slew: (-1.0 / (rate as f64 * 0.00025)).exp(),
+            // A freshly learned spatial power ratio can move more than an ordinary dynamics
+            // retune. Keep the established 0.25 ms dezipper for normal controls, but give
+            // spatial residual Level Match one millisecond so the first ready detector frame
+            // cannot become an audible/telemetry gain step.
             match_spatial_transition_slew: (-1.0 / (rate as f64 * 0.001)).exp(),
-            // A freshly reset spatial detector must observe more than one sample before its
-            // power ratio can steer gain. One millisecond rejects a single phase snapshot
-            // without delaying ordinary dynamics/EQ retunes.
+            // Spatial phase/decorrelation retunes reset the perceptual meter. Let the fresh
+            // detector observe one millisecond before its power ratio can steer residual gain;
+            // ordinary dynamics/EQ retunes can use the fresh detector immediately.
             match_warmup_frames: (rate / 1_000).max(1),
             // Approximate the BS.1770 K-weighting detector with the standard pre-filter
             // and RLB corner parameters, compiled through the existing allocation-free
@@ -336,7 +340,6 @@ pub struct Processor {
     match_gain: f64,
     match_transition_from: f64,
     match_observed_frames: u32,
-    match_spatial_transition: bool,
     pending: Option<Settings>,
 }
 impl Processor {
@@ -354,7 +357,6 @@ impl Processor {
             match_gain: 1.0,
             match_transition_from: 1.0,
             match_observed_frames: 0,
-            match_spatial_transition: false,
             pending: None,
         }
     }
@@ -371,27 +373,30 @@ impl Processor {
                 // before returning. Reverse the existing crossfade at the exact same mix
                 // point so the waveform stays continuous and the remaining time is only
                 // the distance already travelled toward B.
-                let progress = 1.0 - self.remaining as f64 / self.total as f64;
-                let current_match_gain =
-                    self.match_transition_from * (1.0 - progress) + self.match_gain * progress;
                 let needs_warmup = self
                     .active
                     .settings
                     .music
                     .match_detector_needs_warmup(&self.next.settings.music);
+                let current_match_gain = if needs_warmup {
+                    let progress = 1.0 - self.remaining as f64 / self.total as f64;
+                    Some(self.match_transition_from * (1.0 - progress) + self.match_gain * progress)
+                } else {
+                    None
+                };
                 std::mem::swap(&mut self.active, &mut self.next);
                 self.remaining = self.total.saturating_sub(self.remaining).max(1);
-                // Spatial phase/decorrelation reversals can make a single fresh weighted
-                // frame unrepresentative, so pin both gain endpoints to the currently audible
-                // value while that detector warms. Other effect reversals retain the existing
-                // fidelity-13 gain-endpoint swap; changing that behavior makes rapid dynamics
-                // controls step the telemetry even though their transfer is already ramped.
-                self.match_spatial_transition = needs_warmup;
-                if needs_warmup {
+                if let Some(current_match_gain) = current_match_gain {
+                    // Spatial phase/decorrelation changes need a fresh detector. Collapse both
+                    // endpoints onto the gain that was actually audible at the reversal point
+                    // so the warm-up cannot expose the old target's residual-gain endpoint.
                     self.match_transition_from = current_match_gain;
                     self.match_gain = current_match_gain;
                     self.match_observed_frames = 0;
                 } else {
+                    // Preserve the established fidelity-13 reversal contract for ordinary
+                    // dynamics/EQ changes. Their fast dezipper depends on reversing both
+                    // residual-gain endpoints together rather than restarting from one value.
                     std::mem::swap(&mut self.match_transition_from, &mut self.match_gain);
                     self.match_observed_frames = self.next.settings.match_warmup_frames;
                 }
@@ -416,7 +421,6 @@ impl Processor {
             .settings
             .music
             .match_detector_needs_warmup(&settings.music);
-        self.match_spatial_transition = needs_warmup;
         self.match_transition_from = self.match_gain;
         self.match_gain = 1.0;
         self.match_reference_power = 0.0;
@@ -503,6 +507,15 @@ impl Processor {
     }
     pub fn process(&mut self, input: [f32; 2]) -> [f32; 2] {
         let transitioning = self.remaining > 0;
+        // Capture the transition kind before the final frame can commit next into active.
+        // Re-checking after that commit would misclassify the endpoint as a non-spatial
+        // transition and apply the much faster ordinary Level Match dezipper.
+        let spatial_transitioning = transitioning
+            && self
+                .active
+                .settings
+                .music
+                .match_detector_needs_warmup(&self.next.settings.music);
         // Each processed transition frame consumes one step. The last transition frame
         // must be audibly at t=1.0 before settings_pending() can become false.
         let transition_t = if self.remaining == 0 {
@@ -584,12 +597,13 @@ impl Processor {
                     .sqrt()
                     .clamp(0.25, MAX_RESIDUAL_MAKEUP)
             } else {
-                // Hold the currently audible residual gain until a freshly reset spatial
-                // detector has enough samples to represent program power.
+                // Hold the currently audible residual gain until the fresh detector has
+                // enough samples to represent program power. Do not snap toward unity merely
+                // because a retune reset the meter history.
                 self.match_gain
             };
             if transitioning {
-                let slew = if self.match_spatial_transition {
+                let slew = if spatial_transitioning {
                     settings.match_spatial_transition_slew
                 } else {
                     settings.match_transition_slew
