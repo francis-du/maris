@@ -111,6 +111,29 @@ fn validate_processes(processes: &[u32]) -> Result<()> {
     validate_process_set(processes, &available, own)
 }
 
+// Internal aggregate churn does not invalidate the physical audio graph.
+fn device_topology(
+    devices: impl IntoIterator<Item = (u32, Option<String>)>,
+) -> Vec<(u32, Option<String>)> {
+    let mut devices: Vec<_> = devices
+        .into_iter()
+        .filter(|(_, uid)| {
+            !uid.as_deref()
+                .is_some_and(|uid| uid.starts_with("audio.maris.tap."))
+        })
+        .collect();
+    devices.sort_by_key(|(id, _)| *id);
+    devices
+}
+
+fn read_device_topology() -> Result<Vec<(u32, Option<String>)>> {
+    Ok(device_topology(
+        ca::device_ids()?
+            .into_iter()
+            .map(|id| (id, ca::device_uid(id).ok())),
+    ))
+}
+
 pub(super) struct TapCapture {
     api: ca::TapApi,
     tap: u32,
@@ -123,6 +146,7 @@ pub(super) struct TapCapture {
     aggregate_buffer: Option<u32>,
     output_configuration: Option<(u32, OutputConfiguration)>,
     expected_default_output: Option<u32>,
+    device_topology: Option<Vec<(u32, Option<String>)>>,
     listeners: Vec<(u32, ca::Address)>,
     scoped_output: bool,
     pub rate: u32,
@@ -301,6 +325,7 @@ impl TapCapture {
             aggregate_buffer: None,
             output_configuration: None,
             expected_default_output: None,
+            device_topology: None,
             listeners: Vec::with_capacity(12),
             scoped_output,
             rate: 0,
@@ -456,6 +481,7 @@ impl TapCapture {
         // active output's own format does not change. Quarantine PCM immediately;
         // the control thread later decides whether a rebuild is actually required.
         self.watch(ca::SYSTEM_OBJECT, ca::address(b"dev#"))?;
+        self.device_topology = Some(read_device_topology()?);
         if follow_default {
             self.expected_default_output = Some(device);
             self.watch(ca::SYSTEM_OBJECT, ca::address(b"dOut"))?;
@@ -495,7 +521,15 @@ impl TapCapture {
         // A system device-list event means CoreAudio may have rebuilt the HAL
         // graph even when this output keeps the same ID/rate. Do not resume PCM
         // through that old graph; rebuild the quarantined pipeline instead.
-        let topology_changed = metrics.device_list_events.load(Ordering::Acquire) > 0;
+        let topology_changed = if metrics.device_list_events.load(Ordering::Acquire) > 0
+            && generation != metrics.checked_configuration_events.load(Ordering::Acquire)
+        {
+            self.device_topology.as_ref().is_some_and(|expected| {
+                read_device_topology().map_or(true, |current| current != *expected)
+            })
+        } else {
+            false
+        };
         let mut changed = topology_changed
             || current != self.format
             || ca::sample_rate(self.aggregate)? != self.aggregate_rate

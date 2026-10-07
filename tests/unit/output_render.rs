@@ -207,6 +207,39 @@ fn output_handoff_retires_old_stream_before_unquarantining_replacement() {
 }
 
 #[test]
+fn priming_callbacks_do_not_acknowledge_or_consume_replacement_settings() {
+    let settings = Settings::compile(&Profile::default(), 48_000).unwrap();
+    let prime = Arc::new(Metrics::default());
+    let replacement = Arc::new(Metrics::default());
+    let updates = Arc::new(ArrayQueue::new(8));
+    assert!(updates
+        .push(Update {
+            settings,
+            revision: 9,
+            music_revision: 3,
+        })
+        .is_ok());
+    let mut priming = Renderer::new(
+        settings,
+        48_000,
+        Arc::new(ArrayQueue::new(8)),
+        prime.clone(),
+    );
+    let mut next = Renderer::new(settings, 48_000, updates.clone(), replacement.clone());
+    let mut samples = [1.0_f32; 128];
+    priming.render(&mut samples, 2, || ([0.0; 2], false));
+    assert!(prime.callback_ready.load(Ordering::Acquire));
+    assert_eq!(samples, [0.0; 128]);
+    assert!(wait_output_ready(&replacement, Duration::ZERO).is_err());
+    assert_eq!(updates.len(), 1);
+    next.render(&mut samples, 2, || ([0.0; 2], false));
+    wait_output_ready(&replacement, Duration::ZERO).unwrap();
+    assert!(updates.is_empty());
+    assert_eq!(replacement.revision.load(Ordering::Relaxed), 9);
+    assert_eq!(replacement.music_revision.load(Ordering::Relaxed), 3);
+}
+
+#[test]
 fn a_start_request_without_a_callback_is_not_readiness() {
     let metrics = Metrics::default();
     assert!(wait_output_ready(&metrics, Duration::ZERO).is_err());

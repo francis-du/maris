@@ -39,16 +39,17 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
     let metrics = Arc::new(Metrics::default());
     let updates = Arc::new(ArrayQueue::<Update>::new(8));
     // Register Maris as an audio process before resolving the exclusion PID. This stream emits only silence.
+    let prime_metrics = Arc::new(Metrics::default());
     let prime = bridge::output(
         &device,
         &initial,
         bridge::Source::Live(bridge::LiveSource::new(queue.clone(), rate)),
         Settings::compile(&state.profile, rate)?,
-        updates.clone(),
-        metrics.clone(),
+        Arc::new(ArrayQueue::new(8)),
+        prime_metrics.clone(),
     )?;
     prime.play()?;
-    bridge::wait_output_ready(&metrics, Duration::from_secs(1))?;
+    bridge::wait_output_ready(&prime_metrics, Duration::from_secs(1))?;
     // System-wide capture must stay on the established global tap. Some CoreAudio
     // endpoints accept the device-scoped CATapDescription but then mute that physical
     // stream when CATapMutedWhenTapped is engaged, leaving Maris with no usable PCM while
@@ -72,10 +73,11 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
     } else {
         TapCapture::prepare_processes(queue.clone(), metrics.clone(), processes)?
     };
-    drop(prime);
-    // Readiness belongs to one stream. The temporary registration stream must
-    // not acknowledge startup of the final output that has not run yet.
-    metrics.callback_ready.store(false, Ordering::Release);
+    // Keep the silent registration stream alive until the replacement has
+    // actually delivered its own callback. Stopping the physical clock here
+    // forces devices to cold-start again while their aggregate is being built.
+    // Separate metrics and queues prevent priming callbacks from acknowledging
+    // replacement readiness or consuming its pending settings.
     let config = devices::config(&device, false, tap.rate)?;
     metrics.frames.store(0, Ordering::Relaxed);
     metrics.underruns.store(0, Ordering::Relaxed);
@@ -137,6 +139,7 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
     }
     stream.play()?;
     bridge::wait_output_ready(&metrics, Duration::from_secs(1))?;
+    drop(prime);
     // Original applications are muted only after an actual output callback,
     // not merely a successful asynchronous play request.
     tap.start()?;

@@ -700,7 +700,11 @@ fn run(cli: Cli) -> Result<()> {
             match result {
                 Ok(session) => {
                     store.write_json("startup.json", &json!({"phase":"connected","pid":std::process::id(),"updated_at_ms":analysis::now_ms()}))?;
-                    wait(session, seconds, no_tray)
+                    let result = wait(session, seconds, no_tray);
+                    if let Err(error) = &result {
+                        store.write_json("startup.json", &json!({"phase":"failed","pid":std::process::id(),"error":format!("{error:#}"),"updated_at_ms":analysis::now_ms()}))?;
+                    }
+                    result
                 }
                 Err(error) => {
                     store.write_json("startup.json", &json!({"phase":"failed","pid":std::process::id(),"error":format!("{error:#}"),"updated_at_ms":analysis::now_ms()}))?;

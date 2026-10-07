@@ -12,6 +12,9 @@ pub struct Address {
     pub scope: u32,
     pub element: u32,
 }
+// AudioHardwareBase.h: kAudioObjectPropertyScopeInput = 'inpt'.
+pub(super) const INPUT_SCOPE: &[u8; 4] = b"inpt";
+
 pub fn address(selector: &[u8; 4]) -> Address {
     address_scope(selector, b"glob")
 }
@@ -74,6 +77,7 @@ pub type IoId = *mut c_void;
 
 #[link(name = "CoreAudio", kind = "framework")]
 unsafe extern "C" {
+    fn AudioObjectHasProperty(object: u32, address: *const Address) -> u8;
     pub fn AudioObjectGetPropertyDataSize(
         object: u32,
         address: *const Address,
@@ -235,12 +239,36 @@ pub fn default_output() -> Result<u32> {
 pub fn device_ids() -> Result<Vec<u32>> {
     unsafe { property_vec_u32(1, b"dev#") }
 }
+fn input_stream_ids(device: u32) -> Result<Vec<u32>> {
+    let address = address_scope(b"stm#", INPUT_SCOPE);
+    // Output-only endpoints need not expose an input stream property.
+    // Absence is distinct from failure to read an advertised property.
+    let supported = unsafe { AudioObjectHasProperty(device, &address) } != 0;
+    read_optional_input_streams(supported, || unsafe {
+        property_vec_u32_scope(device, b"stm#", INPUT_SCOPE)
+    })
+}
+
+pub(super) fn read_optional_input_streams(
+    supported: bool,
+    read: impl FnOnce() -> Result<Vec<u32>>,
+) -> Result<Vec<u32>> {
+    if supported {
+        read()
+    } else {
+        Ok(Vec::new())
+    }
+}
+
 /// Disable the physical clock device's inputs and all aggregate outputs before
 /// starting the tap. Unused streams arrive as NULL buffers (AudioHardware.h).
 pub fn isolate_tap_io(aggregate: u32, io: IoId, clock_uid: &str) -> Result<u32> {
     let clock = output_device_id_for_uid(clock_uid)?;
-    let physical_inputs = unsafe { property_vec_u32_scope(clock, b"stm#", b"inp ") }?.len();
-    let input_streams = unsafe { property_vec_u32_scope(aggregate, b"stm#", b"inp ") }?;
+    let physical_inputs = input_stream_ids(clock)
+        .context("Read physical clock input streams")?
+        .len();
+    let input_streams = unsafe { property_vec_u32_scope(aggregate, b"stm#", INPUT_SCOPE) }
+        .context("Read aggregate tap input streams")?;
     let inputs = input_streams.len();
     ensure!(
         inputs > physical_inputs && inputs - physical_inputs <= 2,
@@ -274,7 +302,7 @@ pub fn isolate_tap_io(aggregate: u32, io: IoId, clock_uid: &str) -> Result<u32> 
         (1..=2).contains(&channels),
         "Unsupported aggregate tap channel layout"
     );
-    set_stream_usage(aggregate, io, b"inp ", inputs, physical_inputs)?;
+    set_stream_usage(aggregate, io, INPUT_SCOPE, inputs, physical_inputs)?;
     let outputs = output_stream_ids(aggregate)?.len();
     set_stream_usage(aggregate, io, b"outp", outputs, outputs)?;
     Ok(rate.context("Aggregate tap has no input stream")?.round() as u32)

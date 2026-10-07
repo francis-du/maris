@@ -1,6 +1,66 @@
 //! Native callback tests use owned PCM buffers, never system audio permission or physical devices.
 use super::*;
 
+#[test]
+fn internal_aggregate_churn_preserves_external_topology_but_hotplug_does_not() {
+    let speaker = (7, Some("BuiltInSpeakerDevice".to_owned()));
+    let microphone = (8, Some("BuiltInMicrophoneDevice".to_owned()));
+    let original = device_topology([speaker.clone(), microphone.clone()]);
+    let first = (90, Some("audio.maris.tap.first".to_owned()));
+    let second = (91, Some("audio.maris.tap.second".to_owned()));
+    for internal in [vec![], vec![first.clone()], vec![second.clone(), first]] {
+        let mut devices = internal;
+        devices.extend([microphone.clone(), speaker.clone()]);
+        assert_eq!(device_topology(devices), original);
+    }
+    assert_ne!(device_topology([speaker.clone()]), original);
+    assert_ne!(
+        device_topology([
+            speaker.clone(),
+            microphone.clone(),
+            (12, Some("USB".into()))
+        ]),
+        original
+    );
+    assert_ne!(
+        device_topology([speaker.clone(), (8, Some("replacement".into()))]),
+        original
+    );
+    // Unknown and non-Maris private devices cannot be silently ignored.
+    assert_ne!(
+        device_topology([speaker, microphone, (92, None), second]),
+        original
+    );
+}
+
+#[test]
+fn output_only_clock_does_not_require_an_input_property() {
+    let missing = ca::read_optional_input_streams(false, || {
+        panic!("An absent input property must never be queried")
+    })
+    .unwrap();
+    assert!(missing.is_empty());
+    assert_eq!(
+        ca::read_optional_input_streams(true, || Ok(vec![10, 11])).unwrap(),
+        vec![10, 11]
+    );
+    // A driver read failure cannot hide physical microphone streams.
+    let error =
+        ca::read_optional_input_streams(true, || anyhow::bail!("driver failed")).unwrap_err();
+    assert_eq!(error.to_string(), "driver failed");
+}
+
+#[test]
+fn input_stream_scope_matches_the_coreaudio_abi() {
+    let streams = ca::address_scope(b"stm#", ca::INPUT_SCOPE);
+    let usage = ca::address_scope(b"suse", ca::INPUT_SCOPE);
+    // SDK four-character code 'inpt', not 'inp '.
+    assert_eq!(streams.scope, 0x696e7074);
+    assert_eq!(usage.scope, 0x696e7074);
+    assert_eq!(streams.selector, 0x73746d23);
+    assert_eq!(usage.selector, 0x73757365);
+}
+
 fn context(capacity: usize) -> Capture {
     Capture {
         queue: Arc::new(ArrayQueue::new(capacity)),
