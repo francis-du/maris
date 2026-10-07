@@ -54,6 +54,7 @@ pub struct Settings {
     match_meter: f64,
     match_slew: f64,
     match_transition_slew: f64,
+    match_spatial_transition_slew: f64,
     match_warmup_frames: u32,
     match_pre_filter: crate::dsp::tone::Biquad,
     match_rlb_filter: crate::dsp::tone::Biquad,
@@ -149,6 +150,7 @@ impl Settings {
             // still move sharply inside that envelope. A 0.25 ms dezipper prevents per-frame
             // gain jumps while remaining negligible beside a 120 ms settings transition.
             match_transition_slew: (-1.0 / (rate as f64 * 0.00025)).exp(),
+            match_spatial_transition_slew: (-1.0 / (rate as f64 * 0.001)).exp(),
             // A freshly reset spatial detector must observe more than one sample before its
             // power ratio can steer gain. One millisecond rejects a single phase snapshot
             // without delaying ordinary dynamics/EQ retunes.
@@ -334,6 +336,7 @@ pub struct Processor {
     match_gain: f64,
     match_transition_from: f64,
     match_observed_frames: u32,
+    match_spatial_transition: bool,
     pending: Option<Settings>,
 }
 impl Processor {
@@ -351,6 +354,7 @@ impl Processor {
             match_gain: 1.0,
             match_transition_from: 1.0,
             match_observed_frames: 0,
+            match_spatial_transition: false,
             pending: None,
         }
     }
@@ -382,6 +386,7 @@ impl Processor {
                 // value while that detector warms. Other effect reversals retain the existing
                 // fidelity-13 gain-endpoint swap; changing that behavior makes rapid dynamics
                 // controls step the telemetry even though their transfer is already ramped.
+                self.match_spatial_transition = needs_warmup;
                 if needs_warmup {
                     self.match_transition_from = current_match_gain;
                     self.match_gain = current_match_gain;
@@ -411,6 +416,7 @@ impl Processor {
             .settings
             .music
             .match_detector_needs_warmup(&settings.music);
+        self.match_spatial_transition = needs_warmup;
         self.match_transition_from = self.match_gain;
         self.match_gain = 1.0;
         self.match_reference_power = 0.0;
@@ -583,8 +589,12 @@ impl Processor {
                 self.match_gain
             };
             if transitioning {
-                self.match_gain = settings.match_transition_slew * self.match_gain
-                    + (1.0 - settings.match_transition_slew) * desired_match;
+                let slew = if self.match_spatial_transition {
+                    settings.match_spatial_transition_slew
+                } else {
+                    settings.match_transition_slew
+                };
+                self.match_gain = slew * self.match_gain + (1.0 - slew) * desired_match;
             } else {
                 self.match_gain = settings.match_slew * self.match_gain
                     + (1.0 - settings.match_slew) * desired_match;
