@@ -29,16 +29,21 @@ fn idle(process: &mut ConsoleProcess, duration: Duration) {
     }
 }
 
-// Independent 140x40 UI contract: the popup's first column spans x=29..69,
-// with visible data rows y=6..25. Read the actual highlighted label, not app state.
+// Independent 140x40 UI contract: the popup starts at visual column 29,
+// which is zero-based column 28 in vt100. Read only the preset-name column so
+// the selected marker cannot be confused with the dashboard's own marker.
 fn highlighted_preset(process: &ConsoleProcess) -> Option<String> {
     process
         .terminal
         .screen()
-        .rows(29, 40)
-        .skip(6)
-        .take(19)
-        .find_map(|row| row.strip_prefix('▶').map(|name| name.trim().to_owned()))
+        .rows(28, 41)
+        .skip(5)
+        .take(20)
+        .find_map(|row| {
+            row.split_once('▶')
+                .map(|(_, name)| name.trim().to_owned())
+                .filter(|name| !name.is_empty())
+        })
 }
 
 fn visible_preset_row(process: &ConsoleProcess, expected: &str) -> Option<u16> {
