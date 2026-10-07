@@ -42,7 +42,7 @@ impl Coefficients {
     }
 }
 
-pub const DSP_REVISION: &str = "music-fidelity-13";
+pub const DSP_REVISION: &str = "music-fidelity-14";
 
 #[derive(Clone, Copy, PartialEq)]
 pub struct Settings {
@@ -54,6 +54,7 @@ pub struct Settings {
     match_meter: f64,
     match_slew: f64,
     match_transition_slew: f64,
+    match_warmup_frames: u32,
     match_pre_filter: crate::dsp::tone::Biquad,
     match_rlb_filter: crate::dsp::tone::Biquad,
     crossfeed: f64,
@@ -148,6 +149,10 @@ impl Settings {
             // still move sharply inside that envelope. A 0.25 ms dezipper prevents per-frame
             // gain jumps while remaining negligible beside a 120 ms settings transition.
             match_transition_slew: (-1.0 / (rate as f64 * 0.00025)).exp(),
+            // A freshly reset spatial detector must observe more than one sample before its
+            // power ratio can steer gain. One millisecond rejects a single phase snapshot
+            // without delaying ordinary dynamics/EQ retunes.
+            match_warmup_frames: (rate / 1_000).max(1),
             // Approximate the BS.1770 K-weighting detector with the standard pre-filter
             // and RLB corner parameters, compiled through the existing allocation-free
             // RBJ biquads. This keeps the audio callback real-time safe while making Level
@@ -328,6 +333,7 @@ pub struct Processor {
     match_output_filter: [[crate::dsp::tone::State; 2]; 2],
     match_gain: f64,
     match_transition_from: f64,
+    match_observed_frames: u32,
     pending: Option<Settings>,
 }
 impl Processor {
@@ -344,6 +350,7 @@ impl Processor {
             match_output_filter: [[crate::dsp::tone::State::default(); 2]; 2],
             match_gain: 1.0,
             match_transition_from: 1.0,
+            match_observed_frames: 0,
             pending: None,
         }
     }
@@ -360,11 +367,28 @@ impl Processor {
                 // before returning. Reverse the existing crossfade at the exact same mix
                 // point so the waveform stays continuous and the remaining time is only
                 // the distance already travelled toward B.
+                let progress = 1.0 - self.remaining as f64 / self.total as f64;
+                let current_match_gain =
+                    self.match_transition_from * (1.0 - progress) + self.match_gain * progress;
+                let needs_warmup = self
+                    .active
+                    .settings
+                    .music
+                    .match_detector_needs_warmup(&self.next.settings.music);
                 std::mem::swap(&mut self.active, &mut self.next);
                 self.remaining = self.total.saturating_sub(self.remaining).max(1);
-                std::mem::swap(&mut self.match_transition_from, &mut self.match_gain);
+                // Collapse both gain endpoints onto the value that was actually audible at the
+                // reversal point. Restart the incoming-chain power history; only spatial
+                // phase/decorrelation changes need a brief detector warm-up.
+                self.match_transition_from = current_match_gain;
+                self.match_gain = current_match_gain;
                 self.match_reference_power = 0.0;
                 self.match_output_power = 0.0;
+                self.match_observed_frames = if needs_warmup {
+                    0
+                } else {
+                    self.next.settings.match_warmup_frames
+                };
                 self.match_reference_filter = [[crate::dsp::tone::State::default(); 2]; 2];
                 self.match_output_filter = [[crate::dsp::tone::State::default(); 2]; 2];
                 self.pending = None;
@@ -379,10 +403,20 @@ impl Processor {
         // Residual loudness gain belongs to the measured signal path. Keep the old
         // value only as the first crossfade endpoint; fresh meters learn the new
         // blended path instead of dragging an opposite spectral profile's gain along.
+        let needs_warmup = self
+            .active
+            .settings
+            .music
+            .match_detector_needs_warmup(&settings.music);
         self.match_transition_from = self.match_gain;
         self.match_gain = 1.0;
         self.match_reference_power = 0.0;
         self.match_output_power = 0.0;
+        self.match_observed_frames = if needs_warmup {
+            0
+        } else {
+            settings.match_warmup_frames
+        };
         self.match_reference_filter = [[crate::dsp::tone::State::default(); 2]; 2];
         self.match_output_filter = [[crate::dsp::tone::State::default(); 2]; 2];
         self.next = self.active.retune(settings);
@@ -396,6 +430,7 @@ impl Processor {
         self.next = Chain::new(self.next.settings);
         self.match_reference_power = 0.0;
         self.match_output_power = 0.0;
+        self.match_observed_frames = 0;
         self.match_reference_filter = [[crate::dsp::tone::State::default(); 2]; 2];
         self.match_output_filter = [[crate::dsp::tone::State::default(); 2]; 2];
         self.match_gain = 1.0;
@@ -521,13 +556,18 @@ impl Processor {
                 + (1.0 - settings.match_meter) * reference_power;
             self.match_output_power = settings.match_meter * self.match_output_power
                 + (1.0 - settings.match_meter) * output_power;
+            self.match_observed_frames = self.match_observed_frames.saturating_add(1);
+            let meter_ready = self.match_observed_frames >= settings.match_warmup_frames;
             let desired_match = if reference_power <= 1e-12 && output_power <= 1e-12 {
                 // Digital silence is a content boundary, not evidence that the next program
                 // needs the previous program's residual spectral makeup. Let the residual
                 // gain return smoothly to unity while static safety-reserve recovery remains
                 // active in each chain.
                 1.0
-            } else if self.match_reference_power > 1e-10 && self.match_output_power > 1e-10 {
+            } else if meter_ready
+                && self.match_reference_power > 1e-10
+                && self.match_output_power > 1e-10
+            {
                 // Static reserve is already recovered per chain. Bound only the remaining
                 // program-dependent correction so a spectral null cannot become unbounded gain.
                 const MAX_RESIDUAL_MAKEUP: f64 = 3.981_071_705_534_972_2; // +12 dB
@@ -535,7 +575,9 @@ impl Processor {
                     .sqrt()
                     .clamp(0.25, MAX_RESIDUAL_MAKEUP)
             } else {
-                1.0
+                // Hold the currently audible residual gain until a freshly reset spatial
+                // detector has enough samples to represent program power.
+                self.match_gain
             };
             if transitioning {
                 self.match_gain = settings.match_transition_slew * self.match_gain
@@ -550,6 +592,7 @@ impl Processor {
             // keep the old meter but fade its residual gain to unity with the same envelope.
             self.match_reference_power = 0.0;
             self.match_output_power = 0.0;
+            self.match_observed_frames = 0;
             self.match_reference_filter = [[crate::dsp::tone::State::default(); 2]; 2];
             self.match_output_filter = [[crate::dsp::tone::State::default(); 2]; 2];
             self.match_gain = 1.0;
