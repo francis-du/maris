@@ -775,7 +775,9 @@ fn update(version: Option<&str>, dry_run: bool) -> Result<()> {
 
 #[cfg(windows)]
 fn update(version: Option<&str>, dry_run: bool) -> Result<()> {
-    let executable = std::env::current_exe()?.canonicalize()?;
+    // current_exe already returns the absolute module path. Canonicalizing it
+    // adds a verbatim prefix that Windows PowerShell cannot use with -File.
+    let executable = std::env::current_exe()?;
     let package_root = executable
         .parent()
         .and_then(|path| path.parent())
