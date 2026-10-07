@@ -13,88 +13,133 @@ pub enum Action {
     /// Start the configured inputs and output buses; never changes OS volume or defaults.
     Run {
         #[arg(long)]
+        /// Authorize temporary audio capture and routing.
         accept_routing: bool,
         #[arg(long, default_value_t = 48000)]
+        /// Mixer processing sample rate in Hz.
         rate: u32,
         #[arg(long)]
+        /// Stop automatically after this many seconds.
         seconds: Option<u64>,
     },
     /// Apply an EQ preset to one strip without changing device correction.
-    Eq { id: String, preset: String },
+    Eq {
+        /// Mixer input strip ID.
+        id: String,
+        /// Included EQ preset name or stable ID.
+        preset: String,
+    },
     /// Adjust one strip EQ band (1 through 10).
     Band {
+        /// Mixer input strip ID.
         id: String,
+        /// EQ band number, from 1 through 10.
         index: usize,
         #[arg(allow_hyphen_values = true)]
+        /// Gain in dB.
         gain: f64,
     },
     /// Configure the optional compressor on a single strip; there is no makeup gain.
     Compressor {
+        /// Mixer input strip ID.
         id: String,
         #[arg(long, action = clap::ArgAction::Set)]
+        /// Enable or disable this processor.
         enabled: Option<bool>,
         #[arg(long, allow_hyphen_values = true)]
+        /// Detection threshold in dB.
         threshold: Option<f64>,
         #[arg(long)]
+        /// Compression ratio.
         ratio: Option<f64>,
     },
     /// Add a mixer input strip from a device or application source.
     Add {
+        /// Mixer input strip ID.
         id: String,
         #[arg(long)]
+        /// Display name for the input strip.
         name: Option<String>,
         #[arg(long)]
+        /// Input device or application source selector.
         device: Option<String>,
     },
     /// Remove one mixer input strip.
-    Remove { id: String },
+    Remove {
+        /// Mixer input strip ID.
+        id: String,
+    },
     /// Change gain, pan, sends, mute/solo, ducking, or speech cleanup on one strip.
     Set {
+        /// Mixer input strip ID.
         id: String,
         #[arg(long, allow_hyphen_values = true)]
+        /// Gain in dB.
         gain: Option<f64>,
         #[arg(long, action = clap::ArgAction::Set)]
+        /// Mute this strip or bus: true or false.
         mute: Option<bool>,
         #[arg(long, action = clap::ArgAction::Set)]
+        /// Solo this strip: true or false.
         solo: Option<bool>,
         #[arg(long, allow_hyphen_values = true)]
+        /// Stereo pan; negative favors left, positive favors right.
         pan: Option<f64>,
         #[arg(long)]
+        /// Linear send amount to output bus A.
         send_a: Option<f64>,
         #[arg(long)]
+        /// Linear send amount to output bus B.
         send_b: Option<f64>,
         #[arg(long, action = clap::ArgAction::Set)]
+        /// Use this strip to trigger voice ducking.
         voice_trigger: Option<bool>,
         #[arg(long, action = clap::ArgAction::Set)]
+        /// Attenuate this strip when voice ducking triggers.
         duck_target: Option<bool>,
         #[arg(long, action = clap::ArgAction::Set, help = "Enable speech-only RNNoise for this strip")]
+        /// Enable speech-only RNNoise for this strip.
         speech_denoise: Option<bool>,
     },
     /// Configure one output bus, including device, gain, mute, and delay.
     Bus {
+        /// Output bus number: 1 for A, 2 for B.
         index: usize,
         #[arg(long)]
+        /// Device name or stable device identifier.
         device: Option<String>,
         #[arg(long, allow_hyphen_values = true)]
+        /// Gain in dB.
         gain: Option<f64>,
         #[arg(long, action = clap::ArgAction::Set)]
+        /// Mute this strip or bus: true or false.
         mute: Option<bool>,
         #[arg(long, help = "Additional bus delay in milliseconds (0..500)")]
+        /// Additional bus delay in milliseconds.
         delay_ms: Option<f64>,
     },
     /// Configure voice-triggered ducking for the mixer.
     Duck {
         #[arg(long, action = clap::ArgAction::Set)]
+        /// Enable or disable this processor.
         enabled: Option<bool>,
         #[arg(long, allow_hyphen_values = true)]
+        /// Detection threshold in dB.
         threshold: Option<f64>,
         #[arg(long)]
+        /// Ducking attenuation in dB.
         attenuation: Option<f64>,
     },
     /// Save the current mixer topology and strip settings as a named scene.
-    SceneSave { name: String },
+    SceneSave {
+        /// Mixer scene name.
+        name: String,
+    },
     /// Restore a previously saved mixer scene.
-    SceneRestore { name: String },
+    SceneRestore {
+        /// Mixer scene name.
+        name: String,
+    },
     /// Undo the most recent mixer configuration change.
     Undo,
 }

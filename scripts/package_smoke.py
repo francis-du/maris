@@ -66,6 +66,15 @@ def extract(archive: Path, directory: Path, system: str, stem: str) -> None:
             subprocess.run(['/usr/bin/ditto', '-x', '-k', str(archive), str(directory)], check=True)
 
 
+def snapshot_tree(root: Path) -> dict:
+    """Record isolated files, directories and links before an updater dry run."""
+    return {path.relative_to(root).as_posix():
+            ('link', os.readlink(path)) if path.is_symlink() else
+            ('directory', '') if path.is_dir() else
+            ('file', hashlib.sha256(path.read_bytes()).hexdigest())
+            for path in root.rglob('*')}
+
+
 def main() -> None:
     system, arch = host_target()
     source_hash = source_digest()
@@ -121,6 +130,14 @@ def main() -> None:
             state.mkdir(exist_ok=True)
             sentinel = state / 'existing-preferences.txt'
             sentinel.write_bytes(b'pre-existing user data must remain unchanged\n')
+            # Run the installed binary from a prefix containing spaces, using
+            # its bundled platform updater rather than a checkout script.
+            before_install, before_state = snapshot_tree(prefix), snapshot_tree(state)
+            subprocess.run([str(installed), 'update', '--version', metadata['version'], '--dry-run'],
+                           check=True, capture_output=True, timeout=30,
+                           env=dict(os.environ, MARIS_STATE_DIR=str(state)))
+            if snapshot_tree(prefix) != before_install or snapshot_tree(state) != before_state:
+                raise ValueError('Installed updater dry run changed files or user state')
             subprocess.run(command + [yes], check=True, capture_output=True, timeout=120)
             previous = list(prefix.glob('.maris-backup.*/Maris'))
             if len(previous) != 1:
@@ -141,7 +158,7 @@ def main() -> None:
               'interface': 'cli' if cli else 'gui', 'binary_sha256': metadata['executable_sha256'],
               'archive': archive.name, 'checksum_verified': True, 'dry_run_no_writes': True,
               'isolated_install_passed': True, 'installed_version_passed': True,
-              'upgrade_passed': cli, 'failed_upgrade_preserved_previous': cli,
+              'updater_dry_run_passed': cli, 'upgrade_passed': cli, 'failed_upgrade_preserved_previous': cli,
               'user_installation_changed': False, 'audio_started': False, 'hardware_validation': False}
     (review / 'package-smoke.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     print(json.dumps(report, indent=2))

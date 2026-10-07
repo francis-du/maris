@@ -18,65 +18,92 @@ pub enum Action {
     /// Match the selected device against the bundled AutoEq catalog.
     Match {
         #[arg(long)]
+        /// Apply only an exact, unique AutoEq match.
         apply: bool,
     },
     /// Explicitly bind and apply one bundled AutoEq model to the selected device.
-    Bind { model: String },
+    Bind {
+        /// Exact bundled AutoEq model name.
+        model: String,
+    },
     /// Print the JSON schema for device-specific listening settings.
     Schema,
     /// List original listening scenes, not measurement corrections.
     Scenes,
     /// Preview a device-constrained scene without changing audio or saved preferences.
-    Preview { name: String },
+    Preview {
+        /// Preset name or stable ID.
+        name: String,
+    },
     /// Apply a device-specific listening preset or scene.
-    Preset { name: String },
+    Preset {
+        /// Preset name or stable ID.
+        name: String,
+    },
     /// Edit device-specific listening parameters directly.
     Set {
         #[arg(long, allow_hyphen_values = true)]
+        /// Bass gain in dB.
         bass: Option<f64>,
         #[arg(long, help = "Virtual-bass amount from 0 to 1; zero disables it")]
+        /// Virtual bass amount.
         virtual_bass: Option<f64>,
         #[arg(long, allow_hyphen_values = true)]
+        /// Presence gain in dB.
         presence: Option<f64>,
         #[arg(long, allow_hyphen_values = true)]
+        /// High-frequency gain in dB.
         air: Option<f64>,
         #[arg(long)]
+        /// High-frequency softness amount.
         softness: Option<f64>,
         #[arg(long)]
+        /// Transient emphasis amount.
         intensity: Option<f64>,
         #[arg(
             long,
             help = "Adaptive dynamic-EQ strength from 0 to 1; zero disables it"
         )]
+        /// Adaptive EQ strength.
         adaptive: Option<f64>,
         #[arg(long)]
+        /// Stereo width amount.
         width: Option<f64>,
         #[arg(long, help = "Virtual 360 amount from 0 to 1")]
+        /// Virtual surround amount.
         virtual_surround: Option<f64>,
         #[arg(long, help = "Stereo Focus amount from 0 to 1")]
+        /// Stereo focus amount.
         stereo_focus: Option<f64>,
         #[arg(long, allow_hyphen_values = true)]
+        /// Stereo balance; negative favors left, positive favors right.
         balance: Option<f64>,
         #[arg(long,action=clap::ArgAction::Set)]
+        /// Enable or disable listening compression.
         compressor: Option<bool>,
     },
     /// Switch between the enhanced path and its level-matched reference.
     Compare {
         #[arg(action=clap::ArgAction::Set)]
+        /// Use the level-matched reference path: true or false.
         reference: bool,
     },
     /// Persist the active output's listening profile as a device profile.
     SaveDevice,
     /// Import a strict Equalizer APO/AutoEq parametric correction file.
     Import {
+        /// Equalizer APO or AutoEq parametric correction file.
         file: PathBuf,
         #[arg(long)]
+        /// Measurement source name recorded with the correction.
         source: String,
     },
     /// Validate or apply a device listening-profile JSON file.
     Apply {
+        /// Settings JSON file to validate or apply.
         file: PathBuf,
         #[arg(long)]
+        /// Validate or preview without applying changes.
         dry_run: bool,
     },
 }

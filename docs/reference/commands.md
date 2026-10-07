@@ -60,7 +60,7 @@ The CLI is the scriptable interface to the same saved settings and audio engine 
 ~~~sh
 maris update
 maris update --dry-run
-maris update --version 0.2.2
+maris update --version 0.2.1
 ~~~
 
 `update` is available from installed CLI releases that contain the bundled verified updater. It uses the same release manifest, archive checksum, executable checksum, transactional replacement and backup logic as the public installer. A development build does not silently fetch or install anything.

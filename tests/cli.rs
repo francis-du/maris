@@ -75,9 +75,11 @@ fn help_exposes_all_public_commands_with_descriptions() {
 }
 
 #[test]
-fn nested_sound_and_mixer_commands_have_descriptions() {
+fn all_nested_commands_have_descriptions() {
     let directory = tempfile::tempdir().unwrap();
     for (parent, commands) in [
+        ("models", &["research"][..]),
+        ("presets", &["list", "show", "apply", "restore"][..]),
         (
             "sound",
             &[
@@ -128,6 +130,14 @@ fn nested_sound_and_mixer_commands_have_descriptions() {
                 line.split_whitespace().count() >= 2,
                 "missing description: {line:?}"
             );
+            let detail = run(directory.path(), &[parent, command, "--help"]);
+            assert!(detail.status.success(), "{parent} {command} --help failed");
+            let detail = String::from_utf8(detail.stdout).unwrap();
+            assert!(detail
+                .lines()
+                .next()
+                .is_some_and(|line| !line.trim().is_empty()));
+            assert!(detail.contains("Usage:"));
         }
     }
 }

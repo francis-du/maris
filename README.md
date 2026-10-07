@@ -29,7 +29,7 @@ Installed CLI releases include their verified updater:
 ~~~sh
 maris update
 maris update --dry-run
-maris update --version 0.2.2
+maris update --version 0.2.1
 ~~~
 
 On Windows the same command launches the bundled PowerShell updater after the current Maris process exits. An older release that predates the updater must be installed once with the public installer above.

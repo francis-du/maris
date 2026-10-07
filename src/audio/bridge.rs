@@ -587,6 +587,9 @@ mod loudness_recovery_tests;
 #[path = "../../tests/unit/loudness_transition.rs"]
 mod loudness_transition_tests;
 #[cfg(test)]
+#[path = "../../tests/unit/output_startup.rs"]
+mod output_startup_tests;
+#[cfg(test)]
 #[path = "../../tests/unit/output_transition.rs"]
 mod output_transition_tests;
 #[cfg(test)]

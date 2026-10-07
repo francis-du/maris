@@ -122,9 +122,12 @@ matching the existing scalar helpers. This fixes baseline AArch64 debug
 compilation; it leaves runtime CPU detection and non-FP16 fallback paths intact.
 It does not raise the application-wide CPU requirement or disable model support.
 
-`UPSTREAM.json` records the original and patched SIMD file hashes, and
-`PATCHES.md` describes the four attribute additions. All other vendored crate
-source and its license are unchanged. The source publication audit covers this
+`UPSTREAM.json` records the original SIMD hash and the maintained source hashes.
+`PATCHES.md` describes the four attribute additions and structural module split.
+Architecture implementations, complex microkernel macros and dispatch macros
+live in `src/simd/`, `src/microkernel/` and `src/gemm/` respectively, keeping all
+maintained Rust files below 1,000 lines. Implementation bodies, public exports,
+feature gates and the license are preserved. The source publication audit covers this
 package with the same credential and path checks as other approved vendors.
 
 The regression reproducer is a library depending on `gemm-f16 = "=0.19.0"`,

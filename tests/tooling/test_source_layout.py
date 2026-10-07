@@ -85,9 +85,14 @@ class SourceLayout(unittest.TestCase):
             self.assertIsNone(re.search(forbidden, file.read_text(encoding='utf-8')), str(file))
 
     def test_maintained_source_files_stay_below_the_project_line_limit(self):
-        for file in SOURCE.rglob('*.rs'):
+        # Tests and reviewed vendored Rust are maintained in this repository too.
+        roots = (SOURCE, ROOT / 'tests', ROOT / 'third_party')
+        files = [file for root in roots for file in root.rglob('*.rs')]
+        self.assertTrue(files)
+        for file in files:
             self.assertLessEqual(len(file.read_text(encoding='utf-8').splitlines()), 1000, str(file))
-            self.assertLessEqual(len(file.stem), 24, str(file))
+            if file.is_relative_to(SOURCE):
+                self.assertLessEqual(len(file.stem), 24, str(file))
 
     def test_contributor_rules_and_architecture_describe_the_actual_modules(self):
         guide = (ROOT / 'AGENTS.md').read_text(encoding='utf-8')

@@ -37,20 +37,24 @@ struct Cli {
         global = true,
         help = "UI language: en, zh-CN, zh-TW, ja, de, es"
     )]
+    /// Interface language code.
     lang: Option<String>,
     #[arg(long, global = true, help = "Emit structured JSON, including errors")]
+    /// Emit structured JSON, including errors.
     json: bool,
     #[arg(
         long,
         global = true,
         help = "Do not automatically launch the menu-bar/system-tray process"
     )]
+    /// Do not launch the tray controller.
     no_tray: bool,
     #[arg(
         long,
         global = true,
         help = "Apply only if the saved settings still have this revision"
     )]
+    /// Apply only at this saved settings revision.
     expected_revision: Option<u64>,
     #[command(subcommand)]
     command: Option<Command>,
@@ -60,9 +64,15 @@ enum PresetCatalogAction {
     /// List the included presets by category.
     List,
     /// Show source data, converted Q values, and safety headroom for one preset.
-    Show { name: String },
+    Show {
+        /// Preset name or stable ID.
+        name: String,
+    },
     /// Apply an included preset.
-    Apply { name: String },
+    Apply {
+        /// Preset name or stable ID.
+        name: String,
+    },
     /// Restore the settings from before the last change.
     Restore,
 }
@@ -85,18 +95,24 @@ enum Command {
     /// Replace this installed release with the latest stable release, or a pinned version.
     Update {
         #[arg(long, help = "Install a specific stable X.Y.Z or vX.Y.Z release")]
+        /// Stable release version to install.
         version: Option<String>,
         #[arg(
             long,
             help = "Show the installer plan without network access or file changes"
         )]
+        /// Validate or preview without applying changes.
         dry_run: bool,
     },
     /// Show or change the interface language.
-    Language { code: Option<String> },
+    Language {
+        /// Interface language code; omit to show the current language.
+        code: Option<String>,
+    },
     /// Read or change the current device's sound settings.
     Sound {
         #[arg(long)]
+        /// Saved device profile key; omit to use the active output.
         device: Option<String>,
         #[command(subcommand)]
         action: crate::cli::sound::Action,
@@ -113,12 +129,16 @@ enum Command {
     /// Process selected apps without changing the system default output.
     Application {
         #[arg(long = "pid", required = true, num_args = 1..)]
+        /// Application process IDs to capture.
         pids: Vec<i32>,
         #[arg(long)]
+        /// Output device name or stable identifier; omit to use the default.
         output: Option<String>,
         #[arg(long)]
+        /// Authorize temporary audio capture and routing.
         accept_routing: bool,
         #[arg(long, help = "Stop after this many seconds")]
+        /// Stop automatically after this many seconds.
         seconds: Option<u64>,
     },
     /// Show which local audio-analysis models are included.
@@ -127,45 +147,65 @@ enum Command {
         action: Option<ModelAction>,
     },
     /// Analyze an audio file and print measured signal/music context.
-    Analyze { file: PathBuf },
+    Analyze {
+        /// Input file path.
+        file: PathBuf,
+    },
     /// Create a bounded tuning proposal from live or file analysis.
     Smart {
         #[arg(long, default_value = "balanced")]
+        /// Listening goal for the tuning proposal.
         goal: String,
         #[arg(long)]
+        /// Input file path.
         file: Option<PathBuf>,
         #[arg(long)]
+        /// Apply the result after validation.
         apply: bool,
         #[arg(long)]
+        /// Write the proposal to this file.
         save: Option<PathBuf>,
     },
     /// Apply a previously saved Smart proposal after revision checks.
-    SmartApply { file: PathBuf },
+    SmartApply {
+        /// Saved tuning proposal JSON file.
+        file: PathBuf,
+    },
     /// Run speech-only RNNoise enhancement on a file.
     Enhance {
+        /// Input audio file path.
         input: PathBuf,
+        /// Output audio file path; existing files are preserved.
         output: PathBuf,
         #[arg(long)]
+        /// Confirm that this input is speech, not music.
         confirm_speech: bool,
     },
     /// Run live speech processing from one input to an output.
     Voice {
         #[arg(long)]
+        /// Input device name or stable identifier.
         input: String,
         #[arg(long)]
+        /// Output device name or stable identifier; omit to use the default.
         output: Option<String>,
         #[arg(long)]
+        /// Confirm that this input is speech, not music.
         confirm_speech: bool,
     },
     /// Start a detached live/system audio session through the desktop controller.
     Start {
         #[arg(long)]
+        /// Input device name or stable identifier.
         input: Option<String>,
         #[arg(long)]
+        /// Output device name or stable identifier; omit to use the default.
         output: Option<String>,
         #[arg(long)]
+        /// Capture system playback instead of an input device.
         system: bool,
         #[arg(long)]
+        /// Authorize temporary audio capture and routing.
         accept_routing: bool,
     },
     /// Request the currently running Maris audio session to stop.
@@ -173,6 +213,7 @@ enum Command {
     /// Run or ensure the native menu-bar/system-tray controller.
     Tray {
         #[arg(long)]
+        /// Run the tray controller in the background.
         background: bool,
     },
     /// Inspect native audio capabilities, permissions, devices, and recovery state.
@@ -185,78 +226,115 @@ enum Command {
         action: Option<PresetCatalogAction>,
     },
     /// Compatibility alias for `maris presets apply <name>`.
-    Preset { name: String },
+    Preset {
+        /// Preset name or stable ID.
+        name: String,
+    },
     /// Edit one global EQ band.
     Band {
+        /// EQ band number, from 1 through 10.
         index: usize,
         #[arg(allow_hyphen_values = true)]
+        /// EQ band gain in dB.
         gain_db: f64,
         #[arg(long)]
+        /// EQ band center frequency in Hz.
         frequency: Option<f64>,
         #[arg(long)]
+        /// EQ band quality factor.
         q: Option<f64>,
     },
     /// Set the global preamp in dB.
     Preamp {
         #[arg(allow_hyphen_values = true)]
+        /// Preamp gain in dB.
         db: f64,
     },
     /// Enable or disable global processing bypass while retaining safety gain.
     Bypass {
         #[arg(action = clap::ArgAction::Set)]
+        /// Whether to bypass tonal processing: true or false.
         value: bool,
     },
     /// Set global headphone crossfeed amount.
-    Crossfeed { amount: f64 },
+    Crossfeed {
+        /// Effect amount.
+        amount: f64,
+    },
     /// Set global stereo-width amount.
-    Width { amount: f64 },
+    Width {
+        /// Effect amount.
+        amount: f64,
+    },
     /// Undo the most recent compatible global settings change.
     Undo,
     /// Print the JSON schema for the global DSP profile.
     Schema,
     /// Validate or apply a global DSP profile JSON file.
     Apply {
+        /// Settings JSON file to validate or apply.
         file: PathBuf,
         #[arg(long)]
+        /// Validate or preview without applying changes.
         dry_run: bool,
     },
     /// Export the current global DSP profile to a new JSON file.
-    Export { file: PathBuf },
+    Export {
+        /// New JSON file for exported settings.
+        file: PathBuf,
+    },
     /// Render an audio file offline through the current DSP profile.
-    Render { input: PathBuf, output: PathBuf },
+    Render {
+        /// Input audio file path.
+        input: PathBuf,
+        /// Output audio file path; existing files are preserved.
+        output: PathBuf,
+    },
     /// Process a live input device until stopped or the optional timeout expires.
     Run {
         #[arg(long)]
+        /// Input device name or stable identifier.
         input: String,
         #[arg(long)]
+        /// Output device name or stable identifier; omit to use the default.
         output: Option<String>,
         #[arg(long)]
+        /// Stop automatically after this many seconds.
         seconds: Option<u64>,
     },
     /// Play an audio file through Maris processing.
     Play {
+        /// Input file path.
         file: PathBuf,
         #[arg(long)]
+        /// Output device name or stable identifier; omit to use the default.
         output: Option<String>,
         #[arg(long)]
+        /// Repeat the file until stopped.
         repeat: bool,
     },
     /// Open the terminal UI, attaching to or starting an audio session as needed.
     Tui {
         #[arg(long)]
+        /// Input device name or stable identifier.
         input: Option<String>,
         #[arg(long)]
+        /// Output device name or stable identifier; omit to use the default.
         output: Option<String>,
         #[arg(long)]
+        /// Audio file to play in the terminal UI.
         play: Option<PathBuf>,
     },
     /// Process macOS/Windows/Linux system playback with explicit routing authorization.
     System {
         #[arg(long)]
+        /// Output device name or stable identifier; omit to use the default.
         output: Option<String>,
         #[arg(long)]
+        /// Authorize temporary audio capture and routing.
         accept_routing: bool,
         #[arg(long, help = "Stop after this many seconds")]
+        /// Stop automatically after this many seconds.
         seconds: Option<u64>,
     },
     /// Restore platform audio routing owned by a previous Maris session.
@@ -264,10 +342,14 @@ enum Command {
     /// Serve the local MCP control protocol; writes are opt-in.
     Mcp {
         #[arg(long)]
+        /// Authorize validated MCP commands to change settings.
         allow_write: bool,
     },
     /// Print MCP integration configuration for a supported client.
-    Integration { client: String },
+    Integration {
+        /// MCP client to generate integration settings for.
+        client: String,
+    },
 }
 
 pub fn main() {

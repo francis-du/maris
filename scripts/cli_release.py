@@ -35,7 +35,8 @@ def software_gate(payload: Path, source: str, system: str, arch: str, version: s
     if (smoke.get('source_sha256') != source or smoke.get('platform') != system or smoke.get('architecture') != arch
             or smoke.get('interface') != 'cli' or smoke.get('binary_sha256') != digest(binary)
             or not all(smoke.get(key) is True for key in ('checksum_verified', 'dry_run_no_writes',
-                'isolated_install_passed', 'installed_version_passed', 'upgrade_passed', 'failed_upgrade_preserved_previous'))
+                'isolated_install_passed', 'installed_version_passed', 'updater_dry_run_passed',
+                'upgrade_passed', 'failed_upgrade_preserved_previous'))
             or smoke.get('audio_started') is not False or smoke.get('user_installation_changed') is not False):
         raise ValueError('Missing matching native CLI installation, upgrade and failure-recovery evidence')
     notice_hash = validate_notices(payload / 'resources/notices', target(system, arch))

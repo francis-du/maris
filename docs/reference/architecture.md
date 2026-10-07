@@ -33,7 +33,9 @@ src/
 
 Use domain paths such as `crate::dsp::profile::Profile` and `crate::devices::identity::Identity` in production code. `lib.rs` retains the older public paths as re-exports so existing library callers continue to compile. A re-export names the same type or function; it does not create another implementation. Integration tests exercise both forms.
 
-Do not add a generic `utils/` directory for code that belongs to a specific feature. Put a new source file next to its callers and declare it through its owning Rust module. Source files stay below 1,000 lines. Standalone tests remain under `tests/`; private unit tests are included from there with `#[cfg(test)]`.
+Do not add a generic `utils/` directory for code that belongs to a specific feature. Put a new source file next to its callers and declare it through its owning Rust module. Maintained Rust files in `src/`, `tests/` and `third_party/` stay below 1,000 lines; the source-layout CI test checks all three trees. Standalone tests remain under `tests/`; private unit tests are included from there with `#[cfg(test)]`.
+
+The vendored `gemm-common` crate separates architecture implementations under `src/simd/`, complex microkernel macros under `src/microkernel/` and dispatch macros under `src/gemm/`. Its exported macros and runtime dispatch remain compatible. Audio quality stereo cases live in `tests/audio_quality/stereo.rs`; output startup cases live in `tests/unit/output_startup.rs`, included by `audio::bridge` only in tests.
 
 ## Module responsibilities
 

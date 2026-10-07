@@ -5,9 +5,30 @@
   "revision": "86102c5b712737978371ac9ef7a11982f686d7bc",
   "source": "https://crates.io/api/v1/crates/gemm-common/0.19.0/download",
   "original_simd_sha256": "5f068586c035edd817239b8f8334f01b744529f705ced474ff0633967695e3ff",
-  "patched_simd_sha256": "456af15c8b8cf47059035123a0d6b758ecfdc442bea88a0633277093412c3b30",
+  "patched_simd_sha256": "310845310b954658df59e84e2c77f648a03adb5009cb91e49eca662a61437947",
   "license": "MIT",
   "modified_files": [
-    "src/simd.rs"
-  ]
+    "src/gemm.rs",
+    "src/gemm/dispatch.rs",
+    "src/microkernel.rs",
+    "src/microkernel/complex.rs",
+    "src/microkernel/complex_two_step.rs",
+    "src/simd.rs",
+    "src/simd/aarch64.rs",
+    "src/simd/x86.rs",
+    "src/simd/x86/complex.rs",
+    "src/simd/x86/wide.rs"
+  ],
+  "maintained_source_sha256": {
+    "src/simd.rs": "310845310b954658df59e84e2c77f648a03adb5009cb91e49eca662a61437947",
+    "src/microkernel.rs": "71699f8309854f584fc8c6a655d9a6c652de313d7e0aaa57f5da11266c26e606",
+    "src/gemm.rs": "c2bfe117281649eb064d87bfc0c2c7110b142186489286b2a8d1186faec4630d",
+    "src/simd/x86.rs": "823f641160f7fc4ade2a01d46c37312027c6948f4ee779db389776487785e892",
+    "src/simd/x86/complex.rs": "d52cfca84ff791f8f359d042964eef3ba04e2f91aaa9c178a5589ad29cd3ecac",
+    "src/simd/x86/wide.rs": "b5ef01f7b62be987a5cfc4f0233264e0e542a68e7822f693d7e786172e59262a",
+    "src/simd/aarch64.rs": "d58abaa48a0b1d170b45f916d0a5e01ee195d0be2264c4e4d8c3e58b5b1aa965",
+    "src/microkernel/complex_two_step.rs": "6e21d243a4f90ea19d7196017c95769ad33d2faac2010f5716b20afca4efc9a3",
+    "src/microkernel/complex.rs": "cca9524cb395ec24b04c1f4aec5dd5ef2359144966b6c11ab8086b46fbb47fb7",
+    "src/gemm/dispatch.rs": "918554c4ce3185b989381a0f6d651833befad30d180647785421a7c980c4707c"
+  }
 }
