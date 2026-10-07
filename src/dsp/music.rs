@@ -457,6 +457,15 @@ impl Settings {
         }
         [1.0 - self.balance.max(0.0), 1.0 + self.balance.min(0.0)]
     }
+
+    pub(crate) fn match_detector_needs_warmup(&self, other: &Self) -> bool {
+        // Spatial transfer changes can rotate/decorrelate a single frame enough that a fresh
+        // K-weighted power ratio is not representative. Dynamics/EQ toggles already have
+        // their own state ramps and must not be held in repeated detector cold starts.
+        self.virtual_surround != other.virtual_surround
+            || self.stereo_focus != other.stereo_focus
+            || self.width != other.width
+    }
 }
 
 #[derive(Clone, Copy)]
