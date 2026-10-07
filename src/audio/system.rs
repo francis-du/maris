@@ -52,22 +52,19 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
     // System-wide capture must stay on the established global tap. Some CoreAudio
     // endpoints accept the device-scoped CATapDescription but then mute that physical
     // stream when CATapMutedWhenTapped is engaged, leaving Maris with no usable PCM while
-    // the original application audio is suppressed.
+    // the original application audio is suppressed. That failure is device-specific and
+    // was reproduced on one Mac while another worked normally.
     //
     // Keep device-scoped capture only for explicit per-application capture. System mode
     // uses a global self-excluding tap and still renders to the selected physical output.
     let mut tap = if processes.is_empty() {
         TapCapture::prepare(queue.clone(), metrics.clone())?
-    } else if let Some(uid) = binding
-        .coreaudio_id
-        .and_then(|device| tap_ffi::single_stereo_output_device_uid(device).ok().flatten())
-    {
-        TapCapture::prepare_processes_for_output(
-            queue.clone(),
-            metrics.clone(),
-            processes,
-            &uid,
-        )?
+    } else if let Some(uid) = binding.coreaudio_id.and_then(|device| {
+        tap_ffi::single_stereo_output_device_uid(device)
+            .ok()
+            .flatten()
+    }) {
+        TapCapture::prepare_processes_for_output(queue.clone(), metrics.clone(), processes, &uid)?
     } else {
         TapCapture::prepare_processes(queue.clone(), metrics.clone(), processes)?
     };
