@@ -377,18 +377,21 @@ impl Processor {
                     .match_detector_needs_warmup(&self.next.settings.music);
                 std::mem::swap(&mut self.active, &mut self.next);
                 self.remaining = self.total.saturating_sub(self.remaining).max(1);
-                // Collapse both gain endpoints onto the value that was actually audible at the
-                // reversal point. Restart the incoming-chain power history; only spatial
-                // phase/decorrelation changes need a brief detector warm-up.
-                self.match_transition_from = current_match_gain;
-                self.match_gain = current_match_gain;
+                // Spatial phase/decorrelation reversals can make a single fresh weighted
+                // frame unrepresentative, so pin both gain endpoints to the currently audible
+                // value while that detector warms. Other effect reversals retain the existing
+                // fidelity-13 gain-endpoint swap; changing that behavior makes rapid dynamics
+                // controls step the telemetry even though their transfer is already ramped.
+                if needs_warmup {
+                    self.match_transition_from = current_match_gain;
+                    self.match_gain = current_match_gain;
+                    self.match_observed_frames = 0;
+                } else {
+                    std::mem::swap(&mut self.match_transition_from, &mut self.match_gain);
+                    self.match_observed_frames = self.next.settings.match_warmup_frames;
+                }
                 self.match_reference_power = 0.0;
                 self.match_output_power = 0.0;
-                self.match_observed_frames = if needs_warmup {
-                    0
-                } else {
-                    self.next.settings.match_warmup_frames
-                };
                 self.match_reference_filter = [[crate::dsp::tone::State::default(); 2]; 2];
                 self.match_output_filter = [[crate::dsp::tone::State::default(); 2]; 2];
                 self.pending = None;
