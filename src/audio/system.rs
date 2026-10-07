@@ -49,25 +49,24 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
     )?;
     prime.play()?;
     bridge::wait_output_ready(&metrics, Duration::from_secs(1))?;
-    // Prefer the exact selected CoreAudio output stream when it is a single
-    // mono/stereo stream. This avoids an unnecessary global stereo mixdown, which
-    // can alter capture level on multi-output systems. Multi-stream or multichannel
-    // devices keep the established global path rather than guessing a stream pair.
-    let scoped_output_uid = binding.coreaudio_id.and_then(|device| {
+    // System-wide capture must stay on the established global tap. Some CoreAudio
+    // endpoints accept the device-scoped CATapDescription but then mute that physical
+    // stream when CATapMutedWhenTapped is engaged, leaving Maris with no usable PCM while
+    // the original application audio is suppressed. That failure is device-specific and
+    // was reproduced on one Mac while another worked normally.
+    //
+    // Keep device-scoped capture only for explicit per-application capture. System mode
+    // uses a global self-excluding tap and still renders to the selected physical output.
+    let mut tap = if processes.is_empty() {
+        TapCapture::prepare(queue.clone(), metrics.clone())?
+    } else if let Some(uid) = binding.coreaudio_id.and_then(|device| {
         tap_ffi::single_stereo_output_device_uid(device)
             .ok()
             .flatten()
-    });
-    let mut tap = match (processes.is_empty(), scoped_output_uid.as_deref()) {
-        (true, Some(uid)) => TapCapture::prepare_for_output(queue.clone(), metrics.clone(), uid)?,
-        (false, Some(uid)) => TapCapture::prepare_processes_for_output(
-            queue.clone(),
-            metrics.clone(),
-            processes,
-            uid,
-        )?,
-        (true, None) => TapCapture::prepare(queue.clone(), metrics.clone())?,
-        (false, None) => TapCapture::prepare_processes(queue.clone(), metrics.clone(), processes)?,
+    }) {
+        TapCapture::prepare_processes_for_output(queue.clone(), metrics.clone(), processes, &uid)?
+    } else {
+        TapCapture::prepare_processes(queue.clone(), metrics.clone(), processes)?
     };
     drop(prime);
     // Readiness belongs to one stream. The temporary registration stream must
