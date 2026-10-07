@@ -147,14 +147,6 @@ impl TapCapture {
         Self::prepare_scope(queue, metrics, None, None)
     }
 
-    pub fn prepare_for_output(
-        queue: Arc<ArrayQueue<[f32; 2]>>,
-        metrics: Arc<Metrics>,
-        device_uid: &str,
-    ) -> Result<Self> {
-        Self::prepare_scope(queue, metrics, None, Some((device_uid, 0)))
-    }
-
     pub fn prepare_processes(
         queue: Arc<ArrayQueue<[f32; 2]>>,
         metrics: Arc<Metrics>,
