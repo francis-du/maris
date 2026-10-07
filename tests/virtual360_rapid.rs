@@ -73,8 +73,7 @@ fn rapid_virtual360_amount_updates_keep_audio_and_makeup_continuous() {
             }
             previous = output;
             let makeup = processor.level_match_makeup_db();
-            maximum_makeup_step =
-                maximum_makeup_step.max((makeup - previous_makeup).abs());
+            maximum_makeup_step = maximum_makeup_step.max((makeup - previous_makeup).abs());
             previous_makeup = makeup;
         }
         let delta = 10.0 * (output_power / input_power.max(1e-30)).log10();
