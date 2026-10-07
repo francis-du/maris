@@ -77,16 +77,23 @@ enum ModelAction {
 enum Command {
     #[cfg(unix)]
     #[command(name = "__route-watch", hide = true)]
-    RouteWatch {
-        token: String,
-    },
+    RouteWatch { token: String },
     /// Open Maris and automatically tune system playback after OS authorization.
     App,
     /// Build a local macOS application bundle from this executable.
     Package,
-    Language {
-        code: Option<String>,
+    /// Replace this installed release with the latest stable release, or a pinned version.
+    Update {
+        #[arg(long, help = "Install a specific stable X.Y.Z or vX.Y.Z release")]
+        version: Option<String>,
+        #[arg(
+            long,
+            help = "Show the installer plan without network access or file changes"
+        )]
+        dry_run: bool,
     },
+    /// Show or change the interface language.
+    Language { code: Option<String> },
     /// Read or change the current device's sound settings.
     Sound {
         #[arg(long)]
@@ -99,6 +106,7 @@ enum Command {
         #[command(subcommand)]
         action: crate::cli::mixer::Action,
     },
+    /// List available audio devices and stable platform identifiers.
     Devices,
     /// List apps with audio without changing their playback.
     Applications,
@@ -118,9 +126,9 @@ enum Command {
         #[command(subcommand)]
         action: Option<ModelAction>,
     },
-    Analyze {
-        file: PathBuf,
-    },
+    /// Analyze an audio file and print measured signal/music context.
+    Analyze { file: PathBuf },
+    /// Create a bounded tuning proposal from live or file analysis.
     Smart {
         #[arg(long, default_value = "balanced")]
         goal: String,
@@ -131,15 +139,16 @@ enum Command {
         #[arg(long)]
         save: Option<PathBuf>,
     },
-    SmartApply {
-        file: PathBuf,
-    },
+    /// Apply a previously saved Smart proposal after revision checks.
+    SmartApply { file: PathBuf },
+    /// Run speech-only RNNoise enhancement on a file.
     Enhance {
         input: PathBuf,
         output: PathBuf,
         #[arg(long)]
         confirm_speech: bool,
     },
+    /// Run live speech processing from one input to an output.
     Voice {
         #[arg(long)]
         input: String,
@@ -148,6 +157,7 @@ enum Command {
         #[arg(long)]
         confirm_speech: bool,
     },
+    /// Start a detached live/system audio session through the desktop controller.
     Start {
         #[arg(long)]
         input: Option<String>,
@@ -158,21 +168,25 @@ enum Command {
         #[arg(long)]
         accept_routing: bool,
     },
+    /// Request the currently running Maris audio session to stop.
     Stop,
+    /// Run or ensure the native menu-bar/system-tray controller.
     Tray {
         #[arg(long)]
         background: bool,
     },
+    /// Inspect native audio capabilities, permissions, devices, and recovery state.
     Doctor,
+    /// Print saved settings and current runtime telemetry.
     Status,
+    /// List, inspect, apply, or restore global EQ presets.
     Presets {
         #[command(subcommand)]
         action: Option<PresetCatalogAction>,
     },
     /// Compatibility alias for `maris presets apply <name>`.
-    Preset {
-        name: String,
-    },
+    Preset { name: String },
+    /// Edit one global EQ band.
     Band {
         index: usize,
         #[arg(allow_hyphen_values = true)]
@@ -182,34 +196,35 @@ enum Command {
         #[arg(long)]
         q: Option<f64>,
     },
+    /// Set the global preamp in dB.
     Preamp {
         #[arg(allow_hyphen_values = true)]
         db: f64,
     },
+    /// Enable or disable global processing bypass while retaining safety gain.
     Bypass {
         #[arg(action = clap::ArgAction::Set)]
         value: bool,
     },
-    Crossfeed {
-        amount: f64,
-    },
-    Width {
-        amount: f64,
-    },
+    /// Set global headphone crossfeed amount.
+    Crossfeed { amount: f64 },
+    /// Set global stereo-width amount.
+    Width { amount: f64 },
+    /// Undo the most recent compatible global settings change.
     Undo,
+    /// Print the JSON schema for the global DSP profile.
     Schema,
+    /// Validate or apply a global DSP profile JSON file.
     Apply {
         file: PathBuf,
         #[arg(long)]
         dry_run: bool,
     },
-    Export {
-        file: PathBuf,
-    },
-    Render {
-        input: PathBuf,
-        output: PathBuf,
-    },
+    /// Export the current global DSP profile to a new JSON file.
+    Export { file: PathBuf },
+    /// Render an audio file offline through the current DSP profile.
+    Render { input: PathBuf, output: PathBuf },
+    /// Process a live input device until stopped or the optional timeout expires.
     Run {
         #[arg(long)]
         input: String,
@@ -218,6 +233,7 @@ enum Command {
         #[arg(long)]
         seconds: Option<u64>,
     },
+    /// Play an audio file through Maris processing.
     Play {
         file: PathBuf,
         #[arg(long)]
@@ -225,6 +241,7 @@ enum Command {
         #[arg(long)]
         repeat: bool,
     },
+    /// Open the terminal UI, attaching to or starting an audio session as needed.
     Tui {
         #[arg(long)]
         input: Option<String>,
@@ -233,6 +250,7 @@ enum Command {
         #[arg(long)]
         play: Option<PathBuf>,
     },
+    /// Process macOS/Windows/Linux system playback with explicit routing authorization.
     System {
         #[arg(long)]
         output: Option<String>,
@@ -241,14 +259,15 @@ enum Command {
         #[arg(long, help = "Stop after this many seconds")]
         seconds: Option<u64>,
     },
+    /// Restore platform audio routing owned by a previous Maris session.
     Restore,
+    /// Serve the local MCP control protocol; writes are opt-in.
     Mcp {
         #[arg(long)]
         allow_write: bool,
     },
-    Integration {
-        client: String,
-    },
+    /// Print MCP integration configuration for a supported client.
+    Integration { client: String },
 }
 
 pub fn main() {
@@ -299,6 +318,7 @@ fn run(cli: Cli) -> Result<()> {
             }
         }
         Command::Package => print(desktop::package_macos()?),
+        Command::Update { version, dry_run } => update(version.as_deref(), dry_run),
         Command::Language { code } => {
             if let Some(code) = code {
                 crate::i18n::save(&store, &code)?;
@@ -631,6 +651,87 @@ fn run(cli: Cli) -> Result<()> {
         }
     }
 }
+
+#[cfg(unix)]
+fn update(version: Option<&str>, dry_run: bool) -> Result<()> {
+    use std::os::unix::process::CommandExt;
+    let executable = std::env::current_exe()?.canonicalize()?;
+    let package_root = executable
+        .parent()
+        .and_then(|path| path.parent())
+        .context("Cannot resolve installed Maris package root")?;
+    let lib = package_root
+        .parent()
+        .context("Cannot resolve installed Maris lib directory")?;
+    ensure!(
+        lib.file_name().and_then(|name| name.to_str()) == Some("lib"),
+        "Update is available from an installed CLI release; reinstall Maris once with the public installer"
+    );
+    let prefix = lib
+        .parent()
+        .context("Cannot resolve Maris install prefix")?;
+    let installer = package_root.join("resources/install.sh");
+    ensure!(
+        installer.is_file(),
+        "This Maris release does not contain the updater; reinstall once with the public installer"
+    );
+    let mut command = std::process::Command::new("/bin/bash");
+    command
+        .arg(installer)
+        .arg("--prefix")
+        .arg(prefix)
+        .arg("--yes");
+    if let Some(version) = version {
+        command.arg("--version").arg(version);
+    }
+    if dry_run {
+        command.arg("--dry-run");
+    }
+    let error = command.exec();
+    Err(error).context("Launch Maris updater")
+}
+
+#[cfg(windows)]
+fn update(version: Option<&str>, dry_run: bool) -> Result<()> {
+    let executable = std::env::current_exe()?.canonicalize()?;
+    let package_root = executable
+        .parent()
+        .and_then(|path| path.parent())
+        .context("Cannot resolve installed Maris package root")?;
+    let prefix = package_root
+        .parent()
+        .context("Cannot resolve Maris install prefix")?;
+    let installer = package_root.join("resources/install.ps1");
+    ensure!(
+        installer.is_file(),
+        "This Maris release does not contain the updater; reinstall once with the public installer"
+    );
+    let mut command = std::process::Command::new("powershell.exe");
+    command
+        .args(["-NoLogo", "-NoProfile", "-File"])
+        .arg(installer)
+        .arg("-Prefix")
+        .arg(prefix)
+        .arg("-Yes");
+    if let Some(version) = version {
+        command.arg("-Version").arg(version);
+    }
+    if dry_run {
+        command.arg("-DryRun");
+        let status = command.status()?;
+        ensure!(status.success(), "Maris update dry run failed");
+        return Ok(());
+    }
+    command
+        .arg("-WaitForPid")
+        .arg(std::process::id().to_string())
+        .spawn()
+        .context("Launch Maris updater")?;
+    print(
+        json!({"update_started":true,"current_version":env!("CARGO_PKG_VERSION"),"requested":version.unwrap_or("latest")}),
+    )
+}
+
 fn wait(mut session: audio::Session, seconds: Option<u64>, no_tray: bool) -> Result<()> {
     if !no_tray {
         if let Err(error) = desktop::ensure_running(session.store()) {

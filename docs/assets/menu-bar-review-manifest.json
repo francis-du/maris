@@ -4,7 +4,7 @@
   "audio_started": false,
   "whole_desktop_captured": false,
   "source_sha256": {
-    "Cargo.toml": "67316602a331ad8a818c468cd16833fab660f7e6ef5ba012bcb36cff3b5f4974",
+    "Cargo.toml": "19a1e61849cb33f45e9dd990a0b9532ac73d511348c02353817cca725583c74f",
     "src/ui/desktop/native.rs": "c5932cc6df9aca97e95e979e30d61399d7ff64337556da3b6513fcb82441b335",
     "src/ui/desktop/menu_header.rs": "e76197797c5b66ae0acb5ffe451769a2074172dc27baedc4abcae612f3bca57d",
     "src/ui/desktop/native_mark.rs": "1b721a31705f5690188151921a729b0bd692cb0f90c144ca9482c815e64e91d2",
@@ -17,25 +17,25 @@
     "src/i18n/surface.rs": "02f8ff5343c057964514fd2e0af86775799fe1ed6bec46badc79a69d0ccfe99a",
     "src/i18n/messages.rs": "f523252bfe6c4bfe21d828959ec33019fb2b1f1fc1383f336e2bb4e2b9ae144d"
   },
-  "probe_sha256": "5e5350e0b8748a2e240d2f9c427f2c33cae4b3a994bf4ef74a23bf78e43e2121",
+  "probe_sha256": "9d90a3111d0a5fe281bf00cc6f146f32f5cf1160e6fb475a8f389e2723a39b7f",
   "images": {
     "menu-bar-en.svg": {
-      "sha256": "1a68449db72a4dee51c99216cd30ddb669d9aebb84a0a947a2c08fa38b03cf7e",
+      "sha256": "875c7997cab958881db0192a12c57bd8d5bf83708db3d97413a94c1efe426436",
       "locale": "en",
       "width": 1100,
       "height": 1300,
       "captures": [
         {
-          "sha256": "0a78e7bbe02858b6a2988ec100cb8d51c076a3b0e17254804ca1a3c53be9bddf",
-          "pixel_width": 26,
-          "pixel_height": 22,
+          "sha256": "7e5ea9cae1653d472d83635f89208ff9e63334aff0afb410a64cbe86bccaf18b",
+          "pixel_width": 52,
+          "pixel_height": 44,
           "capture": {
             "appearance": "light",
             "logical_height": 22.0,
             "logical_width": 26.0,
-            "pixel_height": 22,
-            "pixel_width": 26,
-            "png_bytes": 3129,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 3960,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -60,17 +60,17 @@
           }
         },
         {
-          "sha256": "d04caca52152851bd6dcb0e357cca86d5ffda1c815dd23b6a26e5ff4b9a7ba65",
-          "pixel_width": 358,
-          "pixel_height": 470,
+          "sha256": "9e329dfc0b0150a15bd8c2603fca81e5c2725d1b04f05564bd9c27934717655b",
+          "pixel_width": 766,
+          "pixel_height": 1000,
           "capture": {
             "appearance": "light",
             "capture_attempts": 1,
-            "logical_height": 470.0,
-            "logical_width": 358.0,
-            "pixel_height": 470,
-            "pixel_width": 358,
-            "png_bytes": 39354,
+            "logical_height": 500.0,
+            "logical_width": 383.0,
+            "pixel_height": 1000,
+            "pixel_width": 766,
+            "png_bytes": 106753,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -95,16 +95,16 @@
           }
         },
         {
-          "sha256": "d149a24d7790adaec173d76782c8a6102839f4d1980ce17044abeb56cbb17940",
-          "pixel_width": 26,
-          "pixel_height": 22,
+          "sha256": "0f7d2766b91243020dffa504e14e5a1b3edb80debcd4fe14450cabc88ae4af06",
+          "pixel_width": 52,
+          "pixel_height": 44,
           "capture": {
             "appearance": "dark",
             "logical_height": 22.0,
             "logical_width": 26.0,
-            "pixel_height": 22,
-            "pixel_width": 26,
-            "png_bytes": 3149,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 3987,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -129,17 +129,17 @@
           }
         },
         {
-          "sha256": "2b7d47d71c79a676e0ceb9256a3f646623e6bbc378d677cf5a24841220c17b65",
-          "pixel_width": 358,
-          "pixel_height": 470,
+          "sha256": "9817d72131f80e0753a92baa9599a050a39d2131635f973d286e0066d26a7443",
+          "pixel_width": 766,
+          "pixel_height": 1000,
           "capture": {
             "appearance": "dark",
             "capture_attempts": 1,
-            "logical_height": 470.0,
-            "logical_width": 358.0,
-            "pixel_height": 470,
-            "pixel_width": 358,
-            "png_bytes": 40966,
+            "logical_height": 500.0,
+            "logical_width": 383.0,
+            "pixel_height": 1000,
+            "pixel_width": 766,
+            "png_bytes": 106807,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -164,16 +164,16 @@
           }
         },
         {
-          "sha256": "d149a24d7790adaec173d76782c8a6102839f4d1980ce17044abeb56cbb17940",
-          "pixel_width": 26,
-          "pixel_height": 22,
+          "sha256": "0f7d2766b91243020dffa504e14e5a1b3edb80debcd4fe14450cabc88ae4af06",
+          "pixel_width": 52,
+          "pixel_height": 44,
           "capture": {
             "appearance": "dark",
             "logical_height": 22.0,
             "logical_width": 26.0,
-            "pixel_height": 22,
-            "pixel_width": 26,
-            "png_bytes": 3149,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 3987,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -198,16 +198,16 @@
           }
         },
         {
-          "sha256": "0aa3108a1ee48e5721a7fdee6bf4f21d2bb43b07ef2cc3889ebbad1a8c0922fc",
-          "pixel_width": 320,
-          "pixel_height": 86,
+          "sha256": "3bf8480521acf3bd5fd87ac869ebf1e8c2bb4460c8c7916507bd2c3c5333a032",
+          "pixel_width": 640,
+          "pixel_height": 172,
           "capture": {
             "appearance": "dark",
             "logical_height": 86.0,
             "logical_width": 320.0,
-            "pixel_height": 86,
-            "pixel_width": 320,
-            "png_bytes": 5383,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 11873,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -232,16 +232,16 @@
           }
         },
         {
-          "sha256": "36667836de4d516dc1faa86662909360f41e8f8636e4485155ac3a6fa7bad7ad",
-          "pixel_width": 26,
-          "pixel_height": 22,
+          "sha256": "860f99271213aefa6a60ec5aac55ed7f4c40adf657c5883534c363159290b93b",
+          "pixel_width": 52,
+          "pixel_height": 44,
           "capture": {
             "appearance": "dark",
             "logical_height": 22.0,
             "logical_width": 26.0,
-            "pixel_height": 22,
-            "pixel_width": 26,
-            "png_bytes": 3148,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 4011,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -266,16 +266,16 @@
           }
         },
         {
-          "sha256": "1c223e4132a50b128065a8c8a148d7800eff6a414207e2a509ab63282b7a4bc0",
-          "pixel_width": 320,
-          "pixel_height": 86,
+          "sha256": "e8b57da3b99c761dfec910724777fe915b47add7379b56aab65cece27112083c",
+          "pixel_width": 640,
+          "pixel_height": 172,
           "capture": {
             "appearance": "dark",
             "logical_height": 86.0,
             "logical_width": 320.0,
-            "pixel_height": 86,
-            "pixel_width": 320,
-            "png_bytes": 4755,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 10506,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -300,16 +300,16 @@
           }
         },
         {
-          "sha256": "022b485c84a4355883b6b76a8831f89ecd567edef6acf046ca7ea588e40b1d28",
-          "pixel_width": 26,
-          "pixel_height": 22,
+          "sha256": "b78dc98db67900148e03887a6a71eaae68289c249ee2f4021f353dbb244419ed",
+          "pixel_width": 52,
+          "pixel_height": 44,
           "capture": {
             "appearance": "dark",
             "logical_height": 22.0,
             "logical_width": 26.0,
-            "pixel_height": 22,
-            "pixel_width": 26,
-            "png_bytes": 3155,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 4057,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -334,16 +334,16 @@
           }
         },
         {
-          "sha256": "86ba9f52b84e18be99181872e3218c6eb1d30a24826d661927a5e0abf8b3f3cc",
-          "pixel_width": 320,
-          "pixel_height": 86,
+          "sha256": "e107f74ec7a94772d88c0aa1ab94c42f490119a9d38cc0ae3d579ec916290ce3",
+          "pixel_width": 640,
+          "pixel_height": 172,
           "capture": {
             "appearance": "dark",
             "logical_height": 86.0,
             "logical_width": 320.0,
-            "pixel_height": 86,
-            "pixel_width": 320,
-            "png_bytes": 5581,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 12269,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -368,16 +368,16 @@
           }
         },
         {
-          "sha256": "36667836de4d516dc1faa86662909360f41e8f8636e4485155ac3a6fa7bad7ad",
-          "pixel_width": 26,
-          "pixel_height": 22,
+          "sha256": "860f99271213aefa6a60ec5aac55ed7f4c40adf657c5883534c363159290b93b",
+          "pixel_width": 52,
+          "pixel_height": 44,
           "capture": {
             "appearance": "dark",
             "logical_height": 22.0,
             "logical_width": 26.0,
-            "pixel_height": 22,
-            "pixel_width": 26,
-            "png_bytes": 3148,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 4011,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -402,16 +402,16 @@
           }
         },
         {
-          "sha256": "68f3c3ab1857153913dd6f758eb5d57877cd4663d8b4322dcd0f5346ec0027bb",
-          "pixel_width": 320,
-          "pixel_height": 86,
+          "sha256": "ddf0c6f8a70e81a6dbd8c8c3999dd3fa6b0ac5b2ba711ccc3d8bf1d665878737",
+          "pixel_width": 640,
+          "pixel_height": 172,
           "capture": {
             "appearance": "dark",
             "logical_height": 86.0,
             "logical_width": 320.0,
-            "pixel_height": 86,
-            "pixel_width": 320,
-            "png_bytes": 5242,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 11619,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -436,16 +436,16 @@
           }
         },
         {
-          "sha256": "36667836de4d516dc1faa86662909360f41e8f8636e4485155ac3a6fa7bad7ad",
-          "pixel_width": 26,
-          "pixel_height": 22,
+          "sha256": "860f99271213aefa6a60ec5aac55ed7f4c40adf657c5883534c363159290b93b",
+          "pixel_width": 52,
+          "pixel_height": 44,
           "capture": {
             "appearance": "dark",
             "logical_height": 22.0,
             "logical_width": 26.0,
-            "pixel_height": 22,
-            "pixel_width": 26,
-            "png_bytes": 3148,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 4011,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -470,16 +470,16 @@
           }
         },
         {
-          "sha256": "a5e755d1a4f99a79c7138c36183bc91623073a717bdd50a4ba266c83e9d380ae",
-          "pixel_width": 320,
-          "pixel_height": 86,
+          "sha256": "a476056e8d1ca4bbd75f83eceb1731d56862a42f317bfc8a769e5b619bbe739a",
+          "pixel_width": 640,
+          "pixel_height": 172,
           "capture": {
             "appearance": "dark",
             "logical_height": 86.0,
             "logical_width": 320.0,
-            "pixel_height": 86,
-            "pixel_width": 320,
-            "png_bytes": 5784,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 12465,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -504,16 +504,16 @@
           }
         },
         {
-          "sha256": "36667836de4d516dc1faa86662909360f41e8f8636e4485155ac3a6fa7bad7ad",
-          "pixel_width": 26,
-          "pixel_height": 22,
+          "sha256": "860f99271213aefa6a60ec5aac55ed7f4c40adf657c5883534c363159290b93b",
+          "pixel_width": 52,
+          "pixel_height": 44,
           "capture": {
             "appearance": "dark",
             "logical_height": 22.0,
             "logical_width": 26.0,
-            "pixel_height": 22,
-            "pixel_width": 26,
-            "png_bytes": 3148,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 4011,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -538,16 +538,16 @@
           }
         },
         {
-          "sha256": "4a757f9cca4b54f6ed36865118782324aa840fbbcc9fc02523ef73cfcb49e0f7",
-          "pixel_width": 320,
-          "pixel_height": 86,
+          "sha256": "eaeff95aa18d122fc9b0c3d1c15139e41dfcf3f93391e038bfddc37524f6aeb5",
+          "pixel_width": 640,
+          "pixel_height": 172,
           "capture": {
             "appearance": "dark",
             "logical_height": 86.0,
             "logical_width": 320.0,
-            "pixel_height": 86,
-            "pixel_width": 320,
-            "png_bytes": 6961,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 15875,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -574,22 +574,22 @@
       ]
     },
     "menu-bar-zh-CN.svg": {
-      "sha256": "fa2bbbe221f14a3b3107d138c28c73fcaa740ecf35ed5da7bd6b16513a0ac0f8",
+      "sha256": "a6f592d3565ef34903886e0c6aa90e33c5818915f4dedb8426cf814bc3054096",
       "locale": "zh-CN",
       "width": 1100,
       "height": 1300,
       "captures": [
         {
-          "sha256": "0a78e7bbe02858b6a2988ec100cb8d51c076a3b0e17254804ca1a3c53be9bddf",
-          "pixel_width": 26,
-          "pixel_height": 22,
+          "sha256": "7e5ea9cae1653d472d83635f89208ff9e63334aff0afb410a64cbe86bccaf18b",
+          "pixel_width": 52,
+          "pixel_height": 44,
           "capture": {
             "appearance": "light",
             "logical_height": 22.0,
             "logical_width": 26.0,
-            "pixel_height": 22,
-            "pixel_width": 26,
-            "png_bytes": 3129,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 3960,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -614,17 +614,17 @@
           }
         },
         {
-          "sha256": "e612476d30a9c96eb42726ee539e3ebb1b0a2c97f616fca8b3047a386dee1065",
-          "pixel_width": 320,
-          "pixel_height": 470,
+          "sha256": "d572b2eaa33e4978443efa002f27d4176e6a113a5b142ecd4e9d9c56cff83992",
+          "pixel_width": 640,
+          "pixel_height": 1000,
           "capture": {
             "appearance": "light",
             "capture_attempts": 1,
-            "logical_height": 470.0,
+            "logical_height": 500.0,
             "logical_width": 320.0,
-            "pixel_height": 470,
-            "pixel_width": 320,
-            "png_bytes": 36772,
+            "pixel_height": 1000,
+            "pixel_width": 640,
+            "png_bytes": 95032,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -649,16 +649,16 @@
           }
         },
         {
-          "sha256": "d149a24d7790adaec173d76782c8a6102839f4d1980ce17044abeb56cbb17940",
-          "pixel_width": 26,
-          "pixel_height": 22,
+          "sha256": "0f7d2766b91243020dffa504e14e5a1b3edb80debcd4fe14450cabc88ae4af06",
+          "pixel_width": 52,
+          "pixel_height": 44,
           "capture": {
             "appearance": "dark",
             "logical_height": 22.0,
             "logical_width": 26.0,
-            "pixel_height": 22,
-            "pixel_width": 26,
-            "png_bytes": 3149,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 3987,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -683,17 +683,17 @@
           }
         },
         {
-          "sha256": "5cafadde800bae89dd91df1d85a45967c15b0600433275a227ad7bac950ae3d1",
-          "pixel_width": 320,
-          "pixel_height": 470,
+          "sha256": "3d7a0ea8181d43610587a44d02df0f38694cd04ab643529659c184007d0be268",
+          "pixel_width": 640,
+          "pixel_height": 1000,
           "capture": {
             "appearance": "dark",
             "capture_attempts": 1,
-            "logical_height": 470.0,
+            "logical_height": 500.0,
             "logical_width": 320.0,
-            "pixel_height": 470,
-            "pixel_width": 320,
-            "png_bytes": 37484,
+            "pixel_height": 1000,
+            "pixel_width": 640,
+            "png_bytes": 95660,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -718,16 +718,16 @@
           }
         },
         {
-          "sha256": "d149a24d7790adaec173d76782c8a6102839f4d1980ce17044abeb56cbb17940",
-          "pixel_width": 26,
-          "pixel_height": 22,
+          "sha256": "0f7d2766b91243020dffa504e14e5a1b3edb80debcd4fe14450cabc88ae4af06",
+          "pixel_width": 52,
+          "pixel_height": 44,
           "capture": {
             "appearance": "dark",
             "logical_height": 22.0,
             "logical_width": 26.0,
-            "pixel_height": 22,
-            "pixel_width": 26,
-            "png_bytes": 3149,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 3987,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -752,16 +752,16 @@
           }
         },
         {
-          "sha256": "9d0be6d279b670f45763fd328fac491c6508f72d5209082c9adbc17c14666964",
-          "pixel_width": 320,
-          "pixel_height": 86,
+          "sha256": "e190febc73673d976ceb6ec3f04655e2d125ce1465b6ea9441c973b74fdb3850",
+          "pixel_width": 640,
+          "pixel_height": 172,
           "capture": {
             "appearance": "dark",
             "logical_height": 86.0,
             "logical_width": 320.0,
-            "pixel_height": 86,
-            "pixel_width": 320,
-            "png_bytes": 5183,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 11323,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -786,16 +786,16 @@
           }
         },
         {
-          "sha256": "36667836de4d516dc1faa86662909360f41e8f8636e4485155ac3a6fa7bad7ad",
-          "pixel_width": 26,
-          "pixel_height": 22,
+          "sha256": "860f99271213aefa6a60ec5aac55ed7f4c40adf657c5883534c363159290b93b",
+          "pixel_width": 52,
+          "pixel_height": 44,
           "capture": {
             "appearance": "dark",
             "logical_height": 22.0,
             "logical_width": 26.0,
-            "pixel_height": 22,
-            "pixel_width": 26,
-            "png_bytes": 3148,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 4011,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -820,16 +820,16 @@
           }
         },
         {
-          "sha256": "36bcd3b4250f3cd24f7ca4c1c42102a62f1db079f4ca722a607a5c0cd9ae700a",
-          "pixel_width": 320,
-          "pixel_height": 86,
+          "sha256": "392470d371e92f269c161853e2f0ee771f44a050c60148e62ff5ead748c67b0b",
+          "pixel_width": 640,
+          "pixel_height": 172,
           "capture": {
             "appearance": "dark",
             "logical_height": 86.0,
             "logical_width": 320.0,
-            "pixel_height": 86,
-            "pixel_width": 320,
-            "png_bytes": 4107,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 8657,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -854,16 +854,16 @@
           }
         },
         {
-          "sha256": "022b485c84a4355883b6b76a8831f89ecd567edef6acf046ca7ea588e40b1d28",
-          "pixel_width": 26,
-          "pixel_height": 22,
+          "sha256": "b78dc98db67900148e03887a6a71eaae68289c249ee2f4021f353dbb244419ed",
+          "pixel_width": 52,
+          "pixel_height": 44,
           "capture": {
             "appearance": "dark",
             "logical_height": 22.0,
             "logical_width": 26.0,
-            "pixel_height": 22,
-            "pixel_width": 26,
-            "png_bytes": 3155,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 4057,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -888,16 +888,16 @@
           }
         },
         {
-          "sha256": "f79ef87fee70557b44c57c3e752f4b6b120ac80e1ecfa5da6c0713b132ec995a",
-          "pixel_width": 320,
-          "pixel_height": 86,
+          "sha256": "a1ef956a6a25b7d6b3eda82e5576c96b846d1ca2b0b306d47a2de0529f506c80",
+          "pixel_width": 640,
+          "pixel_height": 172,
           "capture": {
             "appearance": "dark",
             "logical_height": 86.0,
             "logical_width": 320.0,
-            "pixel_height": 86,
-            "pixel_width": 320,
-            "png_bytes": 5047,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 10898,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -922,16 +922,16 @@
           }
         },
         {
-          "sha256": "36667836de4d516dc1faa86662909360f41e8f8636e4485155ac3a6fa7bad7ad",
-          "pixel_width": 26,
-          "pixel_height": 22,
+          "sha256": "860f99271213aefa6a60ec5aac55ed7f4c40adf657c5883534c363159290b93b",
+          "pixel_width": 52,
+          "pixel_height": 44,
           "capture": {
             "appearance": "dark",
             "logical_height": 22.0,
             "logical_width": 26.0,
-            "pixel_height": 22,
-            "pixel_width": 26,
-            "png_bytes": 3148,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 4011,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -956,16 +956,16 @@
           }
         },
         {
-          "sha256": "a2b080c71a447858b04863e3c07317fb9d4596cd35df63149461aeaa273d18c9",
-          "pixel_width": 320,
-          "pixel_height": 86,
+          "sha256": "f7c599028d0809b6d0eb3d3b7820b45baa54a3afde663e8c83dc4adf8627269d",
+          "pixel_width": 640,
+          "pixel_height": 172,
           "capture": {
             "appearance": "dark",
             "logical_height": 86.0,
             "logical_width": 320.0,
-            "pixel_height": 86,
-            "pixel_width": 320,
-            "png_bytes": 4629,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 9725,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -990,16 +990,16 @@
           }
         },
         {
-          "sha256": "36667836de4d516dc1faa86662909360f41e8f8636e4485155ac3a6fa7bad7ad",
-          "pixel_width": 26,
-          "pixel_height": 22,
+          "sha256": "860f99271213aefa6a60ec5aac55ed7f4c40adf657c5883534c363159290b93b",
+          "pixel_width": 52,
+          "pixel_height": 44,
           "capture": {
             "appearance": "dark",
             "logical_height": 22.0,
             "logical_width": 26.0,
-            "pixel_height": 22,
-            "pixel_width": 26,
-            "png_bytes": 3148,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 4011,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -1024,16 +1024,16 @@
           }
         },
         {
-          "sha256": "e0341074356bdbefcf3f87af713a7f1e666d3ebfb095e490ee5366c679868cbf",
-          "pixel_width": 320,
-          "pixel_height": 86,
+          "sha256": "eb8648723999af78af403c73eec6f9b72e57ef3d1dfc9806e96278e928068da2",
+          "pixel_width": 640,
+          "pixel_height": 172,
           "capture": {
             "appearance": "dark",
             "logical_height": 86.0,
             "logical_width": 320.0,
-            "pixel_height": 86,
-            "pixel_width": 320,
-            "png_bytes": 5704,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 12337,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -1058,16 +1058,16 @@
           }
         },
         {
-          "sha256": "36667836de4d516dc1faa86662909360f41e8f8636e4485155ac3a6fa7bad7ad",
-          "pixel_width": 26,
-          "pixel_height": 22,
+          "sha256": "860f99271213aefa6a60ec5aac55ed7f4c40adf657c5883534c363159290b93b",
+          "pixel_width": 52,
+          "pixel_height": 44,
           "capture": {
             "appearance": "dark",
             "logical_height": 22.0,
             "logical_width": 26.0,
-            "pixel_height": 22,
-            "pixel_width": 26,
-            "png_bytes": 3148,
+            "pixel_height": 44,
+            "pixel_width": 52,
+            "png_bytes": 4011,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false
@@ -1092,16 +1092,16 @@
           }
         },
         {
-          "sha256": "18a59ffa10a15c8d4507983dd55e4ad926d995306c4950e8cdfa2c2c0321c373",
-          "pixel_width": 320,
-          "pixel_height": 86,
+          "sha256": "9a16c9d21907865d387aeb6d08a2a04050cc7a2d49d541824437f7da81d16ba6",
+          "pixel_width": 640,
+          "pixel_height": 172,
           "capture": {
             "appearance": "dark",
             "logical_height": 86.0,
             "logical_width": 320.0,
-            "pixel_height": 86,
-            "pixel_width": 320,
-            "png_bytes": 7391,
+            "pixel_height": 172,
+            "pixel_width": 640,
+            "png_bytes": 16972,
             "renderer": "AppKit cacheDisplayInRect:toBitmapImageRep:",
             "transparent_view_regions": true,
             "whole_desktop_captured": false

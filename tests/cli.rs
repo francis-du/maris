@@ -12,23 +12,134 @@ fn run(directory: &Path, args: &[&str]) -> Output {
         .unwrap()
 }
 #[test]
-fn help_exposes_primary_commands_without_audio_access() {
+fn help_exposes_all_public_commands_with_descriptions() {
     let directory = tempfile::tempdir().unwrap();
     let output = run(directory.path(), &["--help"]);
     assert!(output.status.success());
     let help = String::from_utf8(output.stdout).unwrap();
-    for command in [
+    let commands = [
+        "app",
+        "package",
+        "update",
+        "language",
+        "sound",
+        "mixer",
         "devices",
         "applications",
         "application",
-        "tui",
-        "mcp",
-        "render",
-        "system",
         "models",
-    ] {
-        assert!(help.contains(command));
+        "analyze",
+        "smart",
+        "smart-apply",
+        "enhance",
+        "voice",
+        "start",
+        "stop",
+        "tray",
+        "doctor",
+        "status",
+        "presets",
+        "preset",
+        "band",
+        "preamp",
+        "bypass",
+        "crossfeed",
+        "width",
+        "undo",
+        "schema",
+        "apply",
+        "export",
+        "render",
+        "run",
+        "play",
+        "tui",
+        "system",
+        "restore",
+        "mcp",
+        "integration",
+    ];
+    for command in commands {
+        let line = help
+            .lines()
+            .find(|line| line.split_whitespace().next() == Some(command))
+            .unwrap_or_else(|| panic!("missing command in help: {command}"));
+        assert!(
+            line.split_whitespace().count() >= 2,
+            "command has no help description: {line:?}"
+        );
+        let detail = run(directory.path(), &[command, "--help"]);
+        assert!(detail.status.success(), "{command} --help failed");
+        assert!(String::from_utf8(detail.stdout).unwrap().contains("Usage:"));
     }
+    assert!(!help.contains("__route-watch"));
+}
+
+#[test]
+fn nested_sound_and_mixer_commands_have_descriptions() {
+    let directory = tempfile::tempdir().unwrap();
+    for (parent, commands) in [
+        (
+            "sound",
+            &[
+                "status",
+                "capability",
+                "match",
+                "bind",
+                "schema",
+                "scenes",
+                "preview",
+                "preset",
+                "set",
+                "compare",
+                "save-device",
+                "import",
+                "apply",
+            ][..],
+        ),
+        (
+            "mixer",
+            &[
+                "status",
+                "capabilities",
+                "run",
+                "eq",
+                "band",
+                "compressor",
+                "add",
+                "remove",
+                "set",
+                "bus",
+                "duck",
+                "scene-save",
+                "scene-restore",
+                "undo",
+            ][..],
+        ),
+    ] {
+        let output = run(directory.path(), &[parent, "--help"]);
+        assert!(output.status.success());
+        let help = String::from_utf8(output.stdout).unwrap();
+        for command in commands {
+            let line = help
+                .lines()
+                .find(|line| line.split_whitespace().next() == Some(*command))
+                .unwrap_or_else(|| panic!("missing {parent} command: {command}"));
+            assert!(
+                line.split_whitespace().count() >= 2,
+                "missing description: {line:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn update_from_a_development_binary_fails_before_network_access() {
+    let directory = tempfile::tempdir().unwrap();
+    let output = run(directory.path(), &["--json", "update", "--dry-run"]);
+    assert!(!output.status.success());
+    let value: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let message = value["error"]["message"].as_str().unwrap();
+    assert!(message.contains("installed CLI release") || message.contains("updater"));
 }
 #[test]
 fn negative_gains_and_explicit_boolean_values_parse() {

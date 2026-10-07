@@ -4,7 +4,7 @@ use super::{
     OutputBinding, Session, Settings, Update,
 };
 use crate::control::store::Store;
-use anyhow::{ensure, Result};
+use anyhow::{ensure, Context, Result};
 use cpal::{
     traits::{DeviceTrait, StreamTrait},
     Stream,
@@ -57,8 +57,12 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
     //
     // Keep device-scoped capture only for explicit per-application capture. System mode
     // uses a global self-excluding tap and still renders to the selected physical output.
+    let output_uid = binding
+        .coreaudio_id
+        .and_then(|device| tap_ffi::device_uid(device).ok())
+        .context("Selected macOS output has no stable CoreAudio UID")?;
     let mut tap = if processes.is_empty() {
-        TapCapture::prepare(queue.clone(), metrics.clone())?
+        TapCapture::prepare_for_output_clock(queue.clone(), metrics.clone(), &output_uid)?
     } else if let Some(uid) = binding.coreaudio_id.and_then(|device| {
         tap_ffi::single_stereo_output_device_uid(device)
             .ok()

@@ -34,6 +34,8 @@ class CliContracts(unittest.TestCase):
                     create_payload(ROOT, binary, output, system, arch, '0.1.0', cli=True)
                     self.assertEqual((output / '.maris-package').read_text(encoding='utf-8').splitlines(),
                                      ['maris-package-v2', system, arch, '0.1.0', 'cli'])
+                    updater = 'install.ps1' if system == 'windows' else 'install.sh'
+                    self.assertTrue((output / 'resources' / updater).is_file())
                     validate_binary(binary, system, arch)
                     with self.assertRaises(ValueError):
                         validate_binary(binary, system, 'arm64' if arch == 'x86_64' else 'x86_64')

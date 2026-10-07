@@ -6,7 +6,9 @@ use serde_json::{json, Value};
 
 #[derive(Subcommand)]
 pub enum Action {
+    /// Show the saved mixer topology and current capabilities.
     Status,
+    /// Show platform mixer and routing capabilities without changing state.
     Capabilities,
     /// Start the configured inputs and output buses; never changes OS volume or defaults.
     Run {
@@ -18,10 +20,7 @@ pub enum Action {
         seconds: Option<u64>,
     },
     /// Apply an EQ preset to one strip without changing device correction.
-    Eq {
-        id: String,
-        preset: String,
-    },
+    Eq { id: String, preset: String },
     /// Adjust one strip EQ band (1 through 10).
     Band {
         id: String,
@@ -39,6 +38,7 @@ pub enum Action {
         #[arg(long)]
         ratio: Option<f64>,
     },
+    /// Add a mixer input strip from a device or application source.
     Add {
         id: String,
         #[arg(long)]
@@ -46,9 +46,9 @@ pub enum Action {
         #[arg(long)]
         device: Option<String>,
     },
-    Remove {
-        id: String,
-    },
+    /// Remove one mixer input strip.
+    Remove { id: String },
+    /// Change gain, pan, sends, mute/solo, ducking, or speech cleanup on one strip.
     Set {
         id: String,
         #[arg(long, allow_hyphen_values = true)]
@@ -70,6 +70,7 @@ pub enum Action {
         #[arg(long, action = clap::ArgAction::Set, help = "Enable speech-only RNNoise for this strip")]
         speech_denoise: Option<bool>,
     },
+    /// Configure one output bus, including device, gain, mute, and delay.
     Bus {
         index: usize,
         #[arg(long)]
@@ -81,6 +82,7 @@ pub enum Action {
         #[arg(long, help = "Additional bus delay in milliseconds (0..500)")]
         delay_ms: Option<f64>,
     },
+    /// Configure voice-triggered ducking for the mixer.
     Duck {
         #[arg(long, action = clap::ArgAction::Set)]
         enabled: Option<bool>,
@@ -89,12 +91,11 @@ pub enum Action {
         #[arg(long)]
         attenuation: Option<f64>,
     },
-    SceneSave {
-        name: String,
-    },
-    SceneRestore {
-        name: String,
-    },
+    /// Save the current mixer topology and strip settings as a named scene.
+    SceneSave { name: String },
+    /// Restore a previously saved mixer scene.
+    SceneRestore { name: String },
+    /// Undo the most recent mixer configuration change.
     Undo,
 }
 

@@ -11,25 +11,26 @@ use serde_json::{json, Value};
 use std::{io::Read, path::PathBuf};
 #[derive(Subcommand)]
 pub enum Action {
+    /// Show the selected device's saved listening settings and applied revision.
     Status,
+    /// Show capability limits and correction evidence for the selected device.
     Capability,
+    /// Match the selected device against the bundled AutoEq catalog.
     Match {
         #[arg(long)]
         apply: bool,
     },
-    Bind {
-        model: String,
-    },
+    /// Explicitly bind and apply one bundled AutoEq model to the selected device.
+    Bind { model: String },
+    /// Print the JSON schema for device-specific listening settings.
     Schema,
     /// List original listening scenes, not measurement corrections.
     Scenes,
     /// Preview a device-constrained scene without changing audio or saved preferences.
-    Preview {
-        name: String,
-    },
-    Preset {
-        name: String,
-    },
+    Preview { name: String },
+    /// Apply a device-specific listening preset or scene.
+    Preset { name: String },
+    /// Edit device-specific listening parameters directly.
     Set {
         #[arg(long, allow_hyphen_values = true)]
         bass: Option<f64>,
@@ -59,16 +60,20 @@ pub enum Action {
         #[arg(long,action=clap::ArgAction::Set)]
         compressor: Option<bool>,
     },
+    /// Switch between the enhanced path and its level-matched reference.
     Compare {
         #[arg(action=clap::ArgAction::Set)]
         reference: bool,
     },
+    /// Persist the active output's listening profile as a device profile.
     SaveDevice,
+    /// Import a strict Equalizer APO/AutoEq parametric correction file.
     Import {
         file: PathBuf,
         #[arg(long)]
         source: String,
     },
+    /// Validate or apply a device listening-profile JSON file.
     Apply {
         file: PathBuf,
         #[arg(long)]

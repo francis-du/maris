@@ -129,7 +129,7 @@ class Documentation(unittest.TestCase):
         self.assertIn('assets/mark.svg', self.output['index.html'].decode())
         self.assertIn('rel="icon"', self.output['index.html'].decode())
 
-    def test_published_wordmark_explains_actions_and_readme_does_not_claim_a_release(self):
+    def test_published_wordmark_and_readme_keep_user_facing_release_instructions_current(self):
         namespace = {'svg': 'http://www.w3.org/2000/svg'}
         wordmark = ET.fromstring(self.output['assets/wordmark.svg'])
         labels = [node.text for node in wordmark.findall('svg:text', namespace)]
@@ -138,8 +138,10 @@ class Documentation(unittest.TestCase):
         self.assertIsNotNone(description)
         self.assertIn('Adjust your sound, compare and undo.', description.text)
         readme = (ROOT / 'README.md').read_text(encoding='utf-8')
-        self.assertIn('A public application release is not available yet.', readme)
-        self.assertIn('does not include its weights', readme)
+        self.assertIn('maris update', readme)
+        self.assertIn('https://maris.francis.run/install.sh', readme)
+        self.assertNotIn('A public application release is not available yet.', readme)
+        self.assertNotIn('0.2.0 release preparation', readme)
 
     def test_renderer_escapes_raw_html_and_validates_links_and_structure(self):
         resolve = resolver(ROOT, ROOT / 'docs/en/guide.md', 'en', 'en/guide.html')

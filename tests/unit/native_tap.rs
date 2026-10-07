@@ -18,6 +18,99 @@ fn interleaved(data: &mut [f32], channels: u32) -> ca::BufferList {
         }],
     }
 }
+#[test]
+fn clock_device_null_inputs_do_not_hide_the_tap_or_invent_microphone_audio() {
+    #[repr(C)]
+    struct ClockedList {
+        count: u32,
+        buffers: [ca::Buffer; 4],
+    }
+    let mut samples = [0.1_f32, -0.2, 0.3, -0.4];
+    let mut list = ClockedList {
+        count: 4,
+        buffers: [
+            ca::Buffer {
+                channels: 8,
+                bytes: 4096,
+                data: ptr::null_mut(),
+            },
+            ca::Buffer {
+                channels: 1,
+                bytes: 4096,
+                data: ptr::null_mut(),
+            },
+            ca::Buffer {
+                channels: 2,
+                bytes: 16,
+                data: samples.as_mut_ptr().cast(),
+            },
+            ca::Buffer {
+                channels: 2,
+                bytes: 4096,
+                data: ptr::null_mut(),
+            },
+        ],
+    };
+    let mut context = context(8);
+    process((&list as *const ClockedList).cast(), &mut context);
+    assert_eq!(context.queue.pop(), Some([0.1, -0.2]));
+    assert_eq!(context.queue.pop(), Some([0.3, -0.4]));
+    assert!(context.queue.is_empty());
+    assert_eq!(context.metrics.errors.load(Ordering::Relaxed), 0);
+    samples.fill(0.0);
+    process((&list as *const ClockedList).cast(), &mut context);
+    assert_eq!(context.queue.pop(), Some([0.0; 2]));
+    assert_eq!(context.queue.pop(), Some([0.0; 2]));
+    assert_eq!(context.metrics.captured_frames.load(Ordering::Relaxed), 4);
+    list.buffers[2].data = ptr::null_mut();
+    process((&list as *const ClockedList).cast(), &mut context);
+    assert_eq!(context.metrics.captured_frames.load(Ordering::Relaxed), 4);
+}
+
+#[test]
+fn unexpected_extra_active_inputs_fail_without_enqueuing_audio() {
+    #[repr(C)]
+    struct ExtraList {
+        count: u32,
+        buffers: [ca::Buffer; 3],
+    }
+    let mut samples = [0.25_f32; 2];
+    let buffer = || ca::Buffer {
+        channels: 1,
+        bytes: 8,
+        data: samples.as_ptr().cast_mut().cast(),
+    };
+    let list = ExtraList {
+        count: 3,
+        buffers: [buffer(), buffer(), buffer()],
+    };
+    let mut context = context(8);
+    process((&list as *const ExtraList).cast(), &mut context);
+    assert!(context.queue.is_empty());
+    assert_eq!(context.metrics.errors.load(Ordering::Relaxed), 1);
+    // Keep the owned allocation live through the callback.
+    samples.fill(0.0);
+}
+
+#[test]
+fn startup_requires_new_pcm_and_accepts_digital_silence() {
+    let mut context = context(8);
+    let mut samples = [0.0_f32; 4];
+    let list = interleaved(&mut samples, 2);
+    let zero = std::time::Duration::ZERO;
+    assert!(wait_capture_ready(&context.metrics, 0, zero, || Ok(false)).is_err());
+    process(&list, &mut context);
+    wait_capture_ready(&context.metrics, 0, zero, || Ok(false)).unwrap();
+    // Old PCM from an earlier stream does not acknowledge a fresh start.
+    assert!(wait_capture_ready(&context.metrics, 2, zero, || Ok(false)).is_err());
+    assert!(wait_capture_ready(&context.metrics, 0, zero, || Ok(true)).is_err());
+    assert!(
+        wait_capture_ready(&context.metrics, 0, zero, || anyhow::bail!("device gone")).is_err()
+    );
+    context.metrics.errors.store(1, Ordering::Release);
+    assert!(wait_capture_ready(&context.metrics, 0, zero, || Ok(false)).is_err());
+}
+
 fn process(list: *const ca::BufferList, context: &mut Capture) {
     // SAFETY: each test passes buffers whose declared lengths and pointer lifetimes cover this call.
     let status = unsafe {

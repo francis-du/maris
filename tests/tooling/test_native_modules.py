@@ -27,6 +27,18 @@ class NativeModuleContract(unittest.TestCase):
         self.assertNotIn('flexaudio::processes(', windows)
         self.assertIn('super::windows_route::applications()', windows)
 
+    def test_macos_system_tap_has_a_real_output_clock_and_no_autostart(self):
+        tap = (ROOT / 'src/audio/tap.rs').read_text(encoding='utf-8')
+        system = (ROOT / 'src/audio/system.rs').read_text(encoding='utf-8')
+        self.assertIn('"tapautostart", &NSNumber::new_bool(false)', tap)
+        self.assertIn('ca::set(&dictionary, "subdevices", &subdevices)', tap)
+        self.assertIn('ca::set(&dictionary, "master", &NSString::from_str(clock_uid))', tap)
+        self.assertIn('ca::set(&device, "uid", &NSString::from_str(clock_uid))', tap)
+        self.assertIn('ca::append(&subdevices, &device)', tap)
+        self.assertIn('ca::isolate_tap_io(result.aggregate, result.io, clock_uid)', tap)
+        self.assertIn('System-audio tap started but delivered no PCM; stopping capture to restore original playback', tap)
+        self.assertIn('TapCapture::prepare_for_output_clock', system)
+
 
 if __name__ == '__main__':
     unittest.main()

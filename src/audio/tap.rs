@@ -142,9 +142,40 @@ fn scoped_initializer_supported(class: &AnyClass, selected: bool) -> bool {
     }
 }
 
+fn wait_capture_ready(
+    metrics: &Metrics,
+    before: u64,
+    timeout: std::time::Duration,
+    mut check_configuration: impl FnMut() -> Result<bool>,
+) -> Result<()> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        ensure!(
+            metrics.errors.load(Ordering::Acquire) == 0,
+            "System-audio capture callback failed"
+        );
+        ensure!(
+            !check_configuration()?,
+            "Audio configuration changed during capture startup"
+        );
+        if metrics.captured_frames.load(Ordering::Acquire) > before {
+            return Ok(());
+        }
+        ensure!(
+            std::time::Instant::now() < deadline,
+            "System-audio tap started but delivered no PCM; stopping capture to restore original playback"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+}
+
 impl TapCapture {
-    pub fn prepare(queue: Arc<ArrayQueue<[f32; 2]>>, metrics: Arc<Metrics>) -> Result<Self> {
-        Self::prepare_scope(queue, metrics, None, None)
+    pub fn prepare_for_output_clock(
+        queue: Arc<ArrayQueue<[f32; 2]>>,
+        metrics: Arc<Metrics>,
+        device_uid: &str,
+    ) -> Result<Self> {
+        Self::prepare_scope(queue, metrics, None, None, Some(device_uid))
     }
 
     pub fn prepare_processes(
@@ -153,7 +184,8 @@ impl TapCapture {
         processes: &[u32],
     ) -> Result<Self> {
         validate_processes(processes)?;
-        Self::prepare_scope(queue, metrics, Some(processes), None)
+        let clock_uid = ca::device_uid(ca::default_output()?)?;
+        Self::prepare_scope(queue, metrics, Some(processes), None, Some(&clock_uid))
     }
 
     pub fn prepare_processes_for_output(
@@ -163,7 +195,13 @@ impl TapCapture {
         device_uid: &str,
     ) -> Result<Self> {
         validate_processes(processes)?;
-        Self::prepare_scope(queue, metrics, Some(processes), Some((device_uid, 0)))
+        Self::prepare_scope(
+            queue,
+            metrics,
+            Some(processes),
+            Some((device_uid, 0)),
+            Some(device_uid),
+        )
     }
 
     pub fn capture_mode(&self) -> &'static str {
@@ -175,6 +213,7 @@ impl TapCapture {
         metrics: Arc<Metrics>,
         processes: Option<&[u32]>,
         output: Option<(&str, usize)>,
+        aggregate_clock_uid: Option<&str>,
     ) -> Result<Self> {
         let api = ca::TapApi::load()?;
         let own = ca::own_process()?;
@@ -315,9 +354,22 @@ impl TapCapture {
             &NSString::from_str(&format!("audio.maris.tap.{}", uid)),
         );
         ca::set(&dictionary, "private", &NSNumber::new_bool(true));
-        ca::set(&dictionary, "tapautostart", &NSNumber::new_bool(true));
+        if let Some(clock_uid) = aggregate_clock_uid {
+            let subdevices = ca::object(c"NSMutableArray")?;
+            // Composition expects sub-device dictionaries, not UID strings.
+            let device = ca::object(c"NSMutableDictionary")?;
+            ca::set(&device, "uid", &NSString::from_str(clock_uid));
+            ca::append(&subdevices, &device);
+            ca::set(&dictionary, "subdevices", &subdevices);
+            ca::set(&dictionary, "master", &NSString::from_str(clock_uid));
+            // "clock" is reserved for an AudioClockDevice; this is an audio device.
+        }
+        // TapAutoStart=true waits for tapped applications to produce audio.
+        // Run the output-clocked aggregate immediately, including during silence.
+        // Capture still starts only after the replacement output's real callback.
+        ca::set(&dictionary, "tapautostart", &NSNumber::new_bool(false));
         ca::set(&dictionary, "taps", &taps);
-        // A tap-only private aggregate contains no physical microphone input.
+        // The clock endpoint's I/O is disabled below before starting capture.
         ca::check(
             unsafe {
                 ca::AudioHardwareCreateAggregateDevice(
@@ -331,6 +383,16 @@ impl TapCapture {
             result.aggregate != 0,
             "macOS did not create the private audio connection"
         );
+        // HAL publishes aggregate streams asynchronously. Wait on the control
+        // thread before inspecting the layout or creating an IOProc.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while unsafe { ca::property::<u32>(result.aggregate, b"livn") }.unwrap_or(0) == 0 {
+            ensure!(
+                std::time::Instant::now() < deadline,
+                "Private audio connection did not become ready"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
         result.aggregate_rate = ca::sample_rate(result.aggregate)?;
         result.aggregate_buffer = ca::output_buffer_frames(result.aggregate).ok();
         result.context = Some(Box::new(Capture {
@@ -354,6 +416,9 @@ impl TapCapture {
             },
             "Connect system-audio callback",
         )?;
+        if let Some(clock_uid) = aggregate_clock_uid {
+            result.rate = ca::isolate_tap_io(result.aggregate, result.io, clock_uid)?;
+        }
         result.watch(result.tap, ca::address(b"tfmt"))?;
         result.watch(result.aggregate, ca::address(b"nsrt"))?;
         if result.aggregate_buffer.is_some() {
@@ -466,11 +531,31 @@ impl TapCapture {
             !self.needs_rebuild()?,
             "Audio configuration changed before capture startup; retry"
         );
+        let metrics = &self
+            .context
+            .as_ref()
+            .context("Missing capture state")?
+            .metrics;
+        let before = metrics.captured_frames.load(Ordering::Acquire);
         ca::check(
             unsafe { ca::AudioDeviceStart(self.aggregate, self.io) },
             "Start system-audio capture (allow Maris in the macOS permission dialog)",
         )?;
         self.started = true;
+        if let Err(error) =
+            wait_capture_ready(metrics, before, std::time::Duration::from_secs(2), || {
+                self.needs_rebuild()
+            })
+        {
+            // Keep started=true if native stop fails so Drop retries before
+            // destroying the aggregate/tap. Never claim restoration on failure.
+            ca::check(
+                unsafe { ca::AudioDeviceStop(self.aggregate, self.io) },
+                "Stop stalled system-audio capture",
+            )?;
+            self.started = false;
+            return Err(error);
+        }
         Ok(())
     }
 }
@@ -538,13 +623,23 @@ unsafe extern "C" fn capture(
     if list.count == 0 {
         return 0;
     }
-    if list.count > 2 {
+    if list.count > 128 {
         capture.metrics.errors.fetch_add(1, Ordering::Relaxed);
         return 0;
     }
     let buffers = unsafe { std::slice::from_raw_parts(list.buffers.as_ptr(), list.count as usize) };
-    let first = &buffers[0];
-    let planar = buffers.len() == 2;
+    // Disabled clock-device streams have NULL pointers. Their presence must
+    // neither hide the tap nor cause us to read a microphone buffer.
+    let mut active = buffers.iter().filter(|buffer| !buffer.data.is_null());
+    let Some(first) = active.next() else {
+        return 0;
+    };
+    let second = active.next();
+    if active.next().is_some() {
+        capture.metrics.errors.fetch_add(1, Ordering::Relaxed);
+        return 0;
+    }
+    let planar = second.is_some();
     if first.data.is_null() || first.bytes == 0 {
         return 0;
     }
@@ -556,13 +651,12 @@ unsafe extern "C" fn capture(
         capture.metrics.errors.fetch_add(1, Ordering::Relaxed);
         return 0;
     }
-    if planar
-        && (first.channels != 1
-            || buffers[1].channels != 1
-            || buffers[1].bytes != first.bytes
-            || buffers[1].data.is_null()
-            || !(buffers[1].data as usize).is_multiple_of(4))
-    {
+    if second.is_some_and(|right| {
+        first.channels != 1
+            || right.channels != 1
+            || right.bytes != first.bytes
+            || !(right.data as usize).is_multiple_of(4)
+    }) {
         capture.metrics.errors.fetch_add(1, Ordering::Relaxed);
         return 0;
     }
@@ -587,11 +681,7 @@ unsafe extern "C" fn capture(
             .fetch_add(1, Ordering::Release);
     }
     let left = first.data.cast::<f32>();
-    let right = if planar {
-        buffers[1].data.cast::<f32>()
-    } else {
-        left
-    };
+    let right = second.map_or(left, |buffer| buffer.data.cast::<f32>());
     let mut dropped = 0_u64;
     for i in 0..count {
         let frame = unsafe {

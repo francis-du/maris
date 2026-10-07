@@ -89,6 +89,14 @@ unsafe extern "C" {
         size: *mut u32,
         data: *mut c_void,
     ) -> i32;
+    pub fn AudioObjectSetPropertyData(
+        object: u32,
+        address: *const Address,
+        qualifier_size: u32,
+        qualifier: *const c_void,
+        size: u32,
+        data: *const c_void,
+    ) -> i32;
     pub fn AudioObjectAddPropertyListener(
         object: u32,
         address: *const Address,
@@ -227,6 +235,122 @@ pub fn default_output() -> Result<u32> {
 pub fn device_ids() -> Result<Vec<u32>> {
     unsafe { property_vec_u32(1, b"dev#") }
 }
+/// Disable the physical clock device's inputs and all aggregate outputs before
+/// starting the tap. Unused streams arrive as NULL buffers (AudioHardware.h).
+pub fn isolate_tap_io(aggregate: u32, io: IoId, clock_uid: &str) -> Result<u32> {
+    let clock = output_device_id_for_uid(clock_uid)?;
+    let physical_inputs = unsafe { property_vec_u32_scope(clock, b"stm#", b"inp ") }?.len();
+    let input_streams = unsafe { property_vec_u32_scope(aggregate, b"stm#", b"inp ") }?;
+    let inputs = input_streams.len();
+    ensure!(
+        inputs > physical_inputs && inputs - physical_inputs <= 2,
+        "Unexpected aggregate input layout; refusing physical input capture"
+    );
+    // The physical sub-device precedes the appended sub-tap streams.
+    // Use their actual aggregate virtual format, which may be converted to the
+    // output clock rate by CoreAudio, rather than the standalone tap's rate.
+    let mut rate = None;
+    let mut channels = 0;
+    for stream in &input_streams[physical_inputs..] {
+        let format: Format = unsafe { property(*stream, b"sfmt")? };
+        ensure!(
+            format.id == u32::from_be_bytes(*b"lpcm")
+                && format.flags & 1 != 0
+                && format.flags & 2 == 0
+                && format.bits == 32
+                && (1..=2).contains(&format.channels)
+                && format.rate.is_finite()
+                && (44100.0..=192000.0).contains(&format.rate),
+            "Unsupported aggregate tap PCM format"
+        );
+        ensure!(
+            rate.is_none_or(|value| value == format.rate),
+            "Aggregate tap streams have different rates"
+        );
+        rate = Some(format.rate);
+        channels += format.channels;
+    }
+    ensure!(
+        (1..=2).contains(&channels),
+        "Unsupported aggregate tap channel layout"
+    );
+    set_stream_usage(aggregate, io, b"inp ", inputs, physical_inputs)?;
+    let outputs = output_stream_ids(aggregate)?.len();
+    set_stream_usage(aggregate, io, b"outp", outputs, outputs)?;
+    Ok(rate.context("Aggregate tap has no input stream")?.round() as u32)
+}
+
+fn set_stream_usage(
+    device: u32,
+    io: IoId,
+    scope: &[u8; 4],
+    streams: usize,
+    disabled_prefix: usize,
+) -> Result<()> {
+    ensure!(
+        streams <= 128 && disabled_prefix <= streams,
+        "Unsupported aggregate stream count"
+    );
+    if streams == 0 {
+        return Ok(());
+    }
+    // AudioHardwareIOProcStreamUsage: pointer, UInt32 count, UInt32 flags.
+    // Word storage provides pointer alignment and is allocated on the control thread.
+    let header = size_of::<IoId>() + size_of::<u32>();
+    let bytes = header + streams * size_of::<u32>();
+    let mut words = vec![0_usize; bytes.div_ceil(size_of::<usize>())];
+    let data = words.as_mut_ptr().cast::<u8>();
+    unsafe {
+        data.cast::<IoId>().write(io);
+        data.add(size_of::<IoId>())
+            .cast::<u32>()
+            .write(streams as u32);
+        let flags = data.add(header).cast::<u32>();
+        for index in disabled_prefix..streams {
+            flags.add(index).write(1);
+        }
+        check(
+            AudioObjectSetPropertyData(
+                device,
+                &address_scope(b"suse", scope),
+                0,
+                ptr::null(),
+                bytes as u32,
+                data.cast(),
+            ),
+            "Isolate system tap from physical inputs and outputs",
+        )?;
+        let mut actual = bytes as u32;
+        check(
+            AudioObjectGetPropertyData(
+                device,
+                &address_scope(b"suse", scope),
+                0,
+                ptr::null(),
+                &mut actual,
+                data.cast(),
+            ),
+            "Verify isolated system tap stream usage",
+        )?;
+        ensure!(
+            actual as usize == bytes,
+            "Unexpected stream usage property size"
+        );
+        ensure!(
+            data.cast::<IoId>().read() == io
+                && data.add(size_of::<IoId>()).cast::<u32>().read() as usize == streams,
+            "Stream usage no longer matches the tap callback"
+        );
+        for index in 0..streams {
+            ensure!(
+                (flags.add(index).read() != 0) == (index >= disabled_prefix),
+                "CoreAudio did not isolate the system tap streams"
+            );
+        }
+        Ok(())
+    }
+}
+
 pub fn output_stream_ids(device: u32) -> Result<Vec<u32>> {
     unsafe { property_vec_u32_scope(device, b"stm#", b"outp") }
 }

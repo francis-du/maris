@@ -96,9 +96,7 @@ def main() -> None:
                 (resources / "MARIS_LICENSE_STATUS.txt").write_text(
                     "This source revision declares no project license grant. This package does not add an open-source license grant.\n"
                     "Third-party components retain the license terms reproduced in resources/notices.\n", encoding="utf-8", newline="\n")
-        for source_doc, artifact_name in [("docs/en/install.md", "INSTALL.md"),
-                                          ("docs/development/product-gates.md", "PRODUCT_GATES.md")]:
-            shutil.copyfile(ROOT / source_doc, payload / artifact_name)
+        shutil.copyfile(ROOT / "docs/en/install.md", payload / "INSTALL.md")
         if system == "windows":
             shutil.copyfile(ROOT / "install.ps1", payload / "install.ps1")
         else:

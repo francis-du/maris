@@ -82,6 +82,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config psmisc pulseaudio pulseaudio-utils
       - name: Formatting
         run: cargo fmt --all --check
+      - name: CLI command help contract
+        run: cargo test --locked --test cli
       - name: Default-feature regression tests
         run: cargo test --all-targets --locked
       - name: Minimal-feature regression tests

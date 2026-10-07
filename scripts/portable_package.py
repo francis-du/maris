@@ -64,5 +64,8 @@ def create_payload(root: Path, executable: Path, destination: Path, system: str,
     binary.chmod(0o755)
     shutil.copyfile(root / "docs/reference/third-party.md", resources / "THIRD_PARTY.md")
     shutil.copytree(root / "third_party/eqmac", resources / "eqmac")
+    if cli:
+        updater = "install.ps1" if system == "windows" else "install.sh"
+        shutil.copyfile(root / updater, resources / updater)
     marker = f"maris-package-v2\n{system}\n{arch}\n{version}\ncli\n" if cli else f"maris-package-v1\n{system}\n{arch}\n{version}\n"
     (destination / ".maris-package").write_text(marker, encoding="utf-8", newline="\n")

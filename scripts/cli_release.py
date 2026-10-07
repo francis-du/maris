@@ -25,6 +25,9 @@ def software_gate(payload: Path, source: str, system: str, arch: str, version: s
         raise ValueError('A GUI or mismatched payload cannot use CLI release acceptance')
     binary = payload / 'bin' / ('maris.exe' if system == 'windows' else 'maris')
     validate_binary(binary, system, arch)
+    updater = payload / 'resources' / ('install.ps1' if system == 'windows' else 'install.sh')
+    if not updater.is_file() or updater.is_symlink() or updater.stat().st_size == 0:
+        raise ValueError('CLI release is missing its local trusted updater')
     data = json.loads(report.read_text(encoding='utf-8'))
     check_report(data, source, report.parent, sys.platform)
     smoke_path = ROOT / '.maris-review/package-smoke.json'

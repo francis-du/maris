@@ -10,6 +10,7 @@ param(
     [switch]$AllowUnsigned,
     [switch]$Yes,
     [switch]$DryRun,
+    [int]$WaitForPid = 0,
     [switch]$Help
 )
 Set-StrictMode -Version Latest
@@ -365,6 +366,14 @@ try {
         $text = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'Cargo.toml'))
         $version = [regex]::Match($text, '(?m)^version = "([0-9.]+)"\r?$').Groups[1].Value
         [IO.File]::WriteAllText((Join-Path $From '.maris-package'), "maris-package-v1`nwindows`n$arch`n$version`n", ([Text.UTF8Encoding]::new($false)))
+    }
+    if ($WaitForPid -ne 0) {
+        if ($WaitForPid -lt 1 -or $WaitForPid -eq $PID) { throw 'Invalid updater parent PID.' }
+        $deadline = [DateTime]::UtcNow.AddSeconds(15)
+        while ($null -ne (Get-Process -Id $WaitForPid -ErrorAction SilentlyContinue)) {
+            if ([DateTime]::UtcNow -ge $deadline) { throw 'Timed out waiting for the running Maris updater process to exit.' }
+            Start-Sleep -Milliseconds 50
+        }
     }
     Validate-Payload $From
     Check-Destination
