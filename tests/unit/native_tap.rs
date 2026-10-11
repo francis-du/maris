@@ -81,11 +81,38 @@ fn aggregate_clock_validation_fails_closed_on_wrong_or_inactive_physical_output(
     assert!(inactive.to_string().contains("is not active"));
 }
 
+#[test]
+fn capture_gate_blocks_new_callbacks_and_waits_for_existing_readers() {
+    let gate = Arc::new(AtomicU64::new(0));
+    let first = enter_capture(&gate).expect("initial callback should enter");
+    assert_eq!(gate.load(Ordering::Acquire), CAPTURE_GATE_READER);
+
+    let worker_gate = gate.clone();
+    let worker = std::thread::spawn(move || {
+        block_capture(&worker_gate, std::time::Duration::from_secs(1)).unwrap();
+        assert_eq!(worker_gate.load(Ordering::Acquire), CAPTURE_GATE_BLOCKED);
+        assert!(enter_capture(&worker_gate).is_none());
+        unblock_capture(&worker_gate);
+    });
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+    while gate.load(Ordering::Acquire) & CAPTURE_GATE_BLOCKED == 0 {
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::yield_now();
+    }
+    assert!(enter_capture(&gate).is_none());
+    drop(first);
+    worker.join().unwrap();
+    assert_eq!(gate.load(Ordering::Acquire), 0);
+    assert!(enter_capture(&gate).is_some());
+}
+
 fn context(capacity: usize) -> Capture {
     Capture {
         queue: Arc::new(ArrayQueue::new(capacity)),
         metrics: Arc::new(Metrics::default()),
         next_sample: AtomicU64::new(f64::NAN.to_bits()),
+        gate: AtomicU64::new(0),
     }
 }
 fn interleaved(data: &mut [f32], channels: u32) -> ca::BufferList {
