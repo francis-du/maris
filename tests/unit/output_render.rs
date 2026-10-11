@@ -250,6 +250,20 @@ fn a_start_request_without_a_callback_is_not_readiness() {
 }
 
 #[test]
+fn capture_start_requires_a_fresh_output_callback_not_only_old_readiness() {
+    let metrics = Metrics::default();
+    metrics.callback_ready.store(true, Ordering::Release);
+    metrics.callback_calls.store(7, Ordering::Release);
+    assert!(wait_output_progress(&metrics, 7, Duration::ZERO).is_err());
+
+    metrics.callback_calls.store(8, Ordering::Release);
+    wait_output_progress(&metrics, 7, Duration::ZERO).unwrap();
+
+    metrics.errors.store(1, Ordering::Release);
+    assert!(wait_output_progress(&metrics, 8, Duration::ZERO).is_err());
+}
+
+#[test]
 fn replacement_output_observes_capture_gaps_without_inheriting_old_output_errors() {
     let queue = Arc::new(ArrayQueue::new(4096));
     let capture = Arc::new(Metrics::default());
