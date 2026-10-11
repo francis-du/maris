@@ -187,7 +187,11 @@ fn wait_capture_ready(
         }
         ensure!(
             std::time::Instant::now() < deadline,
-            "System-audio tap started but delivered no PCM; stopping capture to restore original playback"
+            "System-audio tap started but delivered no PCM; stopping capture to restore original playback (captured_frames={}, callback_errors={}, configuration_events={}, checked_configuration_events={})",
+            metrics.captured_frames.load(Ordering::Acquire),
+            metrics.errors.load(Ordering::Acquire),
+            metrics.configuration_events.load(Ordering::Acquire),
+            metrics.checked_configuration_events.load(Ordering::Acquire),
         );
         std::thread::sleep(std::time::Duration::from_millis(2));
     }
@@ -365,6 +369,11 @@ impl TapCapture {
         let sub = ca::object(c"NSMutableDictionary")?;
         ca::set(&sub, "uid", &uid);
         ca::set(&sub, "drift", &NSNumber::new_bool(true));
+        ca::set(
+            &sub,
+            "drift quality",
+            &NSNumber::new_u32(ca::MAX_DRIFT_COMPENSATION_QUALITY),
+        );
         let taps = ca::object(c"NSMutableArray")?;
         ca::append(&taps, &sub);
         let dictionary = ca::object(c"NSMutableDictionary")?;
@@ -417,6 +426,21 @@ impl TapCapture {
                 "Private audio connection did not become ready"
             );
             std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        if let Some(clock_uid) = aggregate_clock_uid {
+            loop {
+                match ca::verify_aggregate_clock(result.aggregate, clock_uid) {
+                    Ok(()) => break,
+                    Err(_) if std::time::Instant::now() < deadline => {
+                        std::thread::sleep(std::time::Duration::from_millis(2));
+                    }
+                    Err(error) => {
+                        return Err(error.context(
+                            "Private audio connection did not bind the selected physical output clock",
+                        ));
+                    }
+                }
+            }
         }
         result.aggregate_rate = ca::sample_rate(result.aggregate)?;
         result.aggregate_buffer = ca::output_buffer_frames(result.aggregate).ok();
