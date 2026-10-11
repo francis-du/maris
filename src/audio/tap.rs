@@ -624,6 +624,31 @@ impl TapCapture {
         Ok(())
     }
 
+    fn set_mute_behavior(&mut self, behavior: isize) -> Result<()> {
+        let description = self
+            .description
+            .as_ref()
+            .context("Missing live tap description")?;
+        // SAFETY: CATapDescription.muteBehavior is atomic/readwrite. CoreAudio also
+        // exposes kAudioTapPropertyDescription as a settable live tap property.
+        let previous = if self.muted { 2_isize } else { 0_isize };
+        unsafe {
+            let _: () = msg_send![&**description, setMuteBehavior: behavior];
+        }
+        if let Err(error) =
+            ca::set_tap_description(self.tap, (&**description as *const AnyObject).cast())
+        {
+            // Keep the retained object consistent with the native tap if the property
+            // update is rejected. A later destroy still gets an independent restore attempt.
+            unsafe {
+                let _: () = msg_send![&**description, setMuteBehavior: previous];
+            }
+            return Err(error);
+        }
+        self.muted = behavior != 0;
+        Ok(())
+    }
+
     pub fn arm_replacement(&mut self) -> Result<()> {
         ensure!(
             self.started,
@@ -633,25 +658,7 @@ impl TapCapture {
             !self.muted,
             "Original playback is already muted by this tap"
         );
-        let description = self
-            .description
-            .as_ref()
-            .context("Missing live tap description")?;
-        // SAFETY: CATapDescription.muteBehavior is atomic/readwrite. CoreAudio also
-        // exposes kAudioTapPropertyDescription as a settable live tap property.
-        unsafe {
-            let _: () = msg_send![&**description, setMuteBehavior: 2_isize];
-        }
-        if let Err(error) =
-            ca::set_tap_description(self.tap, (&**description as *const AnyObject).cast())
-        {
-            // Keep our retained description consistent with the still-unmuted native tap.
-            unsafe {
-                let _: () = msg_send![&**description, setMuteBehavior: 0_isize];
-            }
-            return Err(error);
-        }
-        self.muted = true;
+        self.set_mute_behavior(2)?;
 
         // Never replay PCM captured while the original path was still audible. This
         // bounded drain happens on the control thread; the producer may continue with
@@ -668,9 +675,19 @@ impl TapCapture {
         }
         Ok(())
     }
+
+    fn disarm_replacement(&mut self) -> Result<()> {
+        if self.muted {
+            self.set_mute_behavior(0)?;
+        }
+        Ok(())
+    }
 }
 impl Drop for TapCapture {
     fn drop(&mut self) {
+        // The replacement stream is already gone when Session drops the tap. Restore
+        // original playback explicitly before relying on native tap destruction.
+        let _ = self.disarm_replacement();
         // Stop before destroying the callback or freeing its context. No permanent output state was changed.
         unsafe {
             if self.started {
