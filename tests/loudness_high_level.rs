@@ -54,3 +54,30 @@ fn shipped_presets_keep_dense_high_level_program_near_original_loudness() {
         }
     }
 }
+
+#[test]
+fn deep_device_correction_reserve_still_matches_high_level_program_loudness() {
+    let profile = Profile::default();
+    for correction_preamp_db in [-10.0, -24.0, -30.0] {
+        let music = MusicProfile {
+            correction: vec![maris::tone::Filter {
+                kind: maris::tone::Kind::LowShelf,
+                frequency_hz: 110.0,
+                gain_db: 6.0,
+                q: std::f64::consts::FRAC_1_SQRT_2,
+            }],
+            correction_preamp_db,
+            correction_source: Some("high-level probe".into()),
+            adaptive: maris::music::AdaptiveEq {
+                enabled: false,
+                strength: 0.0,
+            },
+            ..MusicProfile::default()
+        };
+        let (delta, limiter) = settled_delta_and_limiter(&profile, &music);
+        assert!(
+            delta.abs() < 1.0,
+            "{correction_preamp_db:.0} dB correction reserve changed high-level loudness by {delta:.3} dB with {limiter:.3} dB maximum limiter reduction"
+        );
+    }
+}
