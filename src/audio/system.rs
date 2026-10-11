@@ -142,7 +142,12 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
     drop(prime);
     // Original applications are muted only after an actual output callback,
     // not merely a successful asynchronous play request.
+    let callbacks_before_tap = metrics.callback_calls.load(Ordering::Acquire);
     tap.start()?;
+    // A pre-tap callback does not prove the replacement remains alive once
+    // CATapMutedWhenTapped suppresses original playback. Fail closed unless
+    // the physical output advances again after capture itself is confirmed.
+    bridge::wait_output_progress(&metrics, callbacks_before_tap, Duration::from_secs(1))?;
     Ok(Pipeline {
         stream,
         tap,
