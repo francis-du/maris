@@ -23,6 +23,52 @@ struct Capture {
     queue: Arc<ArrayQueue<[f32; 2]>>,
     metrics: Arc<Metrics>,
     next_sample: AtomicU64,
+    gate: AtomicU64,
+}
+
+const CAPTURE_GATE_BLOCKED: u64 = 1;
+const CAPTURE_GATE_READER: u64 = 2;
+
+struct CaptureLease<'a>(&'a AtomicU64);
+impl Drop for CaptureLease<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(CAPTURE_GATE_READER, Ordering::Release);
+    }
+}
+
+fn enter_capture(gate: &AtomicU64) -> Option<CaptureLease<'_>> {
+    let mut state = gate.load(Ordering::Acquire);
+    loop {
+        if state & CAPTURE_GATE_BLOCKED != 0 {
+            return None;
+        }
+        let next = state.checked_add(CAPTURE_GATE_READER)?;
+        match gate.compare_exchange_weak(state, next, Ordering::AcqRel, Ordering::Acquire) {
+            Ok(_) => return Some(CaptureLease(gate)),
+            Err(current) => state = current,
+        }
+    }
+}
+
+fn block_capture(gate: &AtomicU64, timeout: std::time::Duration) -> Result<()> {
+    let previous = gate.fetch_or(CAPTURE_GATE_BLOCKED, Ordering::AcqRel);
+    ensure!(
+        previous & CAPTURE_GATE_BLOCKED == 0,
+        "System-audio capture is already quarantined"
+    );
+    let deadline = std::time::Instant::now() + timeout;
+    while gate.load(Ordering::Acquire) != CAPTURE_GATE_BLOCKED {
+        if std::time::Instant::now() >= deadline {
+            gate.fetch_and(!CAPTURE_GATE_BLOCKED, Ordering::Release);
+            anyhow::bail!("Timed out quarantining system-audio capture");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    Ok(())
+}
+
+fn unblock_capture(gate: &AtomicU64) {
+    gate.fetch_and(!CAPTURE_GATE_BLOCKED, Ordering::Release);
 }
 
 fn device_list_changed(object: u32, addresses: &[ca::Address]) -> bool {
@@ -455,6 +501,7 @@ impl TapCapture {
             queue,
             metrics,
             next_sample: AtomicU64::new(f64::NAN.to_bits()),
+            gate: AtomicU64::new(0),
         }));
         let context = (&**result
             .context
@@ -658,21 +705,29 @@ impl TapCapture {
             !self.muted,
             "Original playback is already muted by this tap"
         );
-        self.set_mute_behavior(2)?;
-
-        // Never replay PCM captured while the original path was still audible. This
-        // bounded drain happens on the control thread; the producer may continue with
-        // post-mute frames while the replacement output remains quarantined.
-        if let Some(capture) = self.context.as_ref() {
-            for _ in 0..capture.queue.capacity() {
-                if capture.queue.pop().is_none() {
-                    break;
-                }
-            }
-            capture
-                .next_sample
-                .store(f64::NAN.to_bits(), Ordering::Release);
+        {
+            let capture = self.context.as_ref().context("Missing capture state")?;
+            block_capture(&capture.gate, std::time::Duration::from_secs(1))?;
         }
+        if let Err(error) = self.set_mute_behavior(2) {
+            if let Some(capture) = self.context.as_ref() {
+                unblock_capture(&capture.gate);
+            }
+            return Err(error);
+        }
+
+        // No callback that entered before the live mute update can still enqueue here:
+        // the reader gate is blocked and drained before new callbacks are admitted.
+        let capture = self.context.as_ref().context("Missing capture state")?;
+        for _ in 0..capture.queue.capacity() {
+            if capture.queue.pop().is_none() {
+                break;
+            }
+        }
+        capture
+            .next_sample
+            .store(f64::NAN.to_bits(), Ordering::Release);
+        unblock_capture(&capture.gate);
         Ok(())
     }
 
@@ -737,6 +792,9 @@ unsafe extern "C" fn capture(
     }
     // SAFETY: CoreAudio owns input buffers for this call; context remains boxed until IOProc destruction.
     let capture = unsafe { &*(context as *const Capture) };
+    let Some(_lease) = enter_capture(&capture.gate) else {
+        return 0;
+    };
     if capture.metrics.configuration_events.load(Ordering::Acquire)
         != capture
             .metrics
