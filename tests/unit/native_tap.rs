@@ -65,6 +65,21 @@ fn input_stream_scope_matches_the_coreaudio_abi() {
     assert_eq!(u32::from_be_bytes(*b"agrp"), 0x61677270);
 }
 
+#[test]
+fn aggregate_clock_validation_fails_closed_on_wrong_or_inactive_physical_output() {
+    ca::verify_aggregate_clock_state("speaker.uid", &[7, 9], "speaker.uid", 7).unwrap();
+
+    let wrong_main =
+        ca::verify_aggregate_clock_state("other.uid", &[7, 9], "speaker.uid", 7).unwrap_err();
+    assert!(wrong_main
+        .to_string()
+        .contains("unexpected main clock device"));
+
+    let inactive =
+        ca::verify_aggregate_clock_state("speaker.uid", &[9, 11], "speaker.uid", 7).unwrap_err();
+    assert!(inactive.to_string().contains("is not active"));
+}
+
 fn context(capacity: usize) -> Capture {
     Capture {
         queue: Arc::new(ArrayQueue::new(capacity)),
