@@ -258,6 +258,24 @@ pub(super) fn verify_aggregate_clock_state(
     Ok(())
 }
 
+pub fn set_tap_description(tap: u32, description: *const c_void) -> Result<()> {
+    ensure!(!description.is_null(), "Missing live tap description");
+    let value = description;
+    check(
+        unsafe {
+            AudioObjectSetPropertyData(
+                tap,
+                &address(b"tdsc"),
+                0,
+                ptr::null(),
+                size_of::<*const c_void>() as u32,
+                (&value as *const *const c_void).cast(),
+            )
+        },
+        "Update live system-audio tap description",
+    )
+}
+
 pub fn verify_aggregate_clock(aggregate: u32, expected_uid: &str) -> Result<()> {
     // kAudioAggregateDevicePropertyMainSubDevice = 'amst'. Apple renamed the
     // public API from "master" to "main", but the composition key remains
