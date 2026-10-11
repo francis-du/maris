@@ -541,6 +541,25 @@ pub(super) fn wait_output_ready(metrics: &Metrics, timeout: Duration) -> Result<
     }
 }
 
+#[cfg(any(target_os = "macos", test))]
+pub(super) fn wait_source_started(metrics: &Metrics, timeout: Duration) -> Result<()> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        anyhow::ensure!(
+            metrics.errors.load(Ordering::Acquire) == 0,
+            "Replacement output failed after system-audio handoff"
+        );
+        if metrics.source_started.load(Ordering::Acquire) {
+            return Ok(());
+        }
+        anyhow::ensure!(
+            Instant::now() < deadline,
+            "Replacement output received no ready system-audio source; restoring original playback"
+        );
+        std::thread::sleep(Duration::from_millis(2));
+    }
+}
+
 /// Caller prepares independent output telemetry and validates settings first.
 /// The old stream remains owned until the replacement proves native readiness.
 #[cfg(any(target_os = "windows", test))]
