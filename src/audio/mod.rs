@@ -311,6 +311,8 @@ pub struct Session {
     system_device_id: u32,
     #[cfg(target_os = "macos")]
     last_device_check: Instant,
+    #[cfg(target_os = "macos")]
+    last_system_progress: Option<(u64, u64)>,
 }
 impl Session {
     pub fn live(store: Store, input: &str, output: Option<&str>) -> Result<Self> {
@@ -437,6 +439,8 @@ impl Session {
             system_device_id: 0,
             #[cfg(target_os = "macos")]
             last_device_check: Instant::now(),
+            #[cfg(target_os = "macos")]
+            last_system_progress: None,
         })
     }
     pub fn play(store: Store, path: &Path, output: Option<&str>, repeat: bool) -> Result<Self> {
@@ -534,6 +538,8 @@ impl Session {
             system_device_id: 0,
             #[cfg(target_os = "macos")]
             last_device_check: Instant::now(),
+            #[cfg(target_os = "macos")]
+            last_system_progress: None,
         })
     }
     pub fn system(store: Store, output: Option<&str>) -> Result<Self> {
