@@ -14,6 +14,7 @@ pub struct Address {
 }
 // AudioHardwareBase.h: kAudioObjectPropertyScopeInput = 'inpt'.
 pub(super) const INPUT_SCOPE: &[u8; 4] = b"inpt";
+pub(super) const MAX_DRIFT_COMPENSATION_QUALITY: u32 = 0x7f;
 
 pub fn address(selector: &[u8; 4]) -> Address {
     address_scope(selector, b"glob")
@@ -238,6 +239,27 @@ pub fn default_output() -> Result<u32> {
 }
 pub fn device_ids() -> Result<Vec<u32>> {
     unsafe { property_vec_u32(1, b"dev#") }
+}
+
+pub fn verify_aggregate_clock(aggregate: u32, expected_uid: &str) -> Result<()> {
+    // kAudioAggregateDevicePropertyMainSubDevice = 'amst'. Apple renamed the
+    // public API from "master" to "main", but the composition key remains
+    // the literal "master". Verify what HAL actually built instead of trusting
+    // AudioHardwareCreateAggregateDevice returning noErr.
+    let main_uid =
+        string_property(aggregate, b"amst").context("Read aggregate main clock device")?;
+    ensure!(
+        main_uid == expected_uid,
+        "CoreAudio aggregate selected an unexpected main clock device: expected {expected_uid:?}, actual {main_uid:?}"
+    );
+    let expected_device = output_device_id_for_uid(expected_uid)?;
+    let active = unsafe { property_vec_u32(aggregate, b"agrp") }
+        .context("Read active aggregate sub-devices")?;
+    ensure!(
+        active.contains(&expected_device),
+        "Selected physical output {expected_device} is not active in the CoreAudio aggregate; active sub-devices: {active:?}"
+    );
+    Ok(())
 }
 fn input_stream_ids(device: u32) -> Result<Vec<u32>> {
     let address = address_scope(b"stm#", INPUT_SCOPE);
