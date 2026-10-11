@@ -59,6 +59,10 @@ fn input_stream_scope_matches_the_coreaudio_abi() {
     assert_eq!(usage.scope, 0x696e7074);
     assert_eq!(streams.selector, 0x73746d23);
     assert_eq!(usage.selector, 0x73757365);
+    assert_eq!(ca::MAX_DRIFT_COMPENSATION_QUALITY, 0x7f);
+    // kAudioAggregateDevicePropertyMainSubDevice / ActiveSubDeviceList.
+    assert_eq!(u32::from_be_bytes(*b"amst"), 0x616d7374);
+    assert_eq!(u32::from_be_bytes(*b"agrp"), 0x61677270);
 }
 
 fn context(capacity: usize) -> Capture {
