@@ -137,12 +137,20 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
         binding.latency_frames = tap_ffi::output_latency_frames(device_id).ok();
         binding.safety_offset_frames = tap_ffi::output_safety_offset_frames(device_id).ok();
     }
+    // Prove the replacement callback while forcing it to silence. The original
+    // application path stays audible during this entire preflight.
+    metrics.output_quarantined.store(true, Ordering::Release);
     stream.play()?;
     bridge::wait_output_ready(&metrics, Duration::from_secs(1))?;
     drop(prime);
-    // Original applications are muted only after an actual output callback,
-    // not merely a successful asynchronous play request.
+
+    // Start the tap unmuted and require real PCM before changing original playback.
     tap.start()?;
+    tap.arm_replacement()?;
+    metrics.output_quarantined.store(false, Ordering::Release);
+    // A live tap plus a live output callback still is not enough: require the clock
+    // bridge and startup envelope to observe post-handoff source frames.
+    bridge::wait_source_started(&metrics, Duration::from_secs(1))?;
     Ok(Pipeline {
         stream,
         tap,
