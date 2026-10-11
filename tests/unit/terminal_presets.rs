@@ -29,20 +29,28 @@ fn idle(process: &mut ConsoleProcess, duration: Duration) {
     }
 }
 
-// Independent 140x40 UI contract: the popup starts at visual column 29,
-// which is zero-based column 28 in vt100. Read only the preset-name column so
-// the selected marker cannot be confused with the dashboard's own marker.
+// Read the rendered popup row rather than a fixed visual-column slice.
+// PTY cell widths can differ across native runners (notably macOS Intel), so
+// column cropping can cut the selected preset name even when the row is
+// correctly highlighted. Use the last marker on a row because the dashboard
+// and preset popup can both render a ▶ on the same line.
 fn highlighted_preset(process: &ConsoleProcess) -> Option<String> {
     process
         .terminal
         .screen()
-        .rows(28, 41)
-        .skip(5)
-        .take(20)
+        .contents()
+        .lines()
         .find_map(|row| {
-            row.split_once('▶')
-                .map(|(_, name)| name.trim().to_owned())
-                .filter(|name| !name.is_empty())
+            let (prefix, highlighted) = row.rsplit_once('▶')?;
+            if !prefix.contains('│') {
+                return None;
+            }
+            let highlighted = highlighted.trim_start();
+            let name = highlighted
+                .split_once("  ")
+                .map_or(highlighted, |(name, _)| name)
+                .trim();
+            (!name.is_empty()).then(|| name.to_owned())
         })
 }
 
