@@ -338,8 +338,15 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
     // alive while the user reads the draft; Enter must still commit that same draft.
     process.send("+");
     let editing = Instant::now();
-    while editing.elapsed() < Duration::from_millis(1400) {
+    let draft_deadline = editing + Duration::from_secs(5);
+    let mut draft_visible = false;
+    while editing.elapsed() < Duration::from_millis(1400) || !draft_visible {
         process.drain(&mut output);
+        draft_visible = process.terminal.screen().contents().contains("+4.5 dB");
+        assert!(
+            Instant::now() < draft_deadline,
+            "draft adjustment was not rendered before delayed Enter"
+        );
         std::thread::sleep(Duration::from_millis(20));
     }
     assert_eq!(
