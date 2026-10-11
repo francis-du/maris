@@ -140,7 +140,9 @@ pub(super) struct TapCapture {
     aggregate: u32,
     io: ca::IoId,
     context: Option<Box<Capture>>,
+    description: Option<Retained<AnyObject>>,
     started: bool,
+    muted: bool,
     format: ca::Format,
     aggregate_rate: u32,
     aggregate_buffer: Option<u32>,
@@ -312,8 +314,10 @@ impl TapCapture {
                 let _: () = msg_send![description, setPrivate: true];
                 // Exclusive means all processes except those listed. Included-process taps keep it false.
                 let _: () = msg_send![description, setExclusive: !selected];
-                // CATapMutedWhenTapped = 2. Untapped applications regain normal playback automatically.
-                let _: () = msg_send![description, setMuteBehavior: 2_isize];
+                // Preflight capture while leaving original playback untouched. The live tap
+                // switches to CATapMutedWhenTapped only after PCM and replacement output
+                // callbacks are both proven.
+                let _: () = msg_send![description, setMuteBehavior: 0_isize];
             }
         };
         configure_description(&description);
@@ -323,7 +327,9 @@ impl TapCapture {
             aggregate: 0,
             io: ptr::null_mut(),
             context: None,
+            description: None,
             started: false,
+            muted: false,
             format: ca::Format::default(),
             aggregate_rate: 0,
             aggregate_buffer: None,
@@ -403,6 +409,7 @@ impl TapCapture {
         // Capture still starts only after the replacement output's real callback.
         ca::set(&dictionary, "tapautostart", &NSNumber::new_bool(false));
         ca::set(&dictionary, "taps", &taps);
+        result.description = Some(description);
         // The clock endpoint's I/O is disabled below before starting capture.
         ca::check(
             unsafe {
@@ -613,6 +620,51 @@ impl TapCapture {
             )?;
             self.started = false;
             return Err(error);
+        }
+        Ok(())
+    }
+
+    pub fn arm_replacement(&mut self) -> Result<()> {
+        ensure!(
+            self.started,
+            "Capture must be running before muting original playback"
+        );
+        ensure!(
+            !self.muted,
+            "Original playback is already muted by this tap"
+        );
+        let description = self
+            .description
+            .as_ref()
+            .context("Missing live tap description")?;
+        // SAFETY: CATapDescription.muteBehavior is atomic/readwrite. CoreAudio also
+        // exposes kAudioTapPropertyDescription as a settable live tap property.
+        unsafe {
+            let _: () = msg_send![&**description, setMuteBehavior: 2_isize];
+        }
+        if let Err(error) =
+            ca::set_tap_description(self.tap, (&**description as *const AnyObject).cast())
+        {
+            // Keep our retained description consistent with the still-unmuted native tap.
+            unsafe {
+                let _: () = msg_send![&**description, setMuteBehavior: 0_isize];
+            }
+            return Err(error);
+        }
+        self.muted = true;
+
+        // Never replay PCM captured while the original path was still audible. This
+        // bounded drain happens on the control thread; the producer may continue with
+        // post-mute frames while the replacement output remains quarantined.
+        if let Some(capture) = self.context.as_ref() {
+            for _ in 0..capture.queue.capacity() {
+                if capture.queue.pop().is_none() {
+                    break;
+                }
+            }
+            capture
+                .next_sample
+                .store(f64::NAN.to_bits(), Ordering::Release);
         }
         Ok(())
     }
