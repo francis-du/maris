@@ -541,6 +541,32 @@ pub(super) fn wait_output_ready(metrics: &Metrics, timeout: Duration) -> Result<
     }
 }
 
+/// Readiness before a tap starts is insufficient: the output may callback once,
+/// then stall exactly when the tap mutes original playback. Require forward
+/// callback progress after capture is live before accepting the handoff.
+#[cfg(any(target_os = "macos", test))]
+pub(super) fn wait_output_progress(
+    metrics: &Metrics,
+    before: u64,
+    timeout: Duration,
+) -> Result<()> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        anyhow::ensure!(
+            metrics.errors.load(Ordering::Acquire) == 0,
+            "Replacement output failed after capture startup"
+        );
+        if metrics.callback_calls.load(Ordering::Acquire) > before {
+            return Ok(());
+        }
+        anyhow::ensure!(
+            Instant::now() < deadline,
+            "Replacement output stopped callbacks after capture startup"
+        );
+        std::thread::sleep(Duration::from_millis(2));
+    }
+}
+
 /// Caller prepares independent output telemetry and validates settings first.
 /// The old stream remains owned until the replacement proves native readiness.
 #[cfg(any(target_os = "windows", test))]
