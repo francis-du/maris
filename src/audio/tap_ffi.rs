@@ -241,6 +241,23 @@ pub fn device_ids() -> Result<Vec<u32>> {
     unsafe { property_vec_u32(1, b"dev#") }
 }
 
+pub(super) fn verify_aggregate_clock_state(
+    main_uid: &str,
+    active: &[u32],
+    expected_uid: &str,
+    expected_device: u32,
+) -> Result<()> {
+    ensure!(
+        main_uid == expected_uid,
+        "CoreAudio aggregate selected an unexpected main clock device: expected {expected_uid:?}, actual {main_uid:?}"
+    );
+    ensure!(
+        active.contains(&expected_device),
+        "Selected physical output {expected_device} is not active in the CoreAudio aggregate; active sub-devices: {active:?}"
+    );
+    Ok(())
+}
+
 pub fn verify_aggregate_clock(aggregate: u32, expected_uid: &str) -> Result<()> {
     // kAudioAggregateDevicePropertyMainSubDevice = 'amst'. Apple renamed the
     // public API from "master" to "main", but the composition key remains
@@ -248,18 +265,10 @@ pub fn verify_aggregate_clock(aggregate: u32, expected_uid: &str) -> Result<()> 
     // AudioHardwareCreateAggregateDevice returning noErr.
     let main_uid =
         string_property(aggregate, b"amst").context("Read aggregate main clock device")?;
-    ensure!(
-        main_uid == expected_uid,
-        "CoreAudio aggregate selected an unexpected main clock device: expected {expected_uid:?}, actual {main_uid:?}"
-    );
     let expected_device = output_device_id_for_uid(expected_uid)?;
     let active = unsafe { property_vec_u32(aggregate, b"agrp") }
         .context("Read active aggregate sub-devices")?;
-    ensure!(
-        active.contains(&expected_device),
-        "Selected physical output {expected_device} is not active in the CoreAudio aggregate; active sub-devices: {active:?}"
-    );
-    Ok(())
+    verify_aggregate_clock_state(&main_uid, &active, expected_uid, expected_device)
 }
 fn input_stream_ids(device: u32) -> Result<Vec<u32>> {
     let address = address_scope(b"stm#", INPUT_SCOPE);
