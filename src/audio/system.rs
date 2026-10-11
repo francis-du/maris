@@ -385,24 +385,24 @@ impl Session {
             .tap
             .as_ref()
             .is_some_and(TapCapture::configuration_pending);
-        if self.tap.is_none()
-            || (!pending_configuration
-                && self.last_device_check.elapsed() < Duration::from_millis(300))
-        {
+        let periodic_check = self.last_device_check.elapsed() >= Duration::from_millis(300);
+        if self.tap.is_none() || (!pending_configuration && !periodic_check) {
             return Ok(());
         }
-        self.last_device_check = Instant::now();
-        let progress = (
-            self.metrics.callback_calls.load(Ordering::Acquire),
-            self.metrics.captured_frames.load(Ordering::Acquire),
-        );
-        if output_stalled(self.last_system_progress, progress) {
-            // Capture is still advancing while the replacement output is not.
-            // Stop the session so dropping TapCapture releases CATapMutedWhenTapped.
-            self.stop_requested = true;
-            return Ok(());
+        if periodic_check {
+            self.last_device_check = Instant::now();
+            let progress = (
+                self.metrics.callback_calls.load(Ordering::Acquire),
+                self.metrics.captured_frames.load(Ordering::Acquire),
+            );
+            if output_stalled(self.last_system_progress, progress) {
+                // Capture is still advancing while the replacement output is not.
+                // Stop the session so dropping TapCapture releases CATapMutedWhenTapped.
+                self.stop_requested = true;
+                return Ok(());
+            }
+            self.last_system_progress = Some(progress);
         }
-        self.last_system_progress = Some(progress);
         if self
             .tap
             .as_ref()
