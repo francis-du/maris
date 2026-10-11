@@ -51,11 +51,13 @@ pub fn devices() -> Result<Vec<DeviceInfo>> {
                 .map(|v| v.name().to_owned())
                 .unwrap_or_else(|_| "Unnamed device".into());
             #[cfg(target_os = "macos")]
-            let coreaudio_id = (direction == "output")
-                .then(|| tap_ffi::output_device_id_at(index).ok())
+            let stable_uid = (direction == "output")
+                .then(|| device.id().ok().map(|id| id.id().to_owned()))
                 .flatten();
             #[cfg(target_os = "macos")]
-            let stable_uid = coreaudio_id.and_then(|id| tap_ffi::device_uid(id).ok());
+            let coreaudio_id = stable_uid
+                .as_deref()
+                .and_then(|uid| tap_ffi::output_device_id_for_uid(uid).ok());
             #[cfg(target_os = "macos")]
             let id = stable_uid.as_ref().map_or_else(
                 || format!("{direction}:{index}"),
@@ -112,11 +114,20 @@ pub fn select(selector: Option<&str>, input: bool) -> Result<Device> {
     #[cfg(target_os = "macos")]
     if !input {
         if let Some(uid) = selector.strip_prefix("uid:") {
-            let index = tap_ffi::output_index_for_uid(uid)?;
-            return devices
-                .into_iter()
-                .nth(index)
-                .context("Stable output device is no longer available");
+            tap_ffi::output_device_id_for_uid(uid)?;
+            let mut matches = devices.into_iter().filter(|device| {
+                device
+                    .id()
+                    .is_ok_and(|id| id.id() == uid)
+            });
+            let device = matches
+                .next()
+                .context("Stable output device is no longer available")?;
+            anyhow::ensure!(
+                matches.next().is_none(),
+                "Stable CoreAudio output identity is ambiguous"
+            );
+            return Ok(device);
         }
     }
     let prefix = if input { "input:" } else { "output:" };
