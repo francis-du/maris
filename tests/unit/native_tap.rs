@@ -63,6 +63,7 @@ fn input_stream_scope_matches_the_coreaudio_abi() {
     // kAudioAggregateDevicePropertyMainSubDevice / ActiveSubDeviceList.
     assert_eq!(u32::from_be_bytes(*b"amst"), 0x616d7374);
     assert_eq!(u32::from_be_bytes(*b"agrp"), 0x61677270);
+    assert_eq!(u32::from_be_bytes(*b"tdsc"), 0x74647363);
 }
 
 #[test]
