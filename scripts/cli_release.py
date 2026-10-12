@@ -80,6 +80,13 @@ def release_destination(root: Path) -> Path:
     return release_output_directory(root / 'dist/online-approved', root)
 
 
+def release_report(root: Path, path: Path) -> Path:
+    path = _release_input_path(path, root)
+    if not path.is_file():
+        raise ValueError('Round evidence must be a regular file in this source checkout')
+    return path
+
+
 def prepare(report: Path | None) -> dict:
     system, arch = host_target()
     source = source_digest()
@@ -87,9 +94,7 @@ def prepare(report: Path | None) -> dict:
     reports = [report] if report else list((ROOT / '.maris-review/verification').glob('*/report.json'))
     if len(reports) != 1:
         raise ValueError('CLI preparation requires exactly one actual current-source 200-round report')
-    report = reports[0].resolve()
-    if not report.is_relative_to(ROOT.resolve()) or report.is_symlink():
-        raise ValueError('Round evidence must belong to this source checkout')
+    report = release_report(ROOT, reports[0])
     suffix = '.tar.gz' if system == 'linux' else '.zip'
     locals = release_package_inputs(
         ROOT,
