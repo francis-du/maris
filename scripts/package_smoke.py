@@ -78,10 +78,13 @@ def snapshot_tree(root: Path) -> dict:
 def package_input_directory(root: Path) -> Path:
     root = root.resolve()
     packages = root / 'dist/packages'
-    if packages.is_symlink():
-        raise ValueError('Linked package-smoke input directory rejected')
-    if not packages.is_dir():
-        raise ValueError('Package-smoke input directory is missing or invalid')
+    current = root
+    for part in packages.relative_to(root).parts:
+        current = current / part
+        if current.is_symlink():
+            raise ValueError('Linked package-smoke input directory rejected')
+        if not current.is_dir():
+            raise ValueError('Package-smoke input directory is missing or invalid')
     try:
         packages.resolve().relative_to(root)
     except ValueError as error:
