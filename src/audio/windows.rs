@@ -391,6 +391,8 @@ impl Session {
             system_device_id: 0,
             #[cfg(target_os = "macos")]
             last_device_check: Instant::now(),
+            #[cfg(target_os = "macos")]
+            last_system_progress: None,
         })
     }
 
