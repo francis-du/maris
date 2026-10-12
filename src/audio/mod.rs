@@ -865,8 +865,6 @@ impl Session {
             status["captured_application_pids"] = json!(&self.system_process_pids);
             status["coreaudio_tap_mode"] =
                 json!(self.tap.as_ref().map(tap::TapCapture::capture_mode));
-            status["coreaudio_capture_callback_calls"] =
-                json!(self.metrics.capture_callback_calls.load(Ordering::Relaxed));
         }
         #[cfg(unix)]
         if let Some(pulse) = &self.pulse {
