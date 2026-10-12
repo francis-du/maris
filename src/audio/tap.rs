@@ -731,7 +731,7 @@ impl TapCapture {
         Ok(())
     }
 
-    fn disarm_replacement(&mut self) -> Result<()> {
+    pub(super) fn disarm_replacement(&mut self) -> Result<()> {
         if self.muted {
             self.set_mute_behavior(0)?;
         }
