@@ -150,7 +150,23 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
     metrics.output_quarantined.store(false, Ordering::Release);
     // A live tap plus a live output callback still is not enough: require the clock
     // bridge and startup envelope to observe post-handoff source frames.
-    bridge::wait_source_started(&metrics, Duration::from_secs(1))?;
+    if let Err(start_error) = bridge::wait_source_started(&metrics, Duration::from_secs(1)) {
+        // Fail open in a deterministic order. tap was constructed before stream, so
+        // ordinary stack unwinding would drop the replacement output first and only then
+        // restore the original application path from TapCapture::drop. Re-quarantine the
+        // replacement and explicitly restore original playback while that stream is still
+        // alive. If the live property update itself fails, destroy the tap now (also while
+        // the replacement stream is alive) so CoreAudio gets a second restoration path
+        // before the output disappears.
+        metrics.output_quarantined.store(true, Ordering::Release);
+        if let Err(restore_error) = tap.disarm_replacement() {
+            drop(tap);
+            return Err(start_error.context(format!(
+                "Replacement output never received post-handoff audio; restoring the original CoreAudio tap also failed: {restore_error:#}"
+            )));
+        }
+        return Err(start_error);
+    }
     Ok(Pipeline {
         stream,
         tap,
