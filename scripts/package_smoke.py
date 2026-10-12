@@ -75,6 +75,41 @@ def snapshot_tree(root: Path) -> dict:
             for path in root.rglob('*')}
 
 
+def package_input_directory(root: Path) -> Path:
+    root = root.resolve()
+    packages = root / 'dist/packages'
+    if packages.is_symlink():
+        raise ValueError('Linked package-smoke input directory rejected')
+    if not packages.is_dir():
+        raise ValueError('Package-smoke input directory is missing or invalid')
+    try:
+        packages.resolve().relative_to(root)
+    except ValueError as error:
+        raise ValueError('Package-smoke input directory escaped the source checkout') from error
+    return packages
+
+
+def package_input_file(directory: Path, path: Path) -> Path:
+    directory = directory.resolve()
+    path = path.absolute()
+    try:
+        relative = path.relative_to(directory)
+    except ValueError as error:
+        raise ValueError('Package-smoke input escaped the package directory') from error
+    current = directory
+    for part in relative.parts[:-1]:
+        current = current / part
+        if current.is_symlink() or not current.is_dir():
+            raise ValueError('Linked or invalid package-smoke input parent rejected')
+    if path.is_symlink() or not path.is_file():
+        raise ValueError('Linked or invalid package-smoke input file rejected')
+    try:
+        path.resolve().relative_to(directory)
+    except ValueError as error:
+        raise ValueError('Package-smoke input file escaped the package directory') from error
+    return path
+
+
 def review_directory(root: Path) -> Path:
     root = root.resolve()
     review = root / '.maris-review'
@@ -94,12 +129,16 @@ def main() -> None:
     system, arch = host_target()
     source_hash = source_digest()
     suffix = '.tar.gz' if system == 'linux' else '.zip'
-    archives = list((ROOT / 'dist/packages').glob(f'Maris-*-{system}-{arch}-local-{source_hash[:12]}{suffix}'))
+    packages = package_input_directory(ROOT)
+    archives = [
+        package_input_file(packages, path)
+        for path in packages.glob(f'Maris-*-{system}-{arch}-local-{source_hash[:12]}{suffix}')
+    ]
     if len(archives) != 1:
         raise ValueError('Expected exactly one current-source native archive')
     archive = archives[0]
     stem = archive.name[:-len(suffix)]
-    checksum = archive.parent / (stem + '.sha256')
+    checksum = package_input_file(packages, archive.parent / (stem + '.sha256'))
     if hashlib.sha256(archive.read_bytes()).hexdigest() != checksum.read_text(encoding='utf-8').split()[0]:
         raise ValueError('Archive checksum mismatch')
     review = review_directory(ROOT)
