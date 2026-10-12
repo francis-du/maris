@@ -180,8 +180,54 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
         capability,
     })
 }
-fn output_stalled(previous: Option<(u64, u64)>, current: (u64, u64)) -> bool {
-    previous.is_some_and(|(output, capture)| current.1 > capture && current.0 == output)
+#[derive(Clone, Copy)]
+pub(super) struct ProgressGuard {
+    pub(super) output_callbacks: u64,
+    pub(super) captured_frames: u64,
+    output_advanced_at: Instant,
+}
+
+fn output_stall_timeout(buffer_frames: Option<u32>, sample_rate: u32) -> Duration {
+    let frames = buffer_frames.unwrap_or(512).max(1);
+    let period = Duration::from_secs_f64(frames as f64 / sample_rate.max(1) as f64);
+    (period * 3 + Duration::from_millis(100))
+        .max(Duration::from_millis(750))
+        .min(Duration::from_secs(5))
+}
+
+fn observe_progress(
+    previous: Option<ProgressGuard>,
+    current: (u64, u64),
+    now: Instant,
+    timeout: Duration,
+) -> (ProgressGuard, bool) {
+    let Some(previous) = previous else {
+        return (
+            ProgressGuard {
+                output_callbacks: current.0,
+                captured_frames: current.1,
+                output_advanced_at: now,
+            },
+            false,
+        );
+    };
+    let output_advanced = current.0 != previous.output_callbacks;
+    let output_advanced_at = if output_advanced {
+        now
+    } else {
+        previous.output_advanced_at
+    };
+    let stalled = !output_advanced
+        && current.1 > previous.captured_frames
+        && now.saturating_duration_since(previous.output_advanced_at) >= timeout;
+    (
+        ProgressGuard {
+            output_callbacks: current.0,
+            captured_frames: current.1,
+            output_advanced_at,
+        },
+        stalled,
+    )
 }
 
 impl Session {
@@ -410,12 +456,20 @@ impl Session {
             return Ok(());
         }
         if periodic_check {
-            self.last_device_check = Instant::now();
+            let now = Instant::now();
+            self.last_device_check = now;
             let progress = (
                 self.metrics.callback_calls.load(Ordering::Acquire),
                 self.metrics.captured_frames.load(Ordering::Acquire),
             );
-            if output_stalled(self.last_system_progress, progress) {
+            let (observed, stalled) = observe_progress(
+                self.last_system_progress,
+                progress,
+                now,
+                output_stall_timeout(self.output_buffer_frames, self.sample_rate),
+            );
+            self.last_system_progress = Some(observed);
+            if stalled {
                 // Capture is advancing while the physical replacement output has stopped.
                 // Quarantine any callback that unexpectedly resumes, restore original
                 // playback immediately, then let normal session teardown retire the route.
@@ -427,7 +481,6 @@ impl Session {
                 }
                 return Ok(());
             }
-            self.last_system_progress = Some(progress);
         }
         if self
             .tap
@@ -523,14 +576,43 @@ impl Session {
 
 #[cfg(test)]
 mod progress_tests {
-    use super::output_stalled;
+    use super::{observe_progress, output_stall_timeout};
+    use std::time::{Duration, Instant};
 
     #[test]
-    fn advancing_capture_without_output_callbacks_is_a_muted_route_stall() {
-        assert!(!output_stalled(None, (10, 100)));
-        assert!(!output_stalled(Some((10, 100)), (11, 200)));
-        assert!(!output_stalled(Some((10, 100)), (10, 100)));
-        assert!(!output_stalled(Some((10, 100)), (9, 200)));
-        assert!(output_stalled(Some((10, 100)), (10, 200)));
+    fn capture_progress_requires_a_real_output_stall_window() {
+        let start = Instant::now();
+        let timeout = Duration::from_millis(750);
+        let (first, stalled) = observe_progress(None, (10, 100), start, timeout);
+        assert!(!stalled);
+
+        let (early, stalled) =
+            observe_progress(Some(first), (10, 200), start + Duration::from_millis(600), timeout);
+        assert!(!stalled);
+
+        let (_, stalled) =
+            observe_progress(Some(early), (10, 300), start + Duration::from_millis(800), timeout);
+        assert!(stalled);
+
+        let (_, stalled) =
+            observe_progress(Some(first), (11, 200), start + Duration::from_secs(2), timeout);
+        assert!(!stalled);
+        let (_, stalled) =
+            observe_progress(Some(first), (10, 100), start + Duration::from_secs(2), timeout);
+        assert!(!stalled);
+        let (_, stalled) =
+            observe_progress(Some(first), (9, 200), start + Duration::from_secs(2), timeout);
+        assert!(!stalled);
+    }
+
+    #[test]
+    fn stall_window_scales_with_the_real_output_buffer_period() {
+        assert_eq!(
+            output_stall_timeout(Some(512), 48_000),
+            Duration::from_millis(750)
+        );
+        let large = output_stall_timeout(Some(65_536), 44_100);
+        assert!(large > Duration::from_secs(4));
+        assert!(large <= Duration::from_secs(5));
     }
 }
