@@ -262,15 +262,14 @@ fn observe_progress(
 }
 
 pub(super) fn add_handoff_status(session: &Session, status: &mut serde_json::Value) {
-    let last_progress = session.last_system_progress.map_or(
-        serde_json::Value::Null,
-        |progress| {
+    let last_progress = session
+        .last_system_progress
+        .map_or(serde_json::Value::Null, |progress| {
             serde_json::json!({
                 "output_callbacks":progress.output_callbacks,
                 "capture_callbacks":progress.capture_callbacks
             })
-        },
-    );
+        });
     status["coreaudio_tap_mode"] =
         serde_json::json!(session.tap.as_ref().map(TapCapture::capture_mode));
     status["coreaudio_handoff"] = serde_json::json!({
