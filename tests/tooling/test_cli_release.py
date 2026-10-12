@@ -17,7 +17,7 @@ from dependency_notices import validate as validate_notices
 from portable_package import create_payload, validate_binary
 from release_bundle import commit_release_inputs, inspect_kit
 from cli_release import release_destination, release_evidence_file, release_package_inputs
-from package_smoke import package_input_directory, package_input_file, review_directory
+from package_smoke import linked_directory as smoke_linked_directory, package_input_directory, package_input_file, review_directory
 from test_online import fixture
 import test_online
 from test_portable import fixture as binary_fixture
@@ -25,6 +25,17 @@ from test_dependency_notices import standard_library_fixture
 
 
 class CliContracts(unittest.TestCase):
+    def test_package_smoke_link_guard_detects_windows_reparse_fallback(self):
+        class FakePath:
+            def __init__(self, attributes):
+                self.attributes = attributes
+            def is_symlink(self):
+                return False
+            def lstat(self):
+                return type('Stat', (), {'st_file_attributes': self.attributes})()
+        self.assertTrue(smoke_linked_directory(FakePath(0x400)))
+        self.assertFalse(smoke_linked_directory(FakePath(0)))
+
     @unittest.skipIf(os.name == 'nt', 'Directory symlink fixture requires native symlink support')
     def test_cli_release_locations_reject_linked_input_and_output_paths(self):
         with tempfile.TemporaryDirectory() as temporary:

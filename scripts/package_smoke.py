@@ -75,13 +75,26 @@ def snapshot_tree(root: Path) -> dict:
             for path in root.rglob('*')}
 
 
+def linked_directory(path: Path) -> bool:
+    if path.is_symlink():
+        return True
+    junction = getattr(path, 'is_junction', None)
+    if junction is not None and junction():
+        return True
+    try:
+        attributes = path.lstat().st_file_attributes
+    except (AttributeError, FileNotFoundError, OSError):
+        return False
+    return bool(attributes & 0x400)  # Windows FILE_ATTRIBUTE_REPARSE_POINT.
+
+
 def package_input_directory(root: Path) -> Path:
     root = root.resolve()
     packages = root / 'dist/packages'
     current = root
     for part in packages.relative_to(root).parts:
         current = current / part
-        if current.is_symlink():
+        if linked_directory(current):
             raise ValueError('Linked package-smoke input directory rejected')
         if not current.is_dir():
             raise ValueError('Package-smoke input directory is missing or invalid')
@@ -102,7 +115,7 @@ def package_input_file(directory: Path, path: Path) -> Path:
     current = directory
     for part in relative.parts[:-1]:
         current = current / part
-        if current.is_symlink() or not current.is_dir():
+        if linked_directory(current) or not current.is_dir():
             raise ValueError('Linked or invalid package-smoke input parent rejected')
     if path.is_symlink() or not path.is_file():
         raise ValueError('Linked or invalid package-smoke input file rejected')
@@ -116,7 +129,7 @@ def package_input_file(directory: Path, path: Path) -> Path:
 def review_directory(root: Path) -> Path:
     root = root.resolve()
     review = root / '.maris-review'
-    if review.is_symlink():
+    if linked_directory(review):
         raise ValueError('Linked package-smoke review directory rejected')
     if review.exists() and not review.is_dir():
         raise ValueError('Package-smoke review path is not a directory')

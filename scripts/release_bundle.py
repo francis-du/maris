@@ -36,6 +36,19 @@ def digest(path: Path) -> str:
     return hasher.hexdigest()
 
 
+def linked_directory(path: Path) -> bool:
+    if path.is_symlink():
+        return True
+    junction = getattr(path, 'is_junction', None)
+    if junction is not None and junction():
+        return True
+    try:
+        attributes = path.lstat().st_file_attributes
+    except (AttributeError, FileNotFoundError, OSError):
+        return False
+    return bool(attributes & 0x400)  # Windows FILE_ATTRIBUTE_REPARSE_POINT.
+
+
 def release_output_directory(path: Path, root: Path = ROOT) -> Path:
     """Create a fixed release output directory without following workspace symlink escapes."""
     root = root.resolve()
@@ -47,7 +60,7 @@ def release_output_directory(path: Path, root: Path = ROOT) -> Path:
     current = root
     for part in relative.parts:
         current = current / part
-        if current.is_symlink():
+        if linked_directory(current):
             raise ValueError('Linked release output directory rejected')
         if current.exists() and not current.is_dir():
             raise ValueError('Release output path contains a non-directory component')
@@ -70,7 +83,7 @@ def release_input_directory(path: Path, root: Path = ROOT) -> Path:
     current = root
     for part in relative.parts:
         current = current / part
-        if current.is_symlink():
+        if linked_directory(current):
             raise ValueError('Linked release input directory rejected')
         if not current.is_dir():
             raise ValueError('Release input path contains a non-directory component')
@@ -84,7 +97,7 @@ def release_input_directory(path: Path, root: Path = ROOT) -> Path:
 def _release_input_path(path: Path, directory: Path) -> Path:
     """Require release collection inputs to stay below a real, unlinked collection root."""
     directory = directory.absolute()
-    if directory.is_symlink() or not directory.is_dir():
+    if linked_directory(directory) or not directory.is_dir():
         raise ValueError('Linked or invalid release input directory rejected')
     path = path.absolute()
     try:
@@ -94,7 +107,7 @@ def _release_input_path(path: Path, directory: Path) -> Path:
     current = directory
     for part in relative.parts[:-1]:
         current = current / part
-        if current.is_symlink() or not current.is_dir():
+        if linked_directory(current) or not current.is_dir():
             raise ValueError('Linked or invalid release input parent rejected')
     if path.is_symlink():
         raise ValueError('Linked release input rejected')
