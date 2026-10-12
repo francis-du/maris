@@ -38,6 +38,11 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
     let queue = Arc::new(ArrayQueue::new(192000 / 4));
     let metrics = Arc::new(Metrics::default());
     let updates = Arc::new(ArrayQueue::<Update>::new(8));
+    let initial_buffer_frames = binding
+        .coreaudio_id
+        .and_then(|device| tap_ffi::output_buffer_frames(device).ok());
+    let initial_progress_timeout =
+        output_progress_timeout(initial_buffer_frames, rate, Duration::from_secs(1));
     // Register Maris as an audio process before resolving the exclusion PID. This stream emits only silence.
     let prime_metrics = Arc::new(Metrics::default());
     let prime = bridge::output(
@@ -49,7 +54,7 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
         prime_metrics.clone(),
     )?;
     prime.play()?;
-    bridge::wait_output_ready(&prime_metrics, Duration::from_secs(1))?;
+    bridge::wait_output_ready(&prime_metrics, initial_progress_timeout)?;
     // System-wide capture must stay on the established global tap. Some CoreAudio
     // endpoints accept the device-scoped CATapDescription but then mute that physical
     // stream when CATapMutedWhenTapped is engaged, leaving Maris with no usable PCM while
@@ -150,7 +155,9 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
     metrics.output_quarantined.store(false, Ordering::Release);
     // A live tap plus a live output callback still is not enough: require the clock
     // bridge and startup envelope to observe post-handoff source frames.
-    if let Err(start_error) = bridge::wait_source_started(&metrics, Duration::from_secs(1)) {
+    let handoff_timeout =
+        output_progress_timeout(binding.buffer_frames, tap.rate, Duration::from_secs(1));
+    if let Err(start_error) = bridge::wait_source_started(&metrics, handoff_timeout) {
         // Fail open in a deterministic order. tap was constructed before stream, so
         // ordinary stack unwinding would drop the replacement output first and only then
         // restore the original application path from TapCapture::drop. Re-quarantine the
@@ -187,12 +194,24 @@ pub(super) struct ProgressGuard {
     output_advanced_at: Instant,
 }
 
-fn output_stall_timeout(buffer_frames: Option<u32>, sample_rate: u32) -> Duration {
+fn output_progress_timeout(
+    buffer_frames: Option<u32>,
+    sample_rate: u32,
+    minimum: Duration,
+) -> Duration {
     let frames = buffer_frames.unwrap_or(512).max(1);
     let period = Duration::from_secs_f64(frames as f64 / sample_rate.max(1) as f64);
     (period * 3 + Duration::from_millis(100))
-        .max(Duration::from_millis(750))
+        .max(minimum)
         .min(Duration::from_secs(5))
+}
+
+fn output_stall_timeout(buffer_frames: Option<u32>, sample_rate: u32) -> Duration {
+    output_progress_timeout(
+        buffer_frames,
+        sample_rate,
+        Duration::from_millis(750),
+    )
 }
 
 fn observe_progress(
@@ -578,7 +597,7 @@ impl Session {
 
 #[cfg(test)]
 mod progress_tests {
-    use super::{observe_progress, output_stall_timeout};
+    use super::{observe_progress, output_progress_timeout, output_stall_timeout};
     use std::time::{Duration, Instant};
 
     #[test]
@@ -628,13 +647,20 @@ mod progress_tests {
     }
 
     #[test]
-    fn stall_window_scales_with_the_real_output_buffer_period() {
+    fn progress_windows_scale_with_the_real_output_buffer_period() {
         assert_eq!(
             output_stall_timeout(Some(512), 48_000),
             Duration::from_millis(750)
         );
+        assert_eq!(
+            output_progress_timeout(Some(512), 48_000, Duration::from_secs(1)),
+            Duration::from_secs(1)
+        );
         let large = output_stall_timeout(Some(65_536), 44_100);
+        let startup =
+            output_progress_timeout(Some(65_536), 44_100, Duration::from_secs(1));
         assert!(large > Duration::from_secs(4));
         assert!(large <= Duration::from_secs(5));
+        assert_eq!(startup, large);
     }
 }
