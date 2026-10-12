@@ -621,12 +621,13 @@ mod progress_tests {
     use std::time::{Duration, Instant};
 
     #[test]
-    fn capture_progress_requires_a_real_output_stall_window() {
+    fn progress_guard_fails_open_on_output_capture_or_combined_stalls() {
         let start = Instant::now();
         let timeout = Duration::from_millis(750);
         let (first, stalled) = observe_progress(None, (10, 100), start, timeout);
         assert!(!stalled);
 
+        // No side has exceeded its window yet.
         let (early, stalled) = observe_progress(
             Some(first),
             (10, 200),
@@ -635,6 +636,7 @@ mod progress_tests {
         );
         assert!(!stalled);
 
+        // Capture advances while the replacement output is stuck.
         let (_, stalled) = observe_progress(
             Some(early),
             (10, 300),
@@ -643,23 +645,49 @@ mod progress_tests {
         );
         assert!(stalled);
 
+        // Output advances while the tap capture is stuck.
+        let (capture_base, stalled) = observe_progress(None, (20, 400), start, timeout);
+        assert!(!stalled);
         let (_, stalled) = observe_progress(
-            Some(first),
-            (11, 200),
-            start + Duration::from_secs(2),
+            Some(capture_base),
+            (21, 400),
+            start + Duration::from_millis(800),
+            timeout,
+        );
+        assert!(stalled);
+
+        // If both sides stop, the physical replacement callback itself is enough evidence
+        // to fail open; capture progress is not required as a witness.
+        let (both_base, stalled) = observe_progress(None, (30, 500), start, timeout);
+        assert!(!stalled);
+        let (_, stalled) = observe_progress(
+            Some(both_base),
+            (30, 500),
+            start + Duration::from_millis(800),
+            timeout,
+        );
+        assert!(stalled);
+
+        // Genuine progress on both sides resets both watchdog clocks.
+        let (healthy, stalled) = observe_progress(
+            None,
+            (40, 600),
+            start,
             timeout,
         );
         assert!(!stalled);
         let (_, stalled) = observe_progress(
-            Some(first),
-            (10, 100),
+            Some(healthy),
+            (41, 700),
             start + Duration::from_secs(2),
             timeout,
         );
         assert!(!stalled);
+
+        // Counter discontinuity/reset is still progress, not a stall.
         let (_, stalled) = observe_progress(
-            Some(first),
-            (9, 200),
+            Some(healthy),
+            (39, 701),
             start + Duration::from_secs(2),
             timeout,
         );
