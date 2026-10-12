@@ -12,6 +12,7 @@ import re
 import subprocess
 import time
 from source_audit import ROOT, source_digest
+from release_bundle import linked_directory
 
 SUITES = ["config_editor", "config_layout", "config_interaction", "config_safety",
           "menu_configuration", "control_messages", "preference_safety", "audio_quality",
@@ -39,11 +40,18 @@ def read_owned(path: Path, bound: int) -> bytes:
 
 def checkpoint_binaries(binaries: dict[str, str], root: Path = ROOT) -> dict:
     result = {}
-    if (root / 'target').is_symlink():
-        raise ValueError('Linked compiled target directory rejected')
+    target = root / 'target'
+    if linked_directory(target) or not target.is_dir():
+        raise ValueError('Linked or invalid compiled target directory rejected')
+    target = target.resolve()
     for name, value in binaries.items():
-        path = Path(value)
-        if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to((root / 'target').resolve()):
+        path = Path(value).absolute()
+        current = path.parent
+        while current != target and current != current.parent:
+            if linked_directory(current) or not current.is_dir():
+                raise ValueError('Regression binary parent must be a real compiled target directory')
+            current = current.parent
+        if linked_directory(path) or not path.is_file() or not path.resolve().is_relative_to(target):
             raise ValueError('Regression binary must be an actual compiled target')
         result[name] = {'path': str(path.resolve()), 'sha256': digest(path)}
     if set(result) != set(SUITES + ['release_matrix']):
@@ -131,6 +139,27 @@ def compile_binaries(output: Path) -> dict[str, str]:
     return binaries
 
 
+def verification_root(root: Path = ROOT) -> Path:
+    root = root.resolve()
+    review = root / '.maris-review'
+    verification = review / 'verification'
+    for path in (review, verification):
+        if linked_directory(path):
+            raise ValueError('Linked verification directory rejected')
+        if path.exists() and not path.is_dir():
+            raise ValueError('Verification path contains a non-directory component')
+    verification.mkdir(parents=True, exist_ok=True)
+    return verification
+
+
+def resume_directory(path: Path, root: Path) -> Path:
+    path = path.absolute()
+    if (linked_directory(path) or linked_directory(path.parent)
+            or path.parent.resolve() != root.resolve() or not path.is_dir()):
+        raise ValueError('Resume must name one existing owned verification directory')
+    return path
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--rounds', type=int, help='Total distinct seeds; default 200 on a new run')
@@ -143,14 +172,9 @@ def main() -> int:
             or args.batch_size is not None and not 1 <= args.batch_size <= 10000):
         parser.error('Round counts and batch size must be between 1 and 10000')
     revision = source_digest()
-    root = ROOT / '.maris-review/verification'
-    if root.is_symlink() or root.parent.is_symlink():
-        raise ValueError('Linked verification directory rejected')
-    root.mkdir(parents=True, exist_ok=True)
+    root = verification_root(ROOT)
     if args.resume:
-        output = (ROOT / args.resume).absolute()
-        if output.is_symlink() or output.parent.resolve() != root.resolve() or not output.is_dir():
-            raise ValueError('Resume must name one existing owned verification directory')
+        output = resume_directory(ROOT / args.resume, root)
     else:
         output = root / datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
         output.mkdir()
