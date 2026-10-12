@@ -417,8 +417,14 @@ impl Session {
             );
             if output_stalled(self.last_system_progress, progress) {
                 // Capture is advancing while the physical replacement output has stopped.
-                // Stop the session so fail-open teardown releases CATapMutedWhenTapped.
+                // Quarantine any callback that unexpectedly resumes, restore original
+                // playback immediately, then let normal session teardown retire the route.
+                self.metrics.output_quarantined.store(true, Ordering::Release);
                 self.stop_requested = true;
+                if let Some(tap) = self.tap.as_mut() {
+                    tap.disarm_replacement()
+                        .context("Restore original playback after replacement output stalled")?;
+                }
                 return Ok(());
             }
             self.last_system_progress = Some(progress);
