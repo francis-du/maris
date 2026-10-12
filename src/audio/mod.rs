@@ -133,6 +133,7 @@ pub(super) struct Metrics {
     peak_right: AtomicU32,
     frames: AtomicU64,
     captured_frames: AtomicU64,
+    capture_callback_calls: AtomicU64,
     callback_processing_nanos: AtomicU64,
     callback_max_nanos: AtomicU64,
     callback_frames: AtomicU64,
@@ -863,6 +864,8 @@ impl Session {
             status["captured_application_pids"] = json!(&self.system_process_pids);
             status["coreaudio_tap_mode"] =
                 json!(self.tap.as_ref().map(tap::TapCapture::capture_mode));
+            status["coreaudio_capture_callback_calls"] =
+                json!(self.metrics.capture_callback_calls.load(Ordering::Relaxed));
         }
         #[cfg(unix)]
         if let Some(pulse) = &self.pulse {
