@@ -82,6 +82,12 @@ class CliContracts(unittest.TestCase):
             outside = root.parent / (root.name + '-outside')
             outside.mkdir()
             try:
+                real_dist = root / 'real-dist'
+                (real_dist / 'packages').mkdir(parents=True)
+                (root / 'dist').symlink_to(real_dist, target_is_directory=True)
+                with self.assertRaisesRegex(ValueError, 'Linked package-smoke input directory'):
+                    package_input_directory(root)
+                (root / 'dist').unlink()
                 (root / 'dist').mkdir()
                 (root / 'dist/packages').symlink_to(outside, target_is_directory=True)
                 with self.assertRaisesRegex(ValueError, 'Linked package-smoke input directory'):
