@@ -38,7 +38,7 @@ def software_gate(payload: Path, source: str, system: str, arch: str, version: s
         raise ValueError('CLI release is missing its local trusted updater')
     data = json.loads(report.read_text(encoding='utf-8'))
     check_report(data, source, report.parent, sys.platform)
-    smoke_path = ROOT / '.maris-review/package-smoke.json'
+    smoke_path = release_evidence_file(ROOT, ROOT / '.maris-review/package-smoke.json')
     smoke = json.loads(smoke_path.read_text(encoding='utf-8'))
     if (smoke.get('source_sha256') != source or smoke.get('platform') != system or smoke.get('architecture') != arch
             or smoke.get('interface') != 'cli' or smoke.get('binary_sha256') != digest(binary)
@@ -80,10 +80,10 @@ def release_destination(root: Path) -> Path:
     return release_output_directory(root / 'dist/online-approved', root)
 
 
-def release_report(root: Path, path: Path) -> Path:
+def release_evidence_file(root: Path, path: Path) -> Path:
     path = _release_input_path(path, root)
     if not path.is_file():
-        raise ValueError('Round evidence must be a regular file in this source checkout')
+        raise ValueError('Release evidence must be a regular file in this source checkout')
     return path
 
 
@@ -94,7 +94,7 @@ def prepare(report: Path | None) -> dict:
     reports = [report] if report else list((ROOT / '.maris-review/verification').glob('*/report.json'))
     if len(reports) != 1:
         raise ValueError('CLI preparation requires exactly one actual current-source 200-round report')
-    report = release_report(ROOT, reports[0])
+    report = release_evidence_file(ROOT, reports[0])
     suffix = '.tar.gz' if system == 'linux' else '.zip'
     locals = release_package_inputs(
         ROOT,
