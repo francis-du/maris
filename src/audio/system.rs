@@ -280,6 +280,10 @@ pub(super) fn add_handoff_status(session: &Session, status: &mut serde_json::Val
         "output_callback_calls":session.metrics.callback_calls.load(Ordering::Acquire),
         "capture_callback_calls":session.metrics.capture_callback_calls.load(Ordering::Acquire),
         "captured_frames":session.metrics.captured_frames.load(Ordering::Acquire),
+        "configuration_pending":session
+            .tap
+            .as_ref()
+            .is_some_and(TapCapture::configuration_pending),
         "source_started":session.metrics.source_started.load(Ordering::Acquire),
         "watchdog_timeout_ms":output_stall_timeout(
             session.output_buffer_frames,
