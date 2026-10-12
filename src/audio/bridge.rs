@@ -517,6 +517,19 @@ impl Renderer {
                 .fetch_add(frame_count as u64, Ordering::Relaxed);
             metrics.callback_calls.fetch_add(1, Ordering::Relaxed);
         }
+        // A fail-open handoff can quarantine output while this callback is already
+        // rendering. Recheck at the hardware boundary so an in-flight pre-quarantine
+        // buffer cannot escape after original playback has been restored.
+        if metrics.output_quarantined.load(Ordering::Acquire) {
+            data.fill(T::from_sample(0.0));
+            metrics.peak.store(0.0_f32.to_bits(), Ordering::Relaxed);
+            metrics
+                .peak_left
+                .store(0.0_f32.to_bits(), Ordering::Relaxed);
+            metrics
+                .peak_right
+                .store(0.0_f32.to_bits(), Ordering::Relaxed);
+        }
     }
 }
 
