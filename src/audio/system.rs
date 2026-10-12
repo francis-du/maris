@@ -261,6 +261,29 @@ fn observe_progress(
     )
 }
 
+pub(super) fn handoff_status(session: &Session) -> serde_json::Value {
+    let last_progress = session.last_system_progress.map_or(
+        serde_json::Value::Null,
+        |progress| {
+            serde_json::json!({
+                "output_callbacks":progress.output_callbacks,
+                "capture_callbacks":progress.capture_callbacks
+            })
+        },
+    );
+    serde_json::json!({
+        "original_playback_muted":session.tap.as_ref().is_some_and(TapCapture::replacement_armed),
+        "output_quarantined":session.metrics.output_quarantined.load(Ordering::Acquire),
+        "output_callback_ready":session.metrics.callback_ready.load(Ordering::Acquire),
+        "output_callback_calls":session.metrics.callback_calls.load(Ordering::Acquire),
+        "capture_callback_calls":session.metrics.capture_callback_calls.load(Ordering::Acquire),
+        "captured_frames":session.metrics.captured_frames.load(Ordering::Acquire),
+        "source_started":session.metrics.source_started.load(Ordering::Acquire),
+        "last_progress":last_progress
+    })
+}
+
+
 impl Session {
     pub(super) fn native_system(store: Store, output: Option<&str>) -> Result<Self> {
         Self::native_tap(
