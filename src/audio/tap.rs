@@ -803,6 +803,12 @@ unsafe extern "C" fn capture(
     let Some(_lease) = enter_capture(&capture.gate) else {
         return 0;
     };
+    // IOProc liveness is independent of whether this callback contains PCM. Selected
+    // applications may be silent or paused without the CoreAudio tap itself being dead.
+    capture
+        .metrics
+        .capture_callback_calls
+        .fetch_add(1, Ordering::Relaxed);
     if capture.metrics.configuration_events.load(Ordering::Acquire)
         != capture
             .metrics
