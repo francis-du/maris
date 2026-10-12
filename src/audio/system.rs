@@ -180,6 +180,10 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
         capability,
     })
 }
+fn output_stalled(previous: Option<(u64, u64)>, current: (u64, u64)) -> bool {
+    previous.is_some_and(|(output, capture)| current.1 > capture && current.0 == output)
+}
+
 impl Session {
     pub(super) fn native_system(store: Store, output: Option<&str>) -> Result<Self> {
         Self::native_tap(
@@ -275,6 +279,7 @@ impl Session {
             system_process_pids,
             system_device_id,
             last_device_check: Instant::now(),
+            last_system_progress: None,
         })
     }
     fn install_system_pipeline(&mut self, p: Pipeline) {
@@ -297,6 +302,7 @@ impl Session {
         self.sent_music_revision = Some(p.music_revision);
         self.sent_capability = p.capability;
         self.device_match_started = false;
+        self.last_system_progress = None;
         self.rebind_count = self.rebind_count.saturating_add(1);
         self.last_rebind_ms = Some(crate::analysis::now_ms());
         self.context.reset();
@@ -399,13 +405,24 @@ impl Session {
             .tap
             .as_ref()
             .is_some_and(TapCapture::configuration_pending);
-        if self.tap.is_none()
-            || (!pending_configuration
-                && self.last_device_check.elapsed() < Duration::from_millis(300))
-        {
+        let periodic_check = self.last_device_check.elapsed() >= Duration::from_millis(300);
+        if self.tap.is_none() || (!pending_configuration && !periodic_check) {
             return Ok(());
         }
-        self.last_device_check = Instant::now();
+        if periodic_check {
+            self.last_device_check = Instant::now();
+            let progress = (
+                self.metrics.callback_calls.load(Ordering::Acquire),
+                self.metrics.captured_frames.load(Ordering::Acquire),
+            );
+            if output_stalled(self.last_system_progress, progress) {
+                // Capture is advancing while the physical replacement output has stopped.
+                // Stop the session so fail-open teardown releases CATapMutedWhenTapped.
+                self.stop_requested = true;
+                return Ok(());
+            }
+            self.last_system_progress = Some(progress);
+        }
         if self
             .tap
             .as_ref()
@@ -495,5 +512,19 @@ impl Session {
             return Ok(());
         }
         self.rebind_system_output(None)
+    }
+}
+
+#[cfg(test)]
+mod progress_tests {
+    use super::output_stalled;
+
+    #[test]
+    fn advancing_capture_without_output_callbacks_is_a_muted_route_stall() {
+        assert!(!output_stalled(None, (10, 100)));
+        assert!(!output_stalled(Some((10, 100)), (11, 200)));
+        assert!(!output_stalled(Some((10, 100)), (10, 100)));
+        assert!(!output_stalled(Some((10, 100)), (9, 200)));
+        assert!(output_stalled(Some((10, 100)), (10, 200)));
     }
 }
