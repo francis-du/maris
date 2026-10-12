@@ -207,11 +207,7 @@ fn output_progress_timeout(
 }
 
 fn output_stall_timeout(buffer_frames: Option<u32>, sample_rate: u32) -> Duration {
-    output_progress_timeout(
-        buffer_frames,
-        sample_rate,
-        Duration::from_millis(750),
-    )
+    output_progress_timeout(buffer_frames, sample_rate, Duration::from_millis(750))
 }
 
 fn observe_progress(
@@ -657,8 +653,7 @@ mod progress_tests {
             Duration::from_secs(1)
         );
         let large = output_stall_timeout(Some(65_536), 44_100);
-        let startup =
-            output_progress_timeout(Some(65_536), 44_100, Duration::from_secs(1));
+        let startup = output_progress_timeout(Some(65_536), 44_100, Duration::from_secs(1));
         assert!(large > Duration::from_secs(4));
         assert!(large <= Duration::from_secs(5));
         assert_eq!(startup, large);
