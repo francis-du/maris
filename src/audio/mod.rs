@@ -881,10 +881,17 @@ impl Session {
 }
 impl Drop for Session {
     fn drop(&mut self) {
-        self.metrics.stopping.store(true, Ordering::Relaxed);
-        std::thread::sleep(Duration::from_millis(40));
+        self.metrics.stopping.store(true, Ordering::Release);
         #[cfg(target_os = "macos")]
-        self.tap.take();
+        {
+            let deadline = Instant::now() + Duration::from_millis(75);
+            while !self.metrics.faded_out.load(Ordering::Acquire) && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            self.tap.take();
+        }
+        #[cfg(not(target_os = "macos"))]
+        std::thread::sleep(Duration::from_millis(40));
         self.streams.clear();
         #[cfg(unix)]
         self.pulse.take();
