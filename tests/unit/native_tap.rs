@@ -451,4 +451,11 @@ fn native_empty_callback_does_not_invent_audio() {
     process(&list, &mut context);
     assert!(context.queue.is_empty());
     assert_eq!(context.metrics.captured_frames.load(Ordering::Relaxed), 0);
+    assert_eq!(
+        context
+            .metrics
+            .capture_callback_calls
+            .load(Ordering::Relaxed),
+        1
+    );
 }
