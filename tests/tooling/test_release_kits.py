@@ -123,6 +123,7 @@ class ReleaseKits(unittest.TestCase):
             output = root / 'manifest/maris-release.tsv'
             argv = ['release_bundle.py', '--collect', str(records), '--output', str(output)]
             with patch.object(release_bundle, 'ROOT', root), patch.object(sys, 'argv', argv), \
+                    patch.dict(os.environ, {'GITHUB_ACTIONS': 'false'}), \
                     redirect_stdout(io.StringIO()):
                 release_bundle.main()
             self.assertTrue(output.is_file())
