@@ -133,6 +133,7 @@ pub(super) struct Metrics {
     peak_right: AtomicU32,
     frames: AtomicU64,
     captured_frames: AtomicU64,
+    #[cfg(target_os = "macos")]
     capture_callback_calls: AtomicU64,
     callback_processing_nanos: AtomicU64,
     callback_max_nanos: AtomicU64,
