@@ -363,15 +363,16 @@ impl Session {
             "Choose a physical output device, not a loopback device"
         );
         // Wait only on the control thread. A vanished device may never acknowledge,
-        // so teardown remains bounded. Retire the renderer before releasing the tap
-        // mute to avoid overlapping buffered processed audio with restored playback.
+        // so teardown remains bounded. Fade the replacement first, then restore the
+        // original application path while the replacement stream still exists, and
+        // only then release that stream. This avoids both overlap and a silent gap.
         self.metrics.stopping.store(true, Ordering::Release);
         let deadline = Instant::now() + Duration::from_millis(75);
         while !self.metrics.faded_out.load(Ordering::Acquire) && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(2));
         }
-        self.streams.clear();
         self.tap.take();
+        self.streams.clear();
         let processes = self.system_processes.clone();
         match pipeline(&self.store, output, &processes) {
             Ok(p) => {
