@@ -718,7 +718,15 @@ impl TapCapture {
 
         // No callback that entered before the live mute update can still enqueue here:
         // the reader gate is blocked and drained before new callbacks are admitted.
-        let capture = self.context.as_ref().context("Missing capture state")?;
+        let Some(capture) = self.context.as_ref() else {
+            let restore = self.set_mute_behavior(0);
+            return match restore {
+                Ok(()) => anyhow::bail!("Missing capture state after muting original playback"),
+                Err(restore_error) => Err(anyhow::anyhow!(
+                    "Missing capture state after muting original playback; restoring the original tap also failed: {restore_error:#}"
+                )),
+            };
+        };
         for _ in 0..capture.queue.capacity() {
             if capture.queue.pop().is_none() {
                 break;
@@ -740,8 +748,8 @@ impl TapCapture {
 }
 impl Drop for TapCapture {
     fn drop(&mut self) {
-        // The replacement stream is already gone when Session drops the tap. Restore
-        // original playback explicitly before relying on native tap destruction.
+        // Restore original playback explicitly before relying on native tap destruction.
+        // Session teardown keeps the replacement stream alive until this restoration runs.
         let _ = self.disarm_replacement();
         // Stop before destroying the callback or freeing its context. No permanent output state was changed.
         unsafe {
