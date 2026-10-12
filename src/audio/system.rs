@@ -261,7 +261,7 @@ fn observe_progress(
     )
 }
 
-pub(super) fn handoff_status(session: &Session) -> serde_json::Value {
+pub(super) fn add_handoff_status(session: &Session, status: &mut serde_json::Value) {
     let last_progress = session.last_system_progress.map_or(
         serde_json::Value::Null,
         |progress| {
@@ -271,7 +271,9 @@ pub(super) fn handoff_status(session: &Session) -> serde_json::Value {
             })
         },
     );
-    serde_json::json!({
+    status["coreaudio_tap_mode"] =
+        serde_json::json!(session.tap.as_ref().map(TapCapture::capture_mode));
+    status["coreaudio_handoff"] = serde_json::json!({
         "original_playback_muted":session.tap.as_ref().is_some_and(TapCapture::replacement_armed),
         "output_quarantined":session.metrics.output_quarantined.load(Ordering::Acquire),
         "output_callback_ready":session.metrics.callback_ready.load(Ordering::Acquire),
@@ -284,9 +286,8 @@ pub(super) fn handoff_status(session: &Session) -> serde_json::Value {
             session.sample_rate,
         ).as_millis() as u64,
         "last_progress":last_progress
-    })
+    });
 }
-
 
 impl Session {
     pub(super) fn native_system(store: Store, output: Option<&str>) -> Result<Self> {
