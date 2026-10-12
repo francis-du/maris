@@ -192,6 +192,7 @@ pub(super) struct ProgressGuard {
     pub(super) output_callbacks: u64,
     pub(super) captured_frames: u64,
     output_advanced_at: Instant,
+    capture_advanced_at: Instant,
 }
 
 fn output_progress_timeout(
@@ -222,26 +223,41 @@ fn observe_progress(
                 output_callbacks: current.0,
                 captured_frames: current.1,
                 output_advanced_at: now,
+                capture_advanced_at: now,
             },
             false,
         );
     };
     let output_advanced = current.0 != previous.output_callbacks;
+    let capture_advanced = current.1 != previous.captured_frames;
     let output_advanced_at = if output_advanced {
         now
     } else {
         previous.output_advanced_at
     };
-    let stalled = !output_advanced
-        && current.1 > previous.captured_frames
-        && now.saturating_duration_since(previous.output_advanced_at) >= timeout;
+    let capture_advanced_at = if capture_advanced {
+        now
+    } else {
+        previous.capture_advanced_at
+    };
+    // The physical replacement output must keep producing callbacks even for digital
+    // silence. If it stops, fail open regardless of whether capture also stopped.
+    let output_stalled =
+        !output_advanced && now.saturating_duration_since(previous.output_advanced_at) >= timeout;
+    // A running output with a dead tap would render starvation/silence while original
+    // playback remains muted. Require the output side to advance before classifying this
+    // as a capture-only stall so a whole-system pause is handled by the output rule above.
+    let capture_stalled = output_advanced
+        && !capture_advanced
+        && now.saturating_duration_since(previous.capture_advanced_at) >= timeout;
     (
         ProgressGuard {
             output_callbacks: current.0,
             captured_frames: current.1,
             output_advanced_at,
+            capture_advanced_at,
         },
-        stalled,
+        output_stalled || capture_stalled,
     )
 }
 
