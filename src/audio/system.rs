@@ -190,7 +190,7 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
 #[derive(Clone, Copy)]
 pub(super) struct ProgressGuard {
     pub(super) output_callbacks: u64,
-    pub(super) captured_frames: u64,
+    pub(super) capture_callbacks: u64,
     output_advanced_at: Instant,
     capture_advanced_at: Instant,
 }
@@ -221,7 +221,7 @@ fn observe_progress(
         return (
             ProgressGuard {
                 output_callbacks: current.0,
-                captured_frames: current.1,
+                capture_callbacks: current.1,
                 output_advanced_at: now,
                 capture_advanced_at: now,
             },
@@ -229,7 +229,7 @@ fn observe_progress(
         );
     };
     let output_advanced = current.0 != previous.output_callbacks;
-    let capture_advanced = current.1 != previous.captured_frames;
+    let capture_advanced = current.1 != previous.capture_callbacks;
     let output_advanced_at = if output_advanced {
         now
     } else {
@@ -244,16 +244,16 @@ fn observe_progress(
     // silence. If it stops, fail open regardless of whether capture also stopped.
     let output_stalled =
         !output_advanced && now.saturating_duration_since(previous.output_advanced_at) >= timeout;
-    // A running output with a dead tap would render starvation/silence while original
-    // playback remains muted. Require the output side to advance before classifying this
-    // as a capture-only stall so a whole-system pause is handled by the output rule above.
+    // A running output with a dead tap IOProc would render starvation/silence while
+    // original playback remains muted. Tap callback liveness is content-independent, so
+    // a silent or paused selected application does not look like a capture failure.
     let capture_stalled = output_advanced
         && !capture_advanced
         && now.saturating_duration_since(previous.capture_advanced_at) >= timeout;
     (
         ProgressGuard {
             output_callbacks: current.0,
-            captured_frames: current.1,
+            capture_callbacks: current.1,
             output_advanced_at,
             capture_advanced_at,
         },
@@ -491,7 +491,7 @@ impl Session {
             self.last_device_check = now;
             let progress = (
                 self.metrics.callback_calls.load(Ordering::Acquire),
-                self.metrics.captured_frames.load(Ordering::Acquire),
+                self.metrics.capture_callback_calls.load(Ordering::Acquire),
             );
             let (observed, stalled) = observe_progress(
                 self.last_system_progress,
