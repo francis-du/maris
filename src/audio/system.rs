@@ -669,12 +669,7 @@ mod progress_tests {
         assert!(stalled);
 
         // Genuine progress on both sides resets both watchdog clocks.
-        let (healthy, stalled) = observe_progress(
-            None,
-            (40, 600),
-            start,
-            timeout,
-        );
+        let (healthy, stalled) = observe_progress(None, (40, 600), start, timeout);
         assert!(!stalled);
         let (_, stalled) = observe_progress(
             Some(healthy),
