@@ -312,7 +312,7 @@ pub struct Session {
     #[cfg(target_os = "macos")]
     last_device_check: Instant,
     #[cfg(target_os = "macos")]
-    last_system_progress: Option<(u64, u64)>,
+    last_system_progress: Option<system::ProgressGuard>,
 }
 impl Session {
     pub fn live(store: Store, input: &str, output: Option<&str>) -> Result<Self> {
