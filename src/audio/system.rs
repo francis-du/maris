@@ -473,7 +473,9 @@ impl Session {
                 // Capture is advancing while the physical replacement output has stopped.
                 // Quarantine any callback that unexpectedly resumes, restore original
                 // playback immediately, then let normal session teardown retire the route.
-                self.metrics.output_quarantined.store(true, Ordering::Release);
+                self.metrics
+                    .output_quarantined
+                    .store(true, Ordering::Release);
                 self.stop_requested = true;
                 if let Some(tap) = self.tap.as_mut() {
                     tap.disarm_replacement()
@@ -586,22 +588,42 @@ mod progress_tests {
         let (first, stalled) = observe_progress(None, (10, 100), start, timeout);
         assert!(!stalled);
 
-        let (early, stalled) =
-            observe_progress(Some(first), (10, 200), start + Duration::from_millis(600), timeout);
+        let (early, stalled) = observe_progress(
+            Some(first),
+            (10, 200),
+            start + Duration::from_millis(600),
+            timeout,
+        );
         assert!(!stalled);
 
-        let (_, stalled) =
-            observe_progress(Some(early), (10, 300), start + Duration::from_millis(800), timeout);
+        let (_, stalled) = observe_progress(
+            Some(early),
+            (10, 300),
+            start + Duration::from_millis(800),
+            timeout,
+        );
         assert!(stalled);
 
-        let (_, stalled) =
-            observe_progress(Some(first), (11, 200), start + Duration::from_secs(2), timeout);
+        let (_, stalled) = observe_progress(
+            Some(first),
+            (11, 200),
+            start + Duration::from_secs(2),
+            timeout,
+        );
         assert!(!stalled);
-        let (_, stalled) =
-            observe_progress(Some(first), (10, 100), start + Duration::from_secs(2), timeout);
+        let (_, stalled) = observe_progress(
+            Some(first),
+            (10, 100),
+            start + Duration::from_secs(2),
+            timeout,
+        );
         assert!(!stalled);
-        let (_, stalled) =
-            observe_progress(Some(first), (9, 200), start + Duration::from_secs(2), timeout);
+        let (_, stalled) = observe_progress(
+            Some(first),
+            (9, 200),
+            start + Duration::from_secs(2),
+            timeout,
+        );
         assert!(!stalled);
     }
 
