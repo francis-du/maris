@@ -883,13 +883,13 @@ impl Drop for Session {
     fn drop(&mut self) {
         self.metrics.stopping.store(true, Ordering::Relaxed);
         std::thread::sleep(Duration::from_millis(40));
+        #[cfg(target_os = "macos")]
+        self.tap.take();
         self.streams.clear();
         #[cfg(unix)]
         self.pulse.take();
         #[cfg(target_os = "windows")]
         self.windows.take();
-        #[cfg(target_os = "macos")]
-        self.tap.take();
         self.voice.take();
         self.route.take();
         let _ = self.store.write_json(
