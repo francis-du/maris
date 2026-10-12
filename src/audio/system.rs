@@ -486,15 +486,23 @@ impl Session {
             self.last_system_progress = Some(observed);
             if stalled {
                 // Capture is advancing while the physical replacement output has stopped.
-                // Quarantine any callback that unexpectedly resumes, restore original
-                // playback immediately, then let normal session teardown retire the route.
+                // Quarantine any callback that unexpectedly resumes and restore original
+                // playback while the replacement stream is still alive. If the live tap
+                // property update fails, destroy the tap immediately rather than leaving
+                // both original and replacement paths silent until later session teardown.
                 self.metrics
                     .output_quarantined
                     .store(true, Ordering::Release);
                 self.stop_requested = true;
-                if let Some(tap) = self.tap.as_mut() {
-                    tap.disarm_replacement()
-                        .context("Restore original playback after replacement output stalled")?;
+                let restore_error = self
+                    .tap
+                    .as_mut()
+                    .and_then(|tap| tap.disarm_replacement().err());
+                if let Some(restore_error) = restore_error {
+                    self.tap.take();
+                    return Err(restore_error.context(
+                        "Replacement output stalled and the live CoreAudio tap could not restore original playback before tap destruction",
+                    ));
                 }
                 return Ok(());
             }
