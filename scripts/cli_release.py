@@ -15,7 +15,15 @@ from dependency_notices import target, validate as validate_notices
 from package_smoke import extract
 from portable_package import host_target, validate_binary
 from release_gate import check_report
-from release_bundle import commit_release_inputs, digest, inspect_kit, pack
+from release_bundle import (
+    _release_input_path,
+    commit_release_inputs,
+    digest,
+    inspect_kit,
+    pack,
+    release_input_directory,
+    release_output_directory,
+)
 from source_audit import ROOT, source_digest
 
 
@@ -60,6 +68,18 @@ def software_gate(payload: Path, source: str, system: str, arch: str, version: s
             'scope': 'Native CLI/TUI archives, checksums and isolated install/upgrade/recovery; no GUI signing or physical-device certification.'}
 
 
+def release_package_inputs(root: Path, pattern: str) -> list[Path]:
+    packages = root / 'dist/packages'
+    if not packages.exists():
+        return []
+    packages = release_input_directory(packages, root)
+    return [_release_input_path(path, packages) for path in packages.glob(pattern)]
+
+
+def release_destination(root: Path) -> Path:
+    return release_output_directory(root / 'dist/online-approved', root)
+
+
 def prepare(report: Path | None) -> dict:
     system, arch = host_target()
     source = source_digest()
@@ -71,12 +91,14 @@ def prepare(report: Path | None) -> dict:
     if not report.is_relative_to(ROOT.resolve()) or report.is_symlink():
         raise ValueError('Round evidence must belong to this source checkout')
     suffix = '.tar.gz' if system == 'linux' else '.zip'
-    locals = list((ROOT / 'dist/packages').glob(f'Maris-{version}-{system}-{arch}-local-{source[:12]}{suffix}'))
+    locals = release_package_inputs(
+        ROOT,
+        f'Maris-{version}-{system}-{arch}-local-{source[:12]}{suffix}',
+    )
     if len(locals) != 1:
         raise ValueError('Build and smoke-test the current native CLI package first')
+    destination = release_destination(ROOT)
     stem = f'Maris-{version}-{system}-{arch}'
-    destination = ROOT / 'dist/online-approved'
-    destination.mkdir(parents=True, exist_ok=True)
     archive = destination / (stem + ('.zip' if system == 'windows' else '.tar.gz'))
     record_path = destination / (stem + '.release.json')
     if archive.is_symlink() or record_path.is_symlink() or record_path.exists():
