@@ -284,6 +284,10 @@ impl TapCapture {
         tap_mode(self.scoped_output)
     }
 
+    pub(super) fn replacement_armed(&self) -> bool {
+        self.muted
+    }
+
     fn prepare_scope(
         queue: Arc<ArrayQueue<[f32; 2]>>,
         metrics: Arc<Metrics>,
