@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 from dependency_notices import validate as validate_notices
 from portable_package import create_payload, validate_binary
 from release_bundle import commit_release_inputs, inspect_kit
-from cli_release import release_destination, release_package_inputs
+from cli_release import release_destination, release_package_inputs, release_report
 from test_online import fixture
 import test_online
 from test_portable import fixture as binary_fixture
@@ -57,6 +57,22 @@ class CliContracts(unittest.TestCase):
             root = Path(temporary).resolve()
             self.assertEqual(release_package_inputs(root, '*.zip'), [])
             self.assertFalse((root / 'dist/online-approved').exists())
+
+    @unittest.skipIf(os.name == 'nt', 'Directory symlink fixture requires native symlink support')
+    def test_cli_release_report_rejects_direct_and_parent_links(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            evidence = root / 'real/report.json'
+            evidence.parent.mkdir()
+            evidence.write_text('{}\n', encoding='utf-8')
+            direct = root / 'direct-report.json'
+            direct.symlink_to(evidence)
+            with self.assertRaisesRegex(ValueError, 'Linked release input'):
+                release_report(root, direct)
+            linked_parent = root / 'linked'
+            linked_parent.symlink_to(evidence.parent, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, 'input parent'):
+                release_report(root, linked_parent / evidence.name)
 
     def test_all_six_cli_payloads_have_native_headers_and_a_distinct_identity(self):
         with tempfile.TemporaryDirectory() as temporary:
