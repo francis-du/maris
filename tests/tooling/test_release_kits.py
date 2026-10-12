@@ -20,7 +20,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
 import release_bundle
-from release_bundle import _normalize_pax_times, _pax_without_volatile_metadata, _release_input_path, _tar_header_with_size, combine, inspect_kit, pack, release_input_directory, release_output_directory, TARGETS
+from release_bundle import _normalize_pax_times, _pax_without_volatile_metadata, _release_input_path, _tar_header_with_size, combine, inspect_kit, linked_directory, pack, release_input_directory, release_output_directory, TARGETS
 from package_smoke import extract
 from test_online import fixture
 
@@ -46,6 +46,17 @@ def make_records(root: Path, *, ci_run='1234', ci_commit='c' * 40, channel='cand
 
 
 class ReleaseKits(unittest.TestCase):
+    def test_linked_directory_detects_windows_reparse_fallback_without_native_windows(self):
+        class FakePath:
+            def __init__(self, attributes):
+                self.attributes = attributes
+            def is_symlink(self):
+                return False
+            def lstat(self):
+                return type('Stat', (), {'st_file_attributes': self.attributes})()
+        self.assertTrue(linked_directory(FakePath(0x400)))
+        self.assertFalse(linked_directory(FakePath(0)))
+
     def test_release_output_directory_rejects_non_directory_components(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
