@@ -279,6 +279,10 @@ pub(super) fn handoff_status(session: &Session) -> serde_json::Value {
         "capture_callback_calls":session.metrics.capture_callback_calls.load(Ordering::Acquire),
         "captured_frames":session.metrics.captured_frames.load(Ordering::Acquire),
         "source_started":session.metrics.source_started.load(Ordering::Acquire),
+        "watchdog_timeout_ms":output_stall_timeout(
+            session.output_buffer_frames,
+            session.sample_rate,
+        ).as_millis() as u64,
         "last_progress":last_progress
     })
 }
