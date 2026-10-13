@@ -145,7 +145,7 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn('source_run_id:', publish)
         self.assertIn('source_sha:', publish)
         self.assertIn('release_tag:', publish)
-        self.assertIn("github.event_name == 'workflow_call' || github.event.workflow_run.conclusion == 'success'", publish)
+        self.assertIn("inputs.release_tag != '' || github.event.workflow_run.conclusion == 'success'", publish)
         self.assertIn("gh release upload", publish)
         self.assertNotIn('gh release upload "$RELEASE_TAG" .release-upload/* --clobber', publish)
         self.assertIn("Reuse exact existing installer assets without clobbering", publish)
@@ -168,9 +168,9 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn("bash install.sh --version", publish)
         self.assertIn("& ./install.ps1 -Version", publish)
         public_smoke = publish.split('  public-install-smoke:', 1)[1].split('  remove-uninstallable-assets:', 1)[0]
-        self.assertIn("if: github.event_name == 'workflow_call' || needs.publish.outputs.mode != 'reuse'", public_smoke)
+        self.assertIn("if: inputs.release_tag != '' || needs.publish.outputs.mode != 'reuse'", public_smoke)
         self.assertIn('ref: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}', public_smoke)
-        self.assertIn("if: github.event_name != 'workflow_call' && needs.publish.outputs.mode == 'reuse'", public_smoke)
+        self.assertIn("if: inputs.release_tag == '' && needs.publish.outputs.mode == 'reuse'", public_smoke)
         self.assertIn('ref: ${{ github.event.repository.default_branch }}', public_smoke)
         self.assertIn("mode: ${{ steps.assets.outputs.mode }}", publish)
         self.assertIn("group: release-assets-", publish)
@@ -225,6 +225,8 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn('SOURCE_RUN_ID: ${{ inputs.source_run_id || github.event.workflow_run.id }}', assets)
         self.assertIn('SOURCE_SHA: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}', assets)
         self.assertIn('RELEASE_TAG_INPUT: ${{ inputs.release_tag }}', assets)
+        self.assertNotIn("github.event_name == 'workflow_call'", assets)
+        self.assertNotIn("github.event_name != 'workflow_call'", assets)
         self.assertIn('Release tag $tag does not point at successful build $SOURCE_SHA', assets)
         smoke_exposure = assets.split('      - name: Expose validated release for public smoke', 1)[1].split('  public-install-smoke:', 1)[0]
         self.assertIn('gh release view "$RELEASE_TAG" --json isDraft', smoke_exposure)
@@ -233,6 +235,7 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn('  promote-stable:', assets)
         promote = assets.split('  promote-stable:', 1)[1].split('  remove-uninstallable-assets:', 1)[0]
         self.assertIn("needs: [publish, public-install-smoke]", promote)
+        self.assertIn("inputs.release_tag != ''", promote)
         self.assertIn("needs.public-install-smoke.result == 'success'", promote)
         self.assertIn('gh release view "$RELEASE_TAG" --json isDraft', promote)
         self.assertIn('gh release view "$RELEASE_TAG" --json isPrerelease', promote)
