@@ -16,23 +16,13 @@ use std::{
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(u8)]
 enum ProgressStall {
-    Output = 1,
-    Capture = 2,
-    OutputAndCapture = 3,
+    Output,
+    Capture,
+    OutputAndCapture,
 }
 
 impl ProgressStall {
-    fn from_code(code: u8) -> Option<Self> {
-        match code {
-            1 => Some(Self::Output),
-            2 => Some(Self::Capture),
-            3 => Some(Self::OutputAndCapture),
-            _ => None,
-        }
-    }
-
     fn label(self) -> &'static str {
         match self {
             Self::Output => "output_stalled",
@@ -42,12 +32,10 @@ impl ProgressStall {
     }
 }
 
-pub(super) fn add_runtime_diagnostics(
-    status: &mut serde_json::Value,
-    metrics: &Metrics,
-    tap: Option<&TapCapture>,
-) {
-    status["coreaudio_tap_mode"] = serde_json::json!(tap.map(TapCapture::capture_mode));
+pub(super) fn add_runtime_diagnostics(status: &mut serde_json::Value, session: &Session) {
+    let metrics = &session.metrics;
+    status["coreaudio_tap_mode"] =
+        serde_json::json!(session.tap.as_ref().map(TapCapture::capture_mode));
     status["coreaudio_capture_callback_calls"] =
         serde_json::json!(metrics.capture_callback_calls.load(Ordering::Acquire));
     status["output_callback_calls"] =
@@ -56,7 +44,9 @@ pub(super) fn add_runtime_diagnostics(
         serde_json::json!(metrics.output_quarantined.load(Ordering::Acquire));
     status["audio_callback_errors"] = serde_json::json!(metrics.errors.load(Ordering::Acquire));
     status["coreaudio_fail_open_reason"] = serde_json::json!(
-        ProgressStall::from_code(metrics.system_fail_open_reason.load(Ordering::Acquire))
+        session
+            .last_system_progress
+            .and_then(|progress| progress.failure)
             .map(ProgressStall::label)
     );
 }
@@ -239,6 +229,7 @@ pub(super) struct ProgressGuard {
     pub(super) capture_callbacks: u64,
     output_advanced_at: Instant,
     capture_advanced_at: Instant,
+    failure: Option<ProgressStall>,
 }
 
 fn output_progress_timeout(
@@ -270,6 +261,7 @@ fn observe_progress(
                 capture_callbacks: current.1,
                 output_advanced_at: now,
                 capture_advanced_at: now,
+                failure: None,
             },
             None,
         );
@@ -302,6 +294,7 @@ fn observe_progress(
             capture_callbacks: current.1,
             output_advanced_at,
             capture_advanced_at,
+            failure,
         },
         failure,
     )
@@ -547,9 +540,6 @@ impl Session {
             );
             self.last_system_progress = Some(observed);
             if let Some(failure) = failure {
-                self.metrics
-                    .system_fail_open_reason
-                    .store(failure as u8, Ordering::Release);
                 self.last_status = Instant::now() - Duration::from_secs(1);
                 // Capture/output progress failed while original playback is muted.
                 // Quarantine any callback that unexpectedly resumes and restore original
