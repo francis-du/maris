@@ -206,6 +206,9 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertGreaterEqual(create_block.count('git fetch --no-tags --depth=1 origin main'), 2)
         self.assertGreaterEqual(create_block.count('git rev-parse FETCH_HEAD'), 2)
         self.assertIn('gh release delete "$RELEASE_TAG" --yes --cleanup-tag', create_block)
+        self.assertIn('gh release delete "$RELEASE_TAG" --yes', create_block)
+        self.assertIn('Release tag ownership changed; removed only the release and preserved the tag.', create_block)
+        self.assertIn('Release tag did not resolve to the validated source after creation', create_block)
         self.assertIn('main advanced while the draft release was being created; rolled it back', create_block)
 
         call = publish_release.split('  assets:', 1)[1]
@@ -219,7 +222,9 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn("needs: [publish, assets]", publish_release)
         self.assertIn("always() && needs.publish.result == 'success' && needs.assets.result != 'success'", publish_release)
         self.assertIn('RELEASE_TAG: ${{ needs.publish.outputs.release_tag }}', publish_release)
+        self.assertIn('SOURCE_SHA: ${{ needs.publish.outputs.source_sha }}', publish_release)
         self.assertIn('gh release delete "$RELEASE_TAG" --yes --cleanup-tag', publish_release)
+        self.assertIn('Release tag no longer belongs to this publication; preserved the tag while removing the release.', publish_release)
 
         self.assertIn('workflow_call:', assets)
         self.assertIn('SOURCE_RUN_ID: ${{ inputs.source_run_id || github.event.workflow_run.id }}', assets)
