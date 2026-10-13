@@ -101,11 +101,22 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          git fetch --no-tags --depth=1 origin main
+          if [ "$(git rev-parse FETCH_HEAD)" != "$GITHUB_SHA" ]; then
+            echo "main advanced after release validation; refusing stale release" >&2
+            exit 1
+          fi
           gh release create "$RELEASE_TAG" \
             --draft \
             --target "$GITHUB_SHA" \
             --title "Maris $RELEASE_VERSION" \
             --generate-notes
+          git fetch --no-tags --depth=1 origin main
+          if [ "$(git rev-parse FETCH_HEAD)" != "$GITHUB_SHA" ]; then
+            gh release delete "$RELEASE_TAG" --yes --cleanup-tag
+            echo "main advanced while the draft release was being created; rolled it back" >&2
+            exit 1
+          fi
 
   assets:
     needs: publish
