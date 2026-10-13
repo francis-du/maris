@@ -16,6 +16,10 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-24.04
+    outputs:
+      source_run_id: ${{ steps.validation.outputs.source_run_id }}
+      source_sha: ${{ steps.validation.outputs.source_sha }}
+      release_tag: ${{ steps.validation.outputs.release_tag }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -24,6 +28,7 @@ jobs:
           persist-credentials: false
 
       - name: Validate release source and successful preflight
+        id: validation
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -58,12 +63,13 @@ jobs:
             -f event=push \
             -f status=success \
             -f per_page=100 > validation-runs.json
-          success="$(jq --arg sha "$GITHUB_SHA" \
+          source_run_id="$(jq -r --arg sha "$GITHUB_SHA" \
             '[.workflow_runs[] | select(.name == "Build application artifacts"
               and .head_sha == $sha
-              and (.head_branch | startswith("release-validation/")))] | length' \
+              and (.head_branch | startswith("release-validation/")))]
+              | sort_by(.created_at) | last | .id // empty' \
             validation-runs.json)"
-          if [ "$success" -lt 1 ]; then
+          if [[ ! "$source_run_id" =~ ^[1-9][0-9]*$ ]]; then
             echo "No successful release-validation Build application artifacts run at $GITHUB_SHA" >&2
             exit 1
           fi
@@ -82,6 +88,11 @@ jobs:
             echo "RELEASE_TAG=$tag"
             echo "RELEASE_VERSION=$version"
           } >> "$GITHUB_ENV"
+          {
+            echo "source_run_id=$source_run_id"
+            echo "source_sha=$GITHUB_SHA"
+            echo "release_tag=$tag"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub release
         shell: bash
@@ -94,3 +105,14 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "Maris $RELEASE_VERSION" \
             --generate-notes
+
+  assets:
+    needs: publish
+    permissions:
+      contents: write
+      actions: read
+    uses: ./.github/workflows/release-assets.yml
+    with:
+      source_run_id: ${{ needs.publish.outputs.source_run_id }}
+      source_sha: ${{ needs.publish.outputs.source_sha }}
+      release_tag: ${{ needs.publish.outputs.release_tag }}
