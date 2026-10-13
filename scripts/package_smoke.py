@@ -24,9 +24,11 @@ def safe_name(name: str, stem: str) -> bool:
 
 def safe_windows_name(name: str, stem: str) -> bool:
     path = name[:-1] if name.endswith('/') else name
-    if not safe_name(name, stem) or not re.fullmatch(r'[A-Za-z0-9_./-]+', path):
+    parts = PurePosixPath(path).parts
+    if (not safe_name(name, stem) or not parts or parts[0] != stem
+            or not re.fullmatch(r'[A-Za-z0-9_./-]+', path)):
         return False
-    for component in PurePosixPath(path).parts:
+    for component in parts:
         if (component in ('', '.', '..') or component.endswith('.')
                 or re.fullmatch(r'(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?', component, re.I)):
             return False
