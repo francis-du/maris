@@ -109,7 +109,7 @@ def _release_input_path(path: Path, directory: Path) -> Path:
         current = current / part
         if linked_directory(current) or not current.is_dir():
             raise ValueError('Linked or invalid release input parent rejected')
-    if path.is_symlink():
+    if linked_directory(path):
         raise ValueError('Linked release input rejected')
     try:
         path.resolve().relative_to(directory.resolve())
@@ -417,7 +417,7 @@ def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: di
         if not re.fullmatch(r'\d+\.\d+\.\d+', version) or (system, arch) not in TARGETS or item['archive'] != name:
             raise ValueError('Invalid native release identity')
         archive = file.parent / name
-        if archive.is_symlink() or not archive.is_file() or not 0 < archive.stat().st_size <= 134217728:
+        if linked_directory(archive) or not archive.is_file() or not 0 < archive.stat().st_size <= 134217728:
             raise ValueError('Missing, linked or oversized release archive')
         if archive.stat().st_size != item['bytes'] or digest(archive) != item['sha256']:
             raise ValueError('Release archive changed after preparation')
