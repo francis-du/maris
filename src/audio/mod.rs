@@ -59,7 +59,7 @@ use std::{
     fs::File,
     path::Path,
     sync::{
-        atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
         Arc, OnceLock,
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -135,8 +135,6 @@ pub(super) struct Metrics {
     captured_frames: AtomicU64,
     #[cfg(target_os = "macos")]
     capture_callback_calls: AtomicU64,
-    #[cfg(target_os = "macos")]
-    system_fail_open_reason: AtomicU8,
     callback_processing_nanos: AtomicU64,
     callback_max_nanos: AtomicU64,
     callback_frames: AtomicU64,
@@ -865,7 +863,7 @@ impl Session {
         {
             status["captured_process_objects"] = json!(&self.system_processes);
             status["captured_application_pids"] = json!(&self.system_process_pids);
-            system::add_runtime_diagnostics(&mut status, &self.metrics, self.tap.as_ref());
+            system::add_runtime_diagnostics(&mut status, self);
         }
         #[cfg(unix)]
         if let Some(pulse) = &self.pulse {
