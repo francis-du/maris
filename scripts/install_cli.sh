@@ -82,8 +82,12 @@ cleanup() {
     local code=$?
     trap - EXIT HUP INT TERM
     if [ "$COMMITTED" -eq 0 ]; then
-        if [ -n "$BACKUP" ] && [ -d "$BACKUP/Maris" ] && [ ! -e "$DEST" ]; then
-            mv -- "$BACKUP/Maris" "$DEST" || printf 'Recovery required: %s/Maris\n' "$BACKUP" >&2
+        if [ -n "$BACKUP" ] && [ -d "$BACKUP/Maris" ]; then
+            if [ ! -e "$DEST" ]; then
+                mv -- "$BACKUP/Maris" "$DEST" || printf 'Recovery required: %s/Maris\n' "$BACKUP" >&2
+            else
+                printf 'Recovery required: %s/Maris\n' "$BACKUP" >&2
+            fi
         fi
         if [ "$LINK_CREATED" -eq 1 ] && [ -L "$LINK" ] && [ "$(readlink -- "$LINK")" = ../lib/maris/bin/maris ]; then
             rm -- "$LINK"
