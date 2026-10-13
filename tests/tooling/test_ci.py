@@ -234,7 +234,8 @@ class ToolchainRequirements(unittest.TestCase):
         promote = assets.split('  promote-stable:', 1)[1].split('  remove-uninstallable-assets:', 1)[0]
         self.assertIn("needs: [publish, public-install-smoke]", promote)
         self.assertIn("needs.public-install-smoke.result == 'success'", promote)
-        self.assertIn('gh release view "$RELEASE_TAG" --json isDraft,isPrerelease', promote)
+        self.assertIn('gh release view "$RELEASE_TAG" --json isDraft', promote)
+        self.assertIn('gh release view "$RELEASE_TAG" --json isPrerelease', promote)
         self.assertIn('gh release edit "$RELEASE_TAG" --prerelease=false --latest', promote)
 
     @unittest.skipUnless(BASH, 'Bash release identity execution required')
