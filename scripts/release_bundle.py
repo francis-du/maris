@@ -346,12 +346,26 @@ def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: di
         stat_result = path.stat()
         return (stat_result.st_dev, stat_result.st_ino, stat_result.st_size)
 
+    def snapshot_record(path: Path) -> tuple[tuple[int, int, int], bytes]:
+        try:
+            if path.is_symlink() or not path.is_file():
+                raise ValueError('Linked or invalid release record rejected')
+            before = identity(path)
+            if before[2] > 32768:
+                raise ValueError('Oversized release record')
+            with path.open('rb') as source:
+                data = source.read(32769)
+            if len(data) > 32768:
+                raise ValueError('Oversized release record')
+            if path.is_symlink() or not path.is_file() or identity(path) != before:
+                raise ValueError('Release record changed while being read')
+            return before, data
+        except OSError as error:
+            raise ValueError('Release record changed while being read') from error
+
     for file in sorted(directory.rglob('*.release.json')):
-        if file.is_symlink():
-            raise ValueError('Linked release record rejected')
-        if file.stat().st_size > 32768:
-            raise ValueError('Oversized release record')
-        item = json.loads(file.read_text(encoding='utf-8'))
+        record_identity, record_bytes = snapshot_record(file)
+        item = json.loads(record_bytes.decode('utf-8'))
         if (item.get('schema_version') not in (1, 2) or item.get('channel') not in ('candidate', 'stable')
                 or (item.get('schema_version') == 2 and item.get('interface') != 'cli')
                 or (item.get('schema_version') == 1 and item.get('interface') not in (None, 'gui'))):
@@ -364,17 +378,21 @@ def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: di
         archive = file.parent / name
         if archive.is_symlink() or not archive.is_file() or not 0 < archive.stat().st_size <= 134217728:
             raise ValueError('Missing, linked or oversized release archive')
-        if archive.stat().st_size != item['bytes'] or digest(archive) != item['sha256']:
+        try:
+            archive_identity = identity(archive)
+        except OSError as error:
+            raise ValueError('Release archive changed during validation') from error
+        if archive_identity[2] != item['bytes'] or digest(archive) != item['sha256']:
             raise ValueError('Release archive changed after preparation')
         if not re.fullmatch('[a-f0-9]{64}', item['binary_sha256']) or not re.fullmatch('[a-f0-9]{64}', item['source_sha256']):
             raise ValueError('Invalid release digests')
         inspect_kit(archive, item)
         verified_inputs.append((
             file,
-            identity(file),
-            file.read_bytes(),
+            record_identity,
+            record_bytes,
             archive,
-            identity(archive),
+            archive_identity,
             item['sha256'],
         ))
         records.append(item)
@@ -432,15 +450,16 @@ def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: di
     # cross-target checks run and leave a manifest describing stale bytes.
     for record_path, record_identity, record_bytes, archive, archive_identity, archive_sha256 in verified_inputs:
         try:
-            if (record_path.is_symlink() or not record_path.is_file()
-                    or identity(record_path) != record_identity
-                    or record_path.read_bytes() != record_bytes
-                    or archive.is_symlink() or not archive.is_file()
-                    or identity(archive) != archive_identity
-                    or digest(archive) != archive_sha256):
-                raise ValueError('Release inputs changed while building the manifest')
-        except OSError as error:
+            current_record_identity, current_record_bytes = snapshot_record(record_path)
+            changed = (current_record_identity != record_identity
+                       or current_record_bytes != record_bytes
+                       or archive.is_symlink() or not archive.is_file()
+                       or identity(archive) != archive_identity
+                       or digest(archive) != archive_sha256)
+        except (OSError, ValueError) as error:
             raise ValueError('Release inputs changed while building the manifest') from error
+        if changed:
+            raise ValueError('Release inputs changed while building the manifest')
 
     if output.exists() or output.is_symlink():
         raise ValueError('Manifest destination already exists')
