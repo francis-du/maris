@@ -187,6 +187,13 @@ class ToolchainRequirements(unittest.TestCase):
                 self.assertIn(runner, publish)
 
     @unittest.skipUnless(BASH, 'Bash release identity execution required')
+    def test_release_asset_publication_rejects_draft_and_prerelease_targets(self):
+        publish = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
+        self.assertIn('--json isDraft,isPrerelease,publishedAt', publish)
+        self.assertIn('.isDraft == false and .isPrerelease == false and .publishedAt != null', publish)
+        self.assertIn('must already be published, non-draft and non-prerelease', publish)
+
+
     def test_release_identity_gate_rejects_wrong_version_and_ref_before_native_matrix(self):
         text = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')
         block = re.search(

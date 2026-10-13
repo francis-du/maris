@@ -58,7 +58,11 @@ jobs:
             echo "Tag $tag does not match Cargo version $cargo_version" >&2
             exit 1
           fi
-          gh release view "$tag" >/dev/null
+          release_ok="$(gh release view "$tag" --json isDraft,isPrerelease,publishedAt --jq '(.isDraft == false and .isPrerelease == false and .publishedAt != null)')"
+          if [ "$release_ok" != true ]; then
+            echo "Release $tag must already be published, non-draft and non-prerelease before installer assets can be mutated." >&2
+            exit 1
+          fi
           echo "publish=true" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - name: Download exact successful run artifacts
