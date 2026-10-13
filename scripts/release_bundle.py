@@ -349,9 +349,19 @@ def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: di
     for file in sorted(directory.rglob('*.release.json')):
         if file.is_symlink():
             raise ValueError('Linked release record rejected')
-        if file.stat().st_size > 32768:
-            raise ValueError('Oversized release record')
-        item = json.loads(file.read_text(encoding='utf-8'))
+        try:
+            record_identity = identity(file)
+            if record_identity[2] > 32768:
+                raise ValueError('Oversized release record')
+            record_bytes = file.read_bytes()
+        except OSError as error:
+            raise ValueError('Release record changed while being read') from error
+        if identity(file) != record_identity or file.is_symlink():
+            raise ValueError('Release record changed while being read')
+        try:
+            item = json.loads(record_bytes.decode('utf-8'))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValueError('Unreadable release record') from error
         if (item.get('schema_version') not in (1, 2) or item.get('channel') not in ('candidate', 'stable')
                 or (item.get('schema_version') == 2 and item.get('interface') != 'cli')
                 or (item.get('schema_version') == 1 and item.get('interface') not in (None, 'gui'))):
@@ -371,8 +381,8 @@ def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: di
         inspect_kit(archive, item)
         verified_inputs.append((
             file,
-            identity(file),
-            file.read_bytes(),
+            record_identity,
+            record_bytes,
             archive,
             identity(archive),
             item['sha256'],
