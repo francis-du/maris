@@ -94,7 +94,7 @@ jobs:
             echo "release_tag=$tag"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Publish GitHub release
+      - name: Create draft GitHub release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -102,6 +102,7 @@ jobs:
         run: |
           set -euo pipefail
           gh release create "$RELEASE_TAG" \
+            --draft \
             --target "$GITHUB_SHA" \
             --title "Maris $RELEASE_VERSION" \
             --generate-notes
