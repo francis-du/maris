@@ -156,9 +156,7 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
     metrics.output_quarantined.store(false, Ordering::Release);
     // A live tap plus a live output callback still is not enough: require the clock
     // bridge and startup envelope to observe post-handoff source frames.
-    if let Err(start_error) =
-        bridge::wait_source_started(&metrics, replacement_progress_timeout)
-    {
+    if let Err(start_error) = bridge::wait_source_started(&metrics, replacement_progress_timeout) {
         // Fail open in a deterministic order. tap was constructed before stream, so
         // ordinary stack unwinding would drop the replacement output first and only then
         // restore the original application path from TapCapture::drop. Re-quarantine the
