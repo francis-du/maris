@@ -153,8 +153,12 @@ COMMITTED=0
 cleanup() {
     local code=$?
     trap - EXIT HUP INT TERM
-    if [ "$COMMITTED" -eq 0 ] && [ -n "$BACKUP" ] && [ -d "$BACKUP/Maris.app" ] && [ ! -e "$DEST" ]; then
-        mv -- "$BACKUP/Maris.app" "$DEST" || printf 'Recovery required: previous bundle remains at %s\n' "$BACKUP/Maris.app" >&2
+    if [ "$COMMITTED" -eq 0 ] && [ -n "$BACKUP" ] && [ -d "$BACKUP/Maris.app" ]; then
+        if [ ! -e "$DEST" ]; then
+            mv -- "$BACKUP/Maris.app" "$DEST" || printf 'Recovery required: previous bundle remains at %s\n' "$BACKUP/Maris.app" >&2
+        else
+            printf 'Recovery required: previous bundle remains at %s\n' "$BACKUP/Maris.app" >&2
+        fi
     fi
     # Only this invocation's mktemp staging directory is eligible for removal.
     [ -z "$STAGE" ] || rm -rf -- "$STAGE"
