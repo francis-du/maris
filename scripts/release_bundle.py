@@ -218,6 +218,27 @@ def _normalize_pax_times(path: Path) -> None:
             temporary.unlink(missing_ok=True)
 
 
+def _bounded_regular_bytes(path: Path, limit: int) -> bytes | None:
+    """Read one stable regular file without following links or allocating past its contract."""
+    try:
+        if linked_directory(path) or not path.is_file():
+            return None
+        before = path.stat()
+        if not 0 < before.st_size <= limit:
+            return None
+        with path.open('rb') as source:
+            data = source.read(limit + 1)
+        after = path.stat()
+        if (linked_directory(path) or not path.is_file()
+                or (after.st_dev, after.st_ino, after.st_size)
+                != (before.st_dev, before.st_ino, before.st_size)
+                or len(data) != before.st_size):
+            return None
+        return data
+    except OSError:
+        return None
+
+
 def commit_release_inputs(
     packed: Path,
     record_ready: Path,
@@ -231,22 +252,20 @@ def commit_release_inputs(
 
     def exact_archive() -> bool:
         try:
-            return (archive.is_file() and not archive.is_symlink()
+            return (archive.is_file() and not linked_directory(archive)
                     and archive.stat().st_size == packed.stat().st_size
                     and digest(archive) == expected_sha256)
         except OSError:
             return False
 
     def exact_record() -> bool:
-        try:
-            return (record_path.is_file() and not record_path.is_symlink()
-                    and record_path.read_bytes() == record_ready.read_bytes())
-        except OSError:
-            return False
+        final = _bounded_regular_bytes(record_path, 32768)
+        expected = _bounded_regular_bytes(record_ready, 32768)
+        return final is not None and final == expected
 
     def unlink_our_link(path: Path, source: Path) -> None:
         try:
-            if path.exists() and not path.is_symlink() and path.samefile(source):
+            if path.exists() and not linked_directory(path) and path.samefile(source):
                 path.unlink()
         except (FileNotFoundError, OSError):
             pass
