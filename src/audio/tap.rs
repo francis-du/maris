@@ -23,6 +23,52 @@ struct Capture {
     queue: Arc<ArrayQueue<[f32; 2]>>,
     metrics: Arc<Metrics>,
     next_sample: AtomicU64,
+    gate: AtomicU64,
+}
+
+const CAPTURE_GATE_BLOCKED: u64 = 1;
+const CAPTURE_GATE_READER: u64 = 2;
+
+struct CaptureLease<'a>(&'a AtomicU64);
+impl Drop for CaptureLease<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(CAPTURE_GATE_READER, Ordering::Release);
+    }
+}
+
+fn enter_capture(gate: &AtomicU64) -> Option<CaptureLease<'_>> {
+    let mut state = gate.load(Ordering::Acquire);
+    loop {
+        if state & CAPTURE_GATE_BLOCKED != 0 {
+            return None;
+        }
+        let next = state.checked_add(CAPTURE_GATE_READER)?;
+        match gate.compare_exchange_weak(state, next, Ordering::AcqRel, Ordering::Acquire) {
+            Ok(_) => return Some(CaptureLease(gate)),
+            Err(current) => state = current,
+        }
+    }
+}
+
+fn block_capture(gate: &AtomicU64, timeout: std::time::Duration) -> Result<()> {
+    let previous = gate.fetch_or(CAPTURE_GATE_BLOCKED, Ordering::AcqRel);
+    ensure!(
+        previous & CAPTURE_GATE_BLOCKED == 0,
+        "System-audio capture is already quarantined"
+    );
+    let deadline = std::time::Instant::now() + timeout;
+    while gate.load(Ordering::Acquire) != CAPTURE_GATE_BLOCKED {
+        if std::time::Instant::now() >= deadline {
+            gate.fetch_and(!CAPTURE_GATE_BLOCKED, Ordering::Release);
+            anyhow::bail!("Timed out quarantining system-audio capture");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    Ok(())
+}
+
+fn unblock_capture(gate: &AtomicU64) {
+    gate.fetch_and(!CAPTURE_GATE_BLOCKED, Ordering::Release);
 }
 
 fn device_list_changed(object: u32, addresses: &[ca::Address]) -> bool {
@@ -140,7 +186,9 @@ pub(super) struct TapCapture {
     aggregate: u32,
     io: ca::IoId,
     context: Option<Box<Capture>>,
+    description: Option<Retained<AnyObject>>,
     started: bool,
+    muted: bool,
     format: ca::Format,
     aggregate_rate: u32,
     aggregate_buffer: Option<u32>,
@@ -187,7 +235,11 @@ fn wait_capture_ready(
         }
         ensure!(
             std::time::Instant::now() < deadline,
-            "System-audio tap started but delivered no PCM; stopping capture to restore original playback"
+            "System-audio tap started but delivered no PCM; stopping capture to restore original playback (captured_frames={}, callback_errors={}, configuration_events={}, checked_configuration_events={})",
+            metrics.captured_frames.load(Ordering::Acquire),
+            metrics.errors.load(Ordering::Acquire),
+            metrics.configuration_events.load(Ordering::Acquire),
+            metrics.checked_configuration_events.load(Ordering::Acquire),
         );
         std::thread::sleep(std::time::Duration::from_millis(2));
     }
@@ -308,8 +360,10 @@ impl TapCapture {
                 let _: () = msg_send![description, setPrivate: true];
                 // Exclusive means all processes except those listed. Included-process taps keep it false.
                 let _: () = msg_send![description, setExclusive: !selected];
-                // CATapMutedWhenTapped = 2. Untapped applications regain normal playback automatically.
-                let _: () = msg_send![description, setMuteBehavior: 2_isize];
+                // Preflight capture while leaving original playback untouched. The live tap
+                // switches to CATapMutedWhenTapped only after PCM and replacement output
+                // callbacks are both proven.
+                let _: () = msg_send![description, setMuteBehavior: 0_isize];
             }
         };
         configure_description(&description);
@@ -319,7 +373,9 @@ impl TapCapture {
             aggregate: 0,
             io: ptr::null_mut(),
             context: None,
+            description: None,
             started: false,
+            muted: false,
             format: ca::Format::default(),
             aggregate_rate: 0,
             aggregate_buffer: None,
@@ -365,6 +421,11 @@ impl TapCapture {
         let sub = ca::object(c"NSMutableDictionary")?;
         ca::set(&sub, "uid", &uid);
         ca::set(&sub, "drift", &NSNumber::new_bool(true));
+        ca::set(
+            &sub,
+            "drift quality",
+            &NSNumber::new_u32(ca::MAX_DRIFT_COMPENSATION_QUALITY),
+        );
         let taps = ca::object(c"NSMutableArray")?;
         ca::append(&taps, &sub);
         let dictionary = ca::object(c"NSMutableDictionary")?;
@@ -394,6 +455,7 @@ impl TapCapture {
         // Capture still starts only after the replacement output's real callback.
         ca::set(&dictionary, "tapautostart", &NSNumber::new_bool(false));
         ca::set(&dictionary, "taps", &taps);
+        result.description = Some(description);
         // The clock endpoint's I/O is disabled below before starting capture.
         ca::check(
             unsafe {
@@ -418,12 +480,28 @@ impl TapCapture {
             );
             std::thread::sleep(std::time::Duration::from_millis(2));
         }
+        if let Some(clock_uid) = aggregate_clock_uid {
+            loop {
+                match ca::verify_aggregate_clock(result.aggregate, clock_uid) {
+                    Ok(()) => break,
+                    Err(_) if std::time::Instant::now() < deadline => {
+                        std::thread::sleep(std::time::Duration::from_millis(2));
+                    }
+                    Err(error) => {
+                        return Err(error.context(
+                            "Private audio connection did not bind the selected physical output clock",
+                        ));
+                    }
+                }
+            }
+        }
         result.aggregate_rate = ca::sample_rate(result.aggregate)?;
         result.aggregate_buffer = ca::output_buffer_frames(result.aggregate).ok();
         result.context = Some(Box::new(Capture {
             queue,
             metrics,
             next_sample: AtomicU64::new(f64::NAN.to_bits()),
+            gate: AtomicU64::new(0),
         }));
         let context = (&**result
             .context
@@ -592,9 +670,87 @@ impl TapCapture {
         }
         Ok(())
     }
+
+    fn set_mute_behavior(&mut self, behavior: isize) -> Result<()> {
+        let description = self
+            .description
+            .as_ref()
+            .context("Missing live tap description")?;
+        // SAFETY: CATapDescription.muteBehavior is atomic/readwrite. CoreAudio also
+        // exposes kAudioTapPropertyDescription as a settable live tap property.
+        let previous = if self.muted { 2_isize } else { 0_isize };
+        unsafe {
+            let _: () = msg_send![&**description, setMuteBehavior: behavior];
+        }
+        if let Err(error) =
+            ca::set_tap_description(self.tap, (&**description as *const AnyObject).cast())
+        {
+            // Keep the retained object consistent with the native tap if the property
+            // update is rejected. A later destroy still gets an independent restore attempt.
+            unsafe {
+                let _: () = msg_send![&**description, setMuteBehavior: previous];
+            }
+            return Err(error);
+        }
+        self.muted = behavior != 0;
+        Ok(())
+    }
+
+    pub fn arm_replacement(&mut self) -> Result<()> {
+        ensure!(
+            self.started,
+            "Capture must be running before muting original playback"
+        );
+        ensure!(
+            !self.muted,
+            "Original playback is already muted by this tap"
+        );
+        {
+            let capture = self.context.as_ref().context("Missing capture state")?;
+            block_capture(&capture.gate, std::time::Duration::from_secs(1))?;
+        }
+        if let Err(error) = self.set_mute_behavior(2) {
+            if let Some(capture) = self.context.as_ref() {
+                unblock_capture(&capture.gate);
+            }
+            return Err(error);
+        }
+
+        // No callback that entered before the live mute update can still enqueue here:
+        // the reader gate is blocked and drained before new callbacks are admitted.
+        let Some(capture) = self.context.as_ref() else {
+            let restore = self.set_mute_behavior(0);
+            return match restore {
+                Ok(()) => anyhow::bail!("Missing capture state after muting original playback"),
+                Err(restore_error) => Err(anyhow::anyhow!(
+                    "Missing capture state after muting original playback; restoring the original tap also failed: {restore_error:#}"
+                )),
+            };
+        };
+        for _ in 0..capture.queue.capacity() {
+            if capture.queue.pop().is_none() {
+                break;
+            }
+        }
+        capture
+            .next_sample
+            .store(f64::NAN.to_bits(), Ordering::Release);
+        unblock_capture(&capture.gate);
+        Ok(())
+    }
+
+    pub(super) fn disarm_replacement(&mut self) -> Result<()> {
+        if self.muted {
+            self.set_mute_behavior(0)?;
+        }
+        Ok(())
+    }
 }
 impl Drop for TapCapture {
     fn drop(&mut self) {
+        // Restore original playback explicitly before relying on native tap destruction.
+        // Session teardown keeps the replacement stream alive until this restoration runs.
+        let _ = self.disarm_replacement();
         // Stop before destroying the callback or freeing its context. No permanent output state was changed.
         unsafe {
             if self.started {
@@ -644,6 +800,15 @@ unsafe extern "C" fn capture(
     }
     // SAFETY: CoreAudio owns input buffers for this call; context remains boxed until IOProc destruction.
     let capture = unsafe { &*(context as *const Capture) };
+    let Some(_lease) = enter_capture(&capture.gate) else {
+        return 0;
+    };
+    // IOProc liveness is independent of whether this callback contains PCM. Selected
+    // applications may be silent or paused without the CoreAudio tap itself being dead.
+    capture
+        .metrics
+        .capture_callback_calls
+        .fetch_add(1, Ordering::Relaxed);
     if capture.metrics.configuration_events.load(Ordering::Acquire)
         != capture
             .metrics
