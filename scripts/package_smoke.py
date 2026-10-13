@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 import shutil
 import stat
@@ -21,18 +22,46 @@ def safe_name(name: str, stem: str) -> bool:
             and '..' not in path.parts and '\\' not in name and '\x00' not in name)
 
 
+def safe_linux_name(name: str, stem: str) -> bool:
+    path = name[:-1] if name.endswith('/') else name
+    parts = PurePosixPath(path).parts
+    return (safe_name(name, stem) and bool(parts) and parts[0] == stem
+            and bool(re.fullmatch(r'[A-Za-z0-9_./-]+', path))
+            and all(part not in ('', '.', '..') for part in parts))
+
+
 def extract(archive: Path, directory: Path, system: str, stem: str) -> None:
     total = 0
     if system == 'linux':
         with tarfile.open(archive, 'r:gz') as source:
             entries = source.getmembers()
-            if len(entries) > 10000:
+            if not entries or len(entries) > 10000:
                 raise ValueError('Archive file-count limit exceeded')
+            seen = set()
+            spelling = {}
             for entry in entries:
                 total += entry.size
-                if not safe_name(entry.name, stem) or not (entry.isdir() or entry.isfile()) or total > 536870912:
+                name = entry.name[:-1] if entry.name.endswith('/') else entry.name
+                parts = PurePosixPath(name).parts
+                unsafe = (not safe_linux_name(entry.name, stem)
+                          or not (entry.isdir() or entry.isfile())
+                          or entry.mode & 0o7000
+                          or total > 536870912)
+                key = name.lower()
+                if key in seen:
+                    unsafe = True
+                seen.add(key)
+                prefix = []
+                for part in parts:
+                    prefix.append(part)
+                    value = '/'.join(prefix)
+                    folded = value.lower()
+                    if folded in spelling and spelling[folded] != value:
+                        unsafe = True
+                    spelling[folded] = value
+                if unsafe:
                     raise ValueError('Unsafe archive entry')
-                path = directory.joinpath(*PurePosixPath(entry.name).parts)
+                path = directory.joinpath(*parts)
                 if entry.isdir():
                     path.mkdir(parents=True, exist_ok=True)
                 else:
