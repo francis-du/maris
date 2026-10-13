@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 import shutil
 import stat
@@ -19,6 +20,17 @@ def safe_name(name: str, stem: str) -> bool:
     path = PurePosixPath(name)
     return (not path.is_absolute() and bool(path.parts) and path.parts[0] in (stem, '__MACOSX')
             and '..' not in path.parts and '\\' not in name and '\x00' not in name)
+
+
+def safe_windows_name(name: str, stem: str) -> bool:
+    path = name[:-1] if name.endswith('/') else name
+    if not safe_name(name, stem) or not re.fullmatch(r'[A-Za-z0-9_./-]+', path):
+        return False
+    for component in PurePosixPath(path).parts:
+        if (component in ('', '.', '..') or component.endswith('.')
+                or re.fullmatch(r'(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?', component, re.I)):
+            return False
+    return True
 
 
 def extract(archive: Path, directory: Path, system: str, stem: str) -> None:
@@ -45,11 +57,22 @@ def extract(archive: Path, directory: Path, system: str, stem: str) -> None:
             entries = source.infolist()
             if len(entries) > 10000:
                 raise ValueError('Archive file-count limit exceeded')
+            seen = set()
             for entry in entries:
                 total += entry.file_size
                 mode = stat.S_IFMT(entry.external_attr >> 16)
-                if (not safe_name(entry.filename, stem) or total > 536870912
-                        or mode not in (0, stat.S_IFREG, stat.S_IFDIR)):
+                unsafe = (not safe_name(entry.filename, stem) or total > 536870912
+                          or mode not in (0, stat.S_IFREG, stat.S_IFDIR))
+                if system == 'windows':
+                    normalized = entry.filename[:-1] if entry.filename.endswith('/') else entry.filename
+                    key = normalized.lower()
+                    unsafe = (unsafe or not safe_windows_name(entry.filename, stem)
+                              or key in seen or entry.external_attr & 0x400
+                              or (entry.is_dir() and mode == stat.S_IFREG)
+                              or (not entry.is_dir() and mode == stat.S_IFDIR)
+                              or (entry.is_dir() and entry.file_size != 0))
+                    seen.add(key)
+                if unsafe:
                     raise ValueError('Unsafe archive entry')
             if source.testzip() is not None:
                 raise ValueError('Archive CRC check failed')
