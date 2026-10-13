@@ -63,7 +63,11 @@ class ReleaseTools(unittest.TestCase):
         self.assertIn("id-token: write", pages)
         for path in workflows.glob("*.yml"):
             for action in re.findall(r"uses:\s+(\S+)", path.read_text()):
-                self.assertRegex(action, r"^[^@]+@[a-f0-9]{40}$")
+                if action.startswith("./.github/workflows/"):
+                    self.assertRegex(action, r"^[.]\/\.github\/workflows\/[A-Za-z0-9_.-]+[.]yml$")
+                    self.assertNotIn("@", action)
+                else:
+                    self.assertRegex(action, r"^[^@]+@[a-f0-9]{40}$")
 
     def test_report_rejects_insufficient_or_modified_records(self):
         with tempfile.TemporaryDirectory() as folder:
