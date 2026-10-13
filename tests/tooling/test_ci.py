@@ -240,7 +240,7 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn('gh release view "$RELEASE_TAG" --json isDraft', promote)
         self.assertIn('gh release view "$RELEASE_TAG" --json isPrerelease', promote)
         self.assertIn('SOURCE_SHA: ${{ inputs.source_sha }}', promote)
-        self.assertIn('gh api "repos/$GH_REPO/commits/main" --jq '.sha'', promote)
+        self.assertIn("gh api \"repos/$GH_REPO/commits/main\" --jq '.sha'", promote)
         self.assertIn('main advanced before stable promotion; refusing stale release', promote)
         self.assertIn('gh release edit "$RELEASE_TAG" --prerelease=false --latest', promote)
 
