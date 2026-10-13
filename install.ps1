@@ -388,9 +388,17 @@ try {
     }
     $null = [IO.Directory]::CreateDirectory($Prefix)
     $candidateLock = Join-Path $Prefix '.maris-install.lock'
-    try { $lockHandle = [IO.File]::Open($candidateLock, [IO.FileMode]::CreateNew, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None) }
+    try {
+        $lockHandle = [IO.FileStream]::new(
+            $candidateLock,
+            [IO.FileMode]::CreateNew,
+            [IO.FileAccess]::ReadWrite,
+            [IO.FileShare]::None,
+            1,
+            [IO.FileOptions]::DeleteOnClose
+        )
+    }
     catch { throw 'Another installation may be active. Inspect the existing lock; never delete a live lock.' }
-    $lockPath = $candidateLock
     Check-Destination
     $stage = Join-Path $Prefix ('.maris-stage.' + [Guid]::NewGuid().ToString('N'))
     $null = [IO.Directory]::CreateDirectory($stage)
@@ -427,6 +435,5 @@ try {
     }
     if ($backup -and [IO.Directory]::Exists($backup) -and @(Get-ChildItem -LiteralPath $backup -Force).Count -eq 0) { [IO.Directory]::Delete($backup) }
     if ($null -ne $lockHandle) { $lockHandle.Dispose() }
-    if ($lockPath) { [IO.File]::Delete($lockPath) }
 }
 exit $exitCode
