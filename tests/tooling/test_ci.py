@@ -209,6 +209,12 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn('source_sha: ${{ needs.publish.outputs.source_sha }}', call)
         self.assertIn('release_tag: ${{ needs.publish.outputs.release_tag }}', call)
 
+        self.assertIn('  rollback-release:', publish_release)
+        self.assertIn("needs: [publish, assets]", publish_release)
+        self.assertIn("always() && needs.publish.result == 'success' && needs.assets.result != 'success'", publish_release)
+        self.assertIn('RELEASE_TAG: ${{ needs.publish.outputs.release_tag }}', publish_release)
+        self.assertIn('gh release delete "$RELEASE_TAG" --yes --cleanup-tag', publish_release)
+
         self.assertIn('workflow_call:', assets)
         self.assertIn('SOURCE_RUN_ID: ${{ inputs.source_run_id || github.event.workflow_run.id }}', assets)
         self.assertIn('SOURCE_SHA: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}', assets)
