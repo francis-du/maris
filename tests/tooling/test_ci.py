@@ -191,6 +191,7 @@ class ToolchainRequirements(unittest.TestCase):
         publish = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
         self.assertIn("expected_metadata = ['version', 'source_sha256', 'channel', 'interface']", publish)
         self.assertIn('metadata rows are missing, reordered or duplicated', publish)
+        self.assertIn("values['source_sha256'] != os.environ['SOURCE_SHA']", publish)
         self.assertIn("re.fullmatch(r'[a-f0-9]{64}', values['source_sha256'])", publish)
         self.assertIn("re.fullmatch(r'[1-9][0-9]{0,8}', archive_bytes)", publish)
         self.assertIn("int(archive_bytes) > 134217728", publish)
