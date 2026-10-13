@@ -107,6 +107,20 @@ fn capture_gate_blocks_new_callbacks_and_waits_for_existing_readers() {
     assert!(enter_capture(&gate).is_some());
 }
 
+#[test]
+fn original_playback_restore_quarantines_replacement_before_native_update() {
+    let metrics = Metrics::default();
+    let error = quarantine_then_restore(&metrics, || {
+        assert!(metrics.output_quarantined.load(Ordering::Acquire));
+        anyhow::bail!("injected native restore failure")
+    })
+    .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("injected native restore failure"));
+    assert!(metrics.output_quarantined.load(Ordering::Acquire));
+}
+
 fn context(capacity: usize) -> Capture {
     Capture {
         queue: Arc::new(ArrayQueue::new(capacity)),
