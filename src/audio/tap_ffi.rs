@@ -14,6 +14,7 @@ pub struct Address {
 }
 // AudioHardwareBase.h: kAudioObjectPropertyScopeInput = 'inpt'.
 pub(super) const INPUT_SCOPE: &[u8; 4] = b"inpt";
+pub(super) const MAX_DRIFT_COMPENSATION_QUALITY: u32 = 0x7f;
 
 pub fn address(selector: &[u8; 4]) -> Address {
     address_scope(selector, b"glob")
@@ -238,6 +239,54 @@ pub fn default_output() -> Result<u32> {
 }
 pub fn device_ids() -> Result<Vec<u32>> {
     unsafe { property_vec_u32(1, b"dev#") }
+}
+
+pub(super) fn verify_aggregate_clock_state(
+    main_uid: &str,
+    active: &[u32],
+    expected_uid: &str,
+    expected_device: u32,
+) -> Result<()> {
+    ensure!(
+        main_uid == expected_uid,
+        "CoreAudio aggregate selected an unexpected main clock device: expected {expected_uid:?}, actual {main_uid:?}"
+    );
+    ensure!(
+        active.contains(&expected_device),
+        "Selected physical output {expected_device} is not active in the CoreAudio aggregate; active sub-devices: {active:?}"
+    );
+    Ok(())
+}
+
+pub fn set_tap_description(tap: u32, description: *const c_void) -> Result<()> {
+    ensure!(!description.is_null(), "Missing live tap description");
+    let value = description;
+    check(
+        unsafe {
+            AudioObjectSetPropertyData(
+                tap,
+                &address(b"tdsc"),
+                0,
+                ptr::null(),
+                size_of::<*const c_void>() as u32,
+                (&value as *const *const c_void).cast(),
+            )
+        },
+        "Update live system-audio tap description",
+    )
+}
+
+pub fn verify_aggregate_clock(aggregate: u32, expected_uid: &str) -> Result<()> {
+    // kAudioAggregateDevicePropertyMainSubDevice = 'amst'. Apple renamed the
+    // public API from "master" to "main", but the composition key remains
+    // the literal "master". Verify what HAL actually built instead of trusting
+    // AudioHardwareCreateAggregateDevice returning noErr.
+    let main_uid =
+        string_property(aggregate, b"amst").context("Read aggregate main clock device")?;
+    let expected_device = output_device_id_for_uid(expected_uid)?;
+    let active = unsafe { property_vec_u32(aggregate, b"agrp") }
+        .context("Read active aggregate sub-devices")?;
+    verify_aggregate_clock_state(&main_uid, &active, expected_uid, expected_device)
 }
 fn input_stream_ids(device: u32) -> Result<Vec<u32>> {
     let address = address_scope(b"stm#", INPUT_SCOPE);

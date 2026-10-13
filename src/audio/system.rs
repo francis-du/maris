@@ -16,13 +16,16 @@ use std::{
 };
 
 struct Pipeline {
-    stream: Stream,
+    // Fields drop in declaration order. Restore the original CoreAudio path before
+    // the replacement stream can disappear if a completed pipeline is abandoned.
     tap: TapCapture,
+    stream: Stream,
     metrics: Arc<Metrics>,
     updates: Arc<ArrayQueue<Update>>,
     analysis: AnalysisWorker,
     output: String,
     binding: OutputBinding,
+    device_id: u32,
     revision: u64,
     music_revision: u64,
     capability: crate::devices::capability::Capability,
@@ -32,12 +35,18 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
     let name = device.description()?.name().to_owned();
     let mut binding = output_binding(store, output, &name, &device)?;
     ensure!(!devices::is_virtual(&name), "The active system output is a loopback device, not physical playback; original audio was not changed");
+    let device_id = binding
+        .coreaudio_id
+        .context("Selected macOS output has no CoreAudio device ID")?;
     let rate = device.default_output_config()?.sample_rate();
     let initial = devices::config(&device, false, rate)?;
     let state = store.load()?;
     let queue = Arc::new(ArrayQueue::new(192000 / 4));
     let metrics = Arc::new(Metrics::default());
     let updates = Arc::new(ArrayQueue::<Update>::new(8));
+    let initial_buffer_frames = tap_ffi::output_buffer_frames(device_id).ok();
+    let initial_progress_timeout =
+        output_progress_timeout(initial_buffer_frames, rate, Duration::from_secs(1));
     // Register Maris as an audio process before resolving the exclusion PID. This stream emits only silence.
     let prime_metrics = Arc::new(Metrics::default());
     let prime = bridge::output(
@@ -49,7 +58,7 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
         prime_metrics.clone(),
     )?;
     prime.play()?;
-    bridge::wait_output_ready(&prime_metrics, Duration::from_secs(1))?;
+    bridge::wait_output_ready(&prime_metrics, initial_progress_timeout)?;
     // System-wide capture must stay on the established global tap. Some CoreAudio
     // endpoints accept the device-scoped CATapDescription but then mute that physical
     // stream when CATapMutedWhenTapped is engaged, leaving Maris with no usable PCM while
@@ -58,17 +67,14 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
     //
     // Keep device-scoped capture only for explicit per-application capture. System mode
     // uses a global self-excluding tap and still renders to the selected physical output.
-    let output_uid = binding
-        .coreaudio_id
-        .and_then(|device| tap_ffi::device_uid(device).ok())
+    let output_uid = tap_ffi::device_uid(device_id)
         .context("Selected macOS output has no stable CoreAudio UID")?;
     let mut tap = if processes.is_empty() {
         TapCapture::prepare_for_output_clock(queue.clone(), metrics.clone(), &output_uid)?
-    } else if let Some(uid) = binding.coreaudio_id.and_then(|device| {
-        tap_ffi::single_stereo_output_device_uid(device)
-            .ok()
-            .flatten()
-    }) {
+    } else if let Some(uid) = tap_ffi::single_stereo_output_device_uid(device_id)
+        .ok()
+        .flatten()
+    {
         TapCapture::prepare_processes_for_output(queue.clone(), metrics.clone(), processes, &uid)?
     } else {
         TapCapture::prepare_processes(queue.clone(), metrics.clone(), processes)?
@@ -130,32 +136,131 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
             .is_ok(),
         "Internal output-switch transition queue is unavailable"
     );
-    if let Some(device_id) = binding.coreaudio_id {
-        tap.watch_output(device_id, output.is_none())?;
-        // Capture the negotiated output, not the pre-construction buffer snapshot.
-        binding.buffer_frames = tap_ffi::output_buffer_frames(device_id).ok();
-        binding.latency_frames = tap_ffi::output_latency_frames(device_id).ok();
-        binding.safety_offset_frames = tap_ffi::output_safety_offset_frames(device_id).ok();
-    }
+    tap.watch_output(device_id, output.is_none())?;
+    // Capture the negotiated output, not the pre-construction buffer snapshot.
+    binding.buffer_frames = tap_ffi::output_buffer_frames(device_id).ok();
+    binding.latency_frames = tap_ffi::output_latency_frames(device_id).ok();
+    binding.safety_offset_frames = tap_ffi::output_safety_offset_frames(device_id).ok();
+    let replacement_progress_timeout =
+        output_progress_timeout(binding.buffer_frames, tap.rate, Duration::from_secs(1));
+    // Prove the replacement callback while forcing it to silence. The original
+    // application path stays audible during this entire preflight.
+    metrics.output_quarantined.store(true, Ordering::Release);
     stream.play()?;
-    bridge::wait_output_ready(&metrics, Duration::from_secs(1))?;
+    bridge::wait_output_ready(&metrics, replacement_progress_timeout)?;
     drop(prime);
-    // Original applications are muted only after an actual output callback,
-    // not merely a successful asynchronous play request.
+
+    // Start the tap unmuted and require real PCM before changing original playback.
     tap.start()?;
+    tap.arm_replacement()?;
+    metrics.output_quarantined.store(false, Ordering::Release);
+    // A live tap plus a live output callback still is not enough: require the clock
+    // bridge and startup envelope to observe post-handoff source frames.
+    if let Err(start_error) = bridge::wait_source_started(&metrics, replacement_progress_timeout) {
+        // Fail open in a deterministic order. tap was constructed before stream, so
+        // ordinary stack unwinding would drop the replacement output first and only then
+        // restore the original application path from TapCapture::drop. Re-quarantine the
+        // replacement and explicitly restore original playback while that stream is still
+        // alive. If the live property update itself fails, destroy the tap now (also while
+        // the replacement stream is alive) so CoreAudio gets a second restoration path
+        // before the output disappears.
+        metrics.output_quarantined.store(true, Ordering::Release);
+        if let Err(restore_error) = tap.disarm_replacement() {
+            drop(tap);
+            return Err(start_error.context(format!(
+                "Replacement output never received post-handoff audio; restoring the original CoreAudio tap also failed: {restore_error:#}"
+            )));
+        }
+        return Err(start_error);
+    }
     Ok(Pipeline {
-        stream,
         tap,
+        stream,
         metrics,
         updates,
         analysis,
         output: name,
         binding,
+        device_id,
         revision: state.revision,
         music_revision: listening.revision,
         capability,
     })
 }
+#[derive(Clone, Copy)]
+pub(super) struct ProgressGuard {
+    pub(super) output_callbacks: u64,
+    pub(super) capture_callbacks: u64,
+    output_advanced_at: Instant,
+    capture_advanced_at: Instant,
+}
+
+fn output_progress_timeout(
+    buffer_frames: Option<u32>,
+    sample_rate: u32,
+    minimum: Duration,
+) -> Duration {
+    let frames = buffer_frames.unwrap_or(512).max(1);
+    let period = Duration::from_secs_f64(frames as f64 / sample_rate.max(1) as f64);
+    (period * 3 + Duration::from_millis(100))
+        .max(minimum)
+        .min(Duration::from_secs(5))
+}
+
+fn output_stall_timeout(buffer_frames: Option<u32>, sample_rate: u32) -> Duration {
+    output_progress_timeout(buffer_frames, sample_rate, Duration::from_millis(750))
+}
+
+fn observe_progress(
+    previous: Option<ProgressGuard>,
+    current: (u64, u64),
+    now: Instant,
+    timeout: Duration,
+) -> (ProgressGuard, bool) {
+    let Some(previous) = previous else {
+        return (
+            ProgressGuard {
+                output_callbacks: current.0,
+                capture_callbacks: current.1,
+                output_advanced_at: now,
+                capture_advanced_at: now,
+            },
+            false,
+        );
+    };
+    let output_advanced = current.0 != previous.output_callbacks;
+    let capture_advanced = current.1 != previous.capture_callbacks;
+    let output_advanced_at = if output_advanced {
+        now
+    } else {
+        previous.output_advanced_at
+    };
+    let capture_advanced_at = if capture_advanced {
+        now
+    } else {
+        previous.capture_advanced_at
+    };
+    // The physical replacement output must keep producing callbacks even for digital
+    // silence. If it stops, fail open regardless of whether capture also stopped.
+    let output_stalled =
+        !output_advanced && now.saturating_duration_since(previous.output_advanced_at) >= timeout;
+    // A running output with a dead tap IOProc would render starvation/silence while
+    // original playback remains muted. Tap callback liveness is content-independent, so
+    // a silent or paused selected application does not look like a capture failure.
+    let capture_stalled = output_advanced
+        && !capture_advanced
+        && now.saturating_duration_since(previous.capture_advanced_at) >= timeout;
+    (
+        ProgressGuard {
+            output_callbacks: current.0,
+            capture_callbacks: current.1,
+            output_advanced_at,
+            capture_advanced_at,
+        },
+        output_stalled || capture_stalled,
+    )
+}
+
 impl Session {
     pub(super) fn native_system(store: Store, output: Option<&str>) -> Result<Self> {
         Self::native_tap(
@@ -210,9 +315,10 @@ impl Session {
         input_name: String,
     ) -> Result<Self> {
         let lease = store.session_lock()?;
+        let context = crate::analysis::context::Worker::start()?;
         let p = pipeline(&store, output, &system_processes)?;
         let sample_rate = p.tap.rate;
-        let system_device_id = p.binding.coreaudio_id.unwrap_or(tap_ffi::default_output()?);
+        let system_device_id = p.device_id;
         Ok(Self {
             streams: vec![p.stream],
             route: None,
@@ -239,7 +345,7 @@ impl Session {
             last_status: Instant::now() - Duration::from_secs(1),
             completion: None,
             analysis: p.analysis,
-            context: crate::analysis::context::Worker::start()?,
+            context,
             voice: None,
             pulse: None,
             session_id: super::new_session_id(),
@@ -251,6 +357,7 @@ impl Session {
             system_process_pids,
             system_device_id,
             last_device_check: Instant::now(),
+            last_system_progress: None,
         })
     }
     fn install_system_pipeline(&mut self, p: Pipeline) {
@@ -268,11 +375,12 @@ impl Session {
         self.output_buffer_frames = p.binding.buffer_frames;
         self.output_latency_frames = p.binding.latency_frames;
         self.output_safety_offset_frames = p.binding.safety_offset_frames;
-        self.system_device_id = p.binding.coreaudio_id.unwrap_or(0);
+        self.system_device_id = p.device_id;
         self.sent_revision = p.revision;
         self.sent_music_revision = Some(p.music_revision);
         self.sent_capability = p.capability;
         self.device_match_started = false;
+        self.last_system_progress = None;
         self.rebind_count = self.rebind_count.saturating_add(1);
         self.last_rebind_ms = Some(crate::analysis::now_ms());
         self.context.reset();
@@ -339,15 +447,16 @@ impl Session {
             "Choose a physical output device, not a loopback device"
         );
         // Wait only on the control thread. A vanished device may never acknowledge,
-        // so teardown remains bounded. Retire the renderer before releasing the tap
-        // mute to avoid overlapping buffered processed audio with restored playback.
+        // so teardown remains bounded. Fade the replacement first, then restore the
+        // original application path while the replacement stream still exists, and
+        // only then release that stream. This avoids both overlap and a silent gap.
         self.metrics.stopping.store(true, Ordering::Release);
         let deadline = Instant::now() + Duration::from_millis(75);
         while !self.metrics.faded_out.load(Ordering::Acquire) && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(2));
         }
-        self.streams.clear();
         self.tap.take();
+        self.streams.clear();
         let processes = self.system_processes.clone();
         match pipeline(&self.store, output, &processes) {
             Ok(p) => {
@@ -374,13 +483,47 @@ impl Session {
             .tap
             .as_ref()
             .is_some_and(TapCapture::configuration_pending);
-        if self.tap.is_none()
-            || (!pending_configuration
-                && self.last_device_check.elapsed() < Duration::from_millis(300))
-        {
+        let periodic_check = self.last_device_check.elapsed() >= Duration::from_millis(300);
+        if self.tap.is_none() || (!pending_configuration && !periodic_check) {
             return Ok(());
         }
-        self.last_device_check = Instant::now();
+        if periodic_check {
+            let now = Instant::now();
+            self.last_device_check = now;
+            let progress = (
+                self.metrics.callback_calls.load(Ordering::Acquire),
+                self.metrics.capture_callback_calls.load(Ordering::Acquire),
+            );
+            let (observed, stalled) = observe_progress(
+                self.last_system_progress,
+                progress,
+                now,
+                output_stall_timeout(self.output_buffer_frames, self.sample_rate),
+            );
+            self.last_system_progress = Some(observed);
+            if stalled {
+                // Capture is advancing while the physical replacement output has stopped.
+                // Quarantine any callback that unexpectedly resumes and restore original
+                // playback while the replacement stream is still alive. If the live tap
+                // property update fails, destroy the tap immediately rather than leaving
+                // both original and replacement paths silent until later session teardown.
+                self.metrics
+                    .output_quarantined
+                    .store(true, Ordering::Release);
+                self.stop_requested = true;
+                let restore_error = self
+                    .tap
+                    .as_mut()
+                    .and_then(|tap| tap.disarm_replacement().err());
+                if let Some(restore_error) = restore_error {
+                    self.tap.take();
+                    return Err(restore_error.context(
+                        "Replacement output stalled and the live CoreAudio tap could not restore original playback before tap destruction",
+                    ));
+                }
+                return Ok(());
+            }
+        }
         if self
             .tap
             .as_ref()
@@ -470,5 +613,97 @@ impl Session {
             return Ok(());
         }
         self.rebind_system_output(None)
+    }
+}
+
+#[cfg(test)]
+mod progress_tests {
+    use super::{observe_progress, output_progress_timeout, output_stall_timeout};
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn progress_guard_fails_open_on_output_capture_or_combined_stalls() {
+        let start = Instant::now();
+        let timeout = Duration::from_millis(750);
+        let (first, stalled) = observe_progress(None, (10, 100), start, timeout);
+        assert!(!stalled);
+
+        // No side has exceeded its window yet.
+        let (early, stalled) = observe_progress(
+            Some(first),
+            (10, 200),
+            start + Duration::from_millis(600),
+            timeout,
+        );
+        assert!(!stalled);
+
+        // Capture advances while the replacement output is stuck.
+        let (_, stalled) = observe_progress(
+            Some(early),
+            (10, 300),
+            start + Duration::from_millis(800),
+            timeout,
+        );
+        assert!(stalled);
+
+        // Output advances while the tap capture is stuck.
+        let (capture_base, stalled) = observe_progress(None, (20, 400), start, timeout);
+        assert!(!stalled);
+        let (_, stalled) = observe_progress(
+            Some(capture_base),
+            (21, 400),
+            start + Duration::from_millis(800),
+            timeout,
+        );
+        assert!(stalled);
+
+        // If both sides stop, the physical replacement callback itself is enough evidence
+        // to fail open; capture progress is not required as a witness.
+        let (both_base, stalled) = observe_progress(None, (30, 500), start, timeout);
+        assert!(!stalled);
+        let (_, stalled) = observe_progress(
+            Some(both_base),
+            (30, 500),
+            start + Duration::from_millis(800),
+            timeout,
+        );
+        assert!(stalled);
+
+        // Genuine progress on both sides resets both watchdog clocks.
+        let (healthy, stalled) = observe_progress(None, (40, 600), start, timeout);
+        assert!(!stalled);
+        let (_, stalled) = observe_progress(
+            Some(healthy),
+            (41, 700),
+            start + Duration::from_secs(2),
+            timeout,
+        );
+        assert!(!stalled);
+
+        // Counter discontinuity/reset is still progress, not a stall.
+        let (_, stalled) = observe_progress(
+            Some(healthy),
+            (39, 701),
+            start + Duration::from_secs(2),
+            timeout,
+        );
+        assert!(!stalled);
+    }
+
+    #[test]
+    fn progress_windows_scale_with_the_real_output_buffer_period() {
+        assert_eq!(
+            output_stall_timeout(Some(512), 48_000),
+            Duration::from_millis(750)
+        );
+        assert_eq!(
+            output_progress_timeout(Some(512), 48_000, Duration::from_secs(1)),
+            Duration::from_secs(1)
+        );
+        let large = output_stall_timeout(Some(65_536), 44_100);
+        let startup = output_progress_timeout(Some(65_536), 44_100, Duration::from_secs(1));
+        assert!(large > Duration::from_secs(4));
+        assert!(large <= Duration::from_secs(5));
+        assert_eq!(startup, large);
     }
 }

@@ -6,6 +6,18 @@ fn settings() -> Settings {
 }
 
 #[test]
+fn source_start_wait_requires_real_renderer_progress_and_fails_on_output_error() {
+    let metrics = Metrics::default();
+    assert!(wait_source_started(&metrics, Duration::ZERO).is_err());
+
+    metrics.source_started.store(true, Ordering::Release);
+    wait_source_started(&metrics, Duration::ZERO).unwrap();
+
+    metrics.errors.store(1, Ordering::Release);
+    assert!(wait_source_started(&metrics, Duration::ZERO).is_err());
+}
+
+#[test]
 fn startup_envelope_waits_for_actual_capture_frames_not_output_callbacks() {
     let metrics = Metrics::default();
     let queue = Arc::new(ArrayQueue::new(8192));

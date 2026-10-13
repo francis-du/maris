@@ -59,6 +59,81 @@ fn input_stream_scope_matches_the_coreaudio_abi() {
     assert_eq!(usage.scope, 0x696e7074);
     assert_eq!(streams.selector, 0x73746d23);
     assert_eq!(usage.selector, 0x73757365);
+    assert_eq!(ca::MAX_DRIFT_COMPENSATION_QUALITY, 0x7f);
+    // kAudioAggregateDevicePropertyMainSubDevice / ActiveSubDeviceList.
+    assert_eq!(u32::from_be_bytes(*b"amst"), 0x616d7374);
+    assert_eq!(u32::from_be_bytes(*b"agrp"), 0x61677270);
+    assert_eq!(u32::from_be_bytes(*b"tdsc"), 0x74647363);
+}
+
+#[test]
+fn aggregate_clock_validation_fails_closed_on_wrong_or_inactive_physical_output() {
+    ca::verify_aggregate_clock_state("speaker.uid", &[7, 9], "speaker.uid", 7).unwrap();
+
+    let wrong_main =
+        ca::verify_aggregate_clock_state("other.uid", &[7, 9], "speaker.uid", 7).unwrap_err();
+    assert!(wrong_main
+        .to_string()
+        .contains("unexpected main clock device"));
+
+    let inactive =
+        ca::verify_aggregate_clock_state("speaker.uid", &[9, 11], "speaker.uid", 7).unwrap_err();
+    assert!(inactive.to_string().contains("is not active"));
+}
+
+#[test]
+fn original_playback_restore_quarantines_replacement_before_native_update() {
+    let metrics = Metrics::default();
+    let error = quarantine_then_restore(&metrics, || {
+        assert!(metrics.output_quarantined.load(Ordering::Acquire));
+        anyhow::bail!("injected native restore failure")
+    })
+    .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("injected native restore failure"));
+    assert!(metrics.output_quarantined.load(Ordering::Acquire));
+}
+
+#[test]
+fn capture_start_window_scales_with_the_aggregate_buffer_period() {
+    assert_eq!(
+        capture_progress_timeout(Some(512), 48_000),
+        std::time::Duration::from_secs(2)
+    );
+    let large = capture_progress_timeout(Some(65_536), 44_100);
+    assert!(large > std::time::Duration::from_secs(4));
+    assert!(large <= std::time::Duration::from_secs(5));
+    assert_eq!(
+        capture_progress_timeout(None, 48_000),
+        std::time::Duration::from_secs(2)
+    );
+}
+
+#[test]
+fn capture_gate_blocks_new_callbacks_and_waits_for_existing_readers() {
+    let gate = Arc::new(AtomicU64::new(0));
+    let first = enter_capture(&gate).expect("initial callback should enter");
+    assert_eq!(gate.load(Ordering::Acquire), CAPTURE_GATE_READER);
+
+    let worker_gate = gate.clone();
+    let worker = std::thread::spawn(move || {
+        block_capture(&worker_gate, std::time::Duration::from_secs(1)).unwrap();
+        assert_eq!(worker_gate.load(Ordering::Acquire), CAPTURE_GATE_BLOCKED);
+        assert!(enter_capture(&worker_gate).is_none());
+        unblock_capture(&worker_gate);
+    });
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+    while gate.load(Ordering::Acquire) & CAPTURE_GATE_BLOCKED == 0 {
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::yield_now();
+    }
+    assert!(enter_capture(&gate).is_none());
+    drop(first);
+    worker.join().unwrap();
+    assert_eq!(gate.load(Ordering::Acquire), 0);
+    assert!(enter_capture(&gate).is_some());
 }
 
 fn context(capacity: usize) -> Capture {
@@ -66,6 +141,7 @@ fn context(capacity: usize) -> Capture {
         queue: Arc::new(ArrayQueue::new(capacity)),
         metrics: Arc::new(Metrics::default()),
         next_sample: AtomicU64::new(f64::NAN.to_bits()),
+        gate: AtomicU64::new(0),
     }
 }
 fn interleaved(data: &mut [f32], channels: u32) -> ca::BufferList {
@@ -404,4 +480,11 @@ fn native_empty_callback_does_not_invent_audio() {
     process(&list, &mut context);
     assert!(context.queue.is_empty());
     assert_eq!(context.metrics.captured_frames.load(Ordering::Relaxed), 0);
+    assert_eq!(
+        context
+            .metrics
+            .capture_callback_calls
+            .load(Ordering::Relaxed),
+        1
+    );
 }
