@@ -81,10 +81,11 @@ jobs:
           import os
           import re
 
-          root = Path('.release-download')
-          manifests = list(root.rglob('maris-release.tsv'))
+          root = Path('.release-download').resolve()
+          manifests = [p for p in root.rglob('maris-release.tsv')
+                       if p.is_file() and not p.is_symlink() and p.resolve().is_relative_to(root)]
           if len(manifests) != 1:
-              raise SystemExit(f'expected exactly one assembled manifest, found {len(manifests)}')
+              raise SystemExit(f'expected exactly one real assembled manifest, found {len(manifests)}')
           manifest = manifests[0]
           text = manifest.read_text(encoding='ascii')
           if '\r' in text:
@@ -141,9 +142,10 @@ jobs:
           for system, arch, name, expected_hash, expected_bytes, binary_hash in assets:
               if len(expected_hash) != 64 or len(binary_hash) != 64:
                   raise SystemExit(f'invalid checksum field for {name}')
-              matches = [p for p in root.rglob(name) if p.is_file()]
+              matches = [p for p in root.rglob(name)
+                         if p.is_file() and not p.is_symlink() and p.resolve().is_relative_to(root)]
               if len(matches) != 1:
-                  raise SystemExit(f'expected one {name}, found {len(matches)}')
+                  raise SystemExit(f'expected one real in-root {name}, found {len(matches)}')
               source = matches[0]
               actual_bytes = source.stat().st_size
               actual_hash = hashlib.sha256(source.read_bytes()).hexdigest()
