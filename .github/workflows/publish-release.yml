@@ -111,9 +111,28 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "Maris $RELEASE_VERSION" \
             --generate-notes
+
+          rollback_owned_release() {
+            local tag_sha
+            tag_sha="$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq '.sha' 2>/dev/null || true)"
+            if [ "$tag_sha" = "$GITHUB_SHA" ]; then
+              gh release delete "$RELEASE_TAG" --yes --cleanup-tag
+            else
+              gh release delete "$RELEASE_TAG" --yes
+              echo "Release tag ownership changed; removed only the release and preserved the tag." >&2
+            fi
+          }
+
+          created_tag_sha="$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq '.sha' 2>/dev/null || true)"
+          if [ "$created_tag_sha" != "$GITHUB_SHA" ]; then
+            rollback_owned_release
+            echo "Release tag did not resolve to the validated source after creation" >&2
+            exit 1
+          fi
+
           git fetch --no-tags --depth=1 origin main
           if [ "$(git rev-parse FETCH_HEAD)" != "$GITHUB_SHA" ]; then
-            gh release delete "$RELEASE_TAG" --yes --cleanup-tag
+            rollback_owned_release
             echo "main advanced while the draft release was being created; rolled it back" >&2
             exit 1
           fi
@@ -143,11 +162,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ needs.publish.outputs.release_tag }}
+          SOURCE_SHA: ${{ needs.publish.outputs.source_sha }}
         run: |
           set -euo pipefail
-          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Missing owned release tag for rollback" >&2
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ ! "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]; then
+            echo "Missing owned release identity for rollback" >&2
             exit 1
           fi
           gh release view "$RELEASE_TAG" >/dev/null
-          gh release delete "$RELEASE_TAG" --yes --cleanup-tag
+          tag_sha="$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq '.sha' 2>/dev/null || true)"
+          if [ "$tag_sha" = "$SOURCE_SHA" ]; then
+            gh release delete "$RELEASE_TAG" --yes --cleanup-tag
+          else
+            gh release delete "$RELEASE_TAG" --yes
+            echo "Release tag no longer belongs to this publication; preserved the tag while removing the release." >&2
+            exit 1
+          fi
