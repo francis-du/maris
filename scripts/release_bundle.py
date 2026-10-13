@@ -164,13 +164,19 @@ def commit_release_inputs(
     created_record = False
 
     def exact_archive() -> bool:
-        return (archive.exists() and not archive.is_symlink()
-                and archive.stat().st_size == packed.stat().st_size
-                and digest(archive) == expected_sha256)
+        try:
+            return (archive.is_file() and not archive.is_symlink()
+                    and archive.stat().st_size == packed.stat().st_size
+                    and digest(archive) == expected_sha256)
+        except OSError:
+            return False
 
     def exact_record() -> bool:
-        return (record_path.exists() and not record_path.is_symlink()
-                and record_path.read_bytes() == record_ready.read_bytes())
+        try:
+            return (record_path.is_file() and not record_path.is_symlink()
+                    and record_path.read_bytes() == record_ready.read_bytes())
+        except OSError:
+            return False
 
     def unlink_our_link(path: Path, source: Path) -> None:
         try:
