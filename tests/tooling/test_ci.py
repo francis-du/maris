@@ -187,6 +187,19 @@ class ToolchainRequirements(unittest.TestCase):
                 self.assertIn(runner, publish)
 
     @unittest.skipUnless(BASH, 'Bash release identity execution required')
+    def test_release_asset_workflow_uses_installer_strict_manifest_contract(self):
+        publish = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
+        self.assertIn("expected_metadata = ['version', 'source_sha256', 'channel', 'interface']", publish)
+        self.assertIn('metadata rows are missing, reordered or duplicated', publish)
+        self.assertIn("values['source_sha256'] != os.environ['SOURCE_SHA']", publish)
+        self.assertIn("re.fullmatch(r'[a-f0-9]{64}', values['source_sha256'])", publish)
+        self.assertIn("re.fullmatch(r'[1-9][0-9]{0,8}', archive_bytes)", publish)
+        self.assertIn("int(archive_bytes) > 134217728", publish)
+        self.assertIn("release manifest must use LF line endings", publish)
+        self.assertIn("not p.is_symlink() and p.resolve().is_relative_to(root)", publish)
+        self.assertIn("expected one real in-root", publish)
+
+
     def test_release_identity_gate_rejects_wrong_version_and_ref_before_native_matrix(self):
         text = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')
         block = re.search(
