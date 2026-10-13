@@ -71,6 +71,13 @@ fn unblock_capture(gate: &AtomicU64) {
     gate.fetch_and(!CAPTURE_GATE_BLOCKED, Ordering::Release);
 }
 
+fn quarantine_then_restore(metrics: &Metrics, restore: impl FnOnce() -> Result<()>) -> Result<()> {
+    // A replacement callback may resume after the bounded fade wait expires. Block
+    // it at both renderer quarantine checks before restoring the original path.
+    metrics.output_quarantined.store(true, Ordering::Release);
+    restore()
+}
+
 fn device_list_changed(object: u32, addresses: &[ca::Address]) -> bool {
     object == ca::SYSTEM_OBJECT
         && addresses
@@ -182,6 +189,7 @@ fn read_device_topology() -> Result<Vec<(u32, Option<String>)>> {
 
 pub(super) struct TapCapture {
     api: ca::TapApi,
+    metrics: Arc<Metrics>,
     tap: u32,
     aggregate: u32,
     io: ca::IoId,
@@ -369,6 +377,7 @@ impl TapCapture {
         configure_description(&description);
         let mut result = Self {
             api,
+            metrics: metrics.clone(),
             tap: 0,
             aggregate: 0,
             io: ptr::null_mut(),
@@ -741,7 +750,8 @@ impl TapCapture {
 
     pub(super) fn disarm_replacement(&mut self) -> Result<()> {
         if self.muted {
-            self.set_mute_behavior(0)?;
+            let metrics = self.metrics.clone();
+            quarantine_then_restore(&metrics, || self.set_mute_behavior(0))?;
         }
         Ok(())
     }
