@@ -415,9 +415,14 @@ try {
     [Console]::Error.WriteLine('Maris install: ' + $_.Exception.Message)
     $exitCode = 1
 } finally {
-    if (-not $committed -and $backup -and [IO.Directory]::Exists((Join-Path $backup 'Maris')) -and -not (Test-Path -LiteralPath $destination)) {
-        try { [IO.Directory]::Move((Join-Path $backup 'Maris'), $destination) }
-        catch { [Console]::Error.WriteLine("Recovery required: $backup\Maris"); $exitCode = 1 }
+    if (-not $committed -and $backup -and [IO.Directory]::Exists((Join-Path $backup 'Maris'))) {
+        if (-not (Test-Path -LiteralPath $destination)) {
+            try { [IO.Directory]::Move((Join-Path $backup 'Maris'), $destination) }
+            catch { [Console]::Error.WriteLine("Recovery required: $backup\Maris"); $exitCode = 1 }
+        } else {
+            [Console]::Error.WriteLine("Recovery required: $backup\Maris")
+            $exitCode = 1
+        }
     }
     foreach ($owned in @($stage, $buildDirectory, $downloadDirectory)) {
         if ($owned -and [IO.Directory]::Exists($owned)) {
