@@ -340,6 +340,12 @@ def inspect_kit(archive: Path, item: dict) -> None:
 
 def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: dict | None = None) -> str:
     records = []
+    verified_inputs = []
+
+    def identity(path: Path) -> tuple[int, int, int]:
+        stat_result = path.stat()
+        return (stat_result.st_dev, stat_result.st_ino, stat_result.st_size)
+
     for file in sorted(directory.rglob('*.release.json')):
         if file.is_symlink():
             raise ValueError('Linked release record rejected')
@@ -363,6 +369,14 @@ def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: di
         if not re.fullmatch('[a-f0-9]{64}', item['binary_sha256']) or not re.fullmatch('[a-f0-9]{64}', item['source_sha256']):
             raise ValueError('Invalid release digests')
         inspect_kit(archive, item)
+        verified_inputs.append((
+            file,
+            identity(file),
+            file.read_bytes(),
+            archive,
+            identity(archive),
+            item['sha256'],
+        ))
         records.append(item)
     if len(records) != 6 or {(r['platform'], r['architecture']) for r in records} != TARGETS:
         raise ValueError('All six distinct native CI targets are required')
@@ -413,6 +427,21 @@ def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: di
     for item in sorted(records, key=lambda r: (r['platform'], r['architecture'])):
         lines.append('\t'.join(['asset', item['platform'], item['architecture'], item['archive'],
                                 item['sha256'], str(item['bytes']), item['binary_sha256']]))
+    # Bind the manifest to the exact record/archive objects inspected above.
+    # Another process must not be able to replace validated paths while the
+    # cross-target checks run and leave a manifest describing stale bytes.
+    for record_path, record_identity, record_bytes, archive, archive_identity, archive_sha256 in verified_inputs:
+        try:
+            if (record_path.is_symlink() or not record_path.is_file()
+                    or identity(record_path) != record_identity
+                    or record_path.read_bytes() != record_bytes
+                    or archive.is_symlink() or not archive.is_file()
+                    or identity(archive) != archive_identity
+                    or digest(archive) != archive_sha256):
+                raise ValueError('Release inputs changed while building the manifest')
+        except OSError as error:
+            raise ValueError('Release inputs changed while building the manifest') from error
+
     if output.exists() or output.is_symlink():
         raise ValueError('Manifest destination already exists')
     output.parent.mkdir(parents=True, exist_ok=True)
