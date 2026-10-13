@@ -43,12 +43,10 @@ pub(super) fn add_runtime_diagnostics(status: &mut serde_json::Value, session: &
     status["output_quarantined"] =
         serde_json::json!(metrics.output_quarantined.load(Ordering::Acquire));
     status["audio_callback_errors"] = serde_json::json!(metrics.errors.load(Ordering::Acquire));
-    status["coreaudio_fail_open_reason"] = serde_json::json!(
-        session
-            .last_system_progress
-            .and_then(|progress| progress.failure)
-            .map(ProgressStall::label)
-    );
+    status["coreaudio_fail_open_reason"] = serde_json::json!(session
+        .last_system_progress
+        .and_then(|progress| progress.failure)
+        .map(ProgressStall::label));
 }
 
 struct Pipeline {
