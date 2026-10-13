@@ -450,15 +450,16 @@ def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: di
     # cross-target checks run and leave a manifest describing stale bytes.
     for record_path, record_identity, record_bytes, archive, archive_identity, archive_sha256 in verified_inputs:
         try:
-            if (record_path.is_symlink() or not record_path.is_file()
-                    or identity(record_path) != record_identity
-                    or record_path.read_bytes() != record_bytes
-                    or archive.is_symlink() or not archive.is_file()
-                    or identity(archive) != archive_identity
-                    or digest(archive) != archive_sha256):
-                raise ValueError('Release inputs changed while building the manifest')
-        except OSError as error:
+            current_record_identity, current_record_bytes = snapshot_record(record_path)
+            changed = (current_record_identity != record_identity
+                       or current_record_bytes != record_bytes
+                       or archive.is_symlink() or not archive.is_file()
+                       or identity(archive) != archive_identity
+                       or digest(archive) != archive_sha256)
+        except (OSError, ValueError) as error:
             raise ValueError('Release inputs changed while building the manifest') from error
+        if changed:
+            raise ValueError('Release inputs changed while building the manifest')
 
     if output.exists() or output.is_symlink():
         raise ValueError('Manifest destination already exists')
