@@ -323,6 +323,47 @@ jobs:
           echo "Release tag $RELEASE_TAG moved from successful build $SOURCE_SHA to $actual; installer assets were removed." >&2
           exit 1
 
+      - name: Reverify public installer asset bytes before installation smoke
+        if: steps.release.outputs.publish == 'true' && steps.assets.outputs.failed != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          rm -rf .release-final
+          mkdir .release-final
+          expected=()
+          for path in .release-upload/*; do
+            [ -f "$path" ] || continue
+            expected+=("$(basename "$path")")
+          done
+          if [ "${#expected[@]}" -ne 8 ]; then
+            echo "Expected exactly eight installer-facing release assets" >&2
+            exit 1
+          fi
+          for asset in "${expected[@]}"; do
+            if ! gh release download "$RELEASE_TAG" --pattern "$asset" --dir .release-final --clobber; then
+              echo "Public release asset disappeared before installation smoke: $asset" >&2
+              exit 1
+            fi
+            if cmp -s ".release-upload/$asset" ".release-final/$asset"; then
+              continue
+            fi
+
+            # Retry once before deleting by name: a concurrent repair between the first
+            # download and this check must not be removed as though it were still corrupt.
+            rm -f ".release-final/$asset"
+            if gh release download "$RELEASE_TAG" --pattern "$asset" --dir .release-final --clobber \
+                && cmp -s ".release-upload/$asset" ".release-final/$asset"; then
+              continue
+            fi
+            gh release delete-asset "$RELEASE_TAG" "$asset" --yes
+            echo "Public release asset changed after exact verification/upload: $asset" >&2
+            exit 1
+          done
+
   public-install-smoke:
     needs: publish
     if: needs.publish.outputs.publish == 'true'
