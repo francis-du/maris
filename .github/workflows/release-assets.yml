@@ -9,7 +9,9 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: release-assets-${{ github.event.workflow_run.head_sha }}
+  # Release/tag mutation is repository-global state. Different source commits must
+  # never upload, verify or clean the same GitHub Release concurrently.
+  group: release-assets-${{ github.repository }}
   cancel-in-progress: false
 jobs:
   publish:
@@ -58,7 +60,11 @@ jobs:
             echo "Tag $tag does not match Cargo version $cargo_version" >&2
             exit 1
           fi
-          gh release view "$tag" >/dev/null
+          release_ok="$(gh release view "$tag" --json isDraft,isPrerelease,publishedAt --jq '(.isDraft == false and .isPrerelease == false and .publishedAt != null)')"
+          if [ "$release_ok" != true ]; then
+            echo "Release $tag must already be published, non-draft and non-prerelease before installer assets can be mutated." >&2
+            exit 1
+          fi
           echo "publish=true" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - name: Download exact successful run artifacts
@@ -72,49 +78,68 @@ jobs:
         if: steps.release.outputs.publish == 'true'
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import hashlib
           import shutil
           import os
+          import re
 
-          root = Path('.release-download')
-          manifests = list(root.rglob('maris-release.tsv'))
+          root = Path('.release-download').resolve()
+          manifests = [p for p in root.rglob('maris-release.tsv')
+                       if p.is_file() and not p.is_symlink() and p.resolve().is_relative_to(root)]
           if len(manifests) != 1:
-              raise SystemExit(f'expected exactly one assembled manifest, found {len(manifests)}')
+              raise SystemExit(f'expected exactly one real assembled manifest, found {len(manifests)}')
           manifest = manifests[0]
-          lines = manifest.read_text(encoding='ascii').splitlines()
-          values = {}
+          text = manifest.read_text(encoding='ascii')
+          if '\r' in text:
+              raise SystemExit('release manifest must use LF line endings')
+          lines = text.rstrip('\n').split('\n')
+          version = os.environ['RELEASE_TAG'].removeprefix('v')
+          if len(lines) != 11 or lines[0] != 'maris-release-v2':
+              raise SystemExit('installers require one exact 11-line v2 CLI release manifest')
+
+          metadata = [line.split('\t') for line in lines[1:5]]
+          expected_metadata = ['version', 'source_sha256', 'channel', 'interface']
+          if any(len(fields) != 2 or fields[0] != expected_metadata[index]
+                 for index, fields in enumerate(metadata)):
+              raise SystemExit('release manifest metadata rows are missing, reordered or duplicated')
+          values = {fields[0]: fields[1] for fields in metadata}
+          if (values['version'] != version
+                  or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', values['version'])
+                  or values['source_sha256'] != os.environ['SOURCE_SHA']
+                  or not re.fullmatch(r'[a-f0-9]{64}', values['source_sha256'])
+                  or values['channel'] != 'stable'
+                  or values['interface'] != 'cli'):
+              raise SystemExit('assembled manifest is not the exact stable CLI release for this tag')
+
           assets = []
           seen_targets = set()
-          for line in lines:
-              fields = line.split('\t')
-              if fields[0] == 'asset':
-                  if len(fields) != 7:
-                      raise SystemExit('invalid asset row in release manifest')
-                  system, arch, name, archive_hash, archive_bytes, binary_hash = fields[1:]
-                  expected_name = f"Maris-{values.get('version', '')}-{system}-{arch}" + ('.zip' if system == 'windows' else '.tar.gz')
-                  if name != expected_name:
-                      raise SystemExit(f'installer-visible asset name mismatch: {name} != {expected_name}')
-                  if (system, arch) in seen_targets:
-                      raise SystemExit(f'duplicate installer target: {system}/{arch}')
-                  seen_targets.add((system, arch))
-                  assets.append((system, arch, name, archive_hash, archive_bytes, binary_hash))
-              elif len(fields) == 2:
-                  values[fields[0]] = fields[1]
-
-          version = os.environ['RELEASE_TAG'].removeprefix('v')
           expected_targets = {
               ('macos', 'x86_64'), ('macos', 'arm64'),
               ('linux', 'x86_64'), ('linux', 'arm64'),
               ('windows', 'x86_64'), ('windows', 'arm64'),
           }
-          if lines[0] != 'maris-release-v2':
-              raise SystemExit('installers require the v2 CLI release manifest')
-          if values.get('version') != version or values.get('channel') != 'stable' or values.get('interface') != 'cli':
-              raise SystemExit('assembled manifest is not the stable CLI release for this tag')
-          if seen_targets != expected_targets or len(lines) != 11:
+          for line in lines[5:]:
+              fields = line.split('\t')
+              if len(fields) != 7 or fields[0] != 'asset':
+                  raise SystemExit('invalid asset row in release manifest')
+              system, arch, name, archive_hash, archive_bytes, binary_hash = fields[1:]
+              if (system, arch) not in expected_targets or (system, arch) in seen_targets:
+                  raise SystemExit(f'invalid or duplicate installer target: {system}/{arch}')
+              expected_name = f"Maris-{version}-{system}-{arch}" + ('.zip' if system == 'windows' else '.tar.gz')
+              if name != expected_name:
+                  raise SystemExit(f'installer-visible asset name mismatch: {name} != {expected_name}')
+              if (not re.fullmatch(r'[a-f0-9]{64}', archive_hash)
+                      or not re.fullmatch(r'[a-f0-9]{64}', binary_hash)
+                      or not re.fullmatch(r'[1-9][0-9]{0,8}', archive_bytes)
+                      or int(archive_bytes) > 134217728):
+                  raise SystemExit(f'invalid checksum or size field for {name}')
+              seen_targets.add((system, arch))
+              assets.append((system, arch, name, archive_hash, archive_bytes, binary_hash))
+          if seen_targets != expected_targets:
               raise SystemExit('manifest must contain exactly the six installer-supported native targets')
 
           out = Path('.release-upload')
@@ -123,9 +148,10 @@ jobs:
           for system, arch, name, expected_hash, expected_bytes, binary_hash in assets:
               if len(expected_hash) != 64 or len(binary_hash) != 64:
                   raise SystemExit(f'invalid checksum field for {name}')
-              matches = [p for p in root.rglob(name) if p.is_file()]
+              matches = [p for p in root.rglob(name)
+                         if p.is_file() and not p.is_symlink() and p.resolve().is_relative_to(root)]
               if len(matches) != 1:
-                  raise SystemExit(f'expected one {name}, found {len(matches)}')
+                  raise SystemExit(f'expected one real in-root {name}, found {len(matches)}')
               source = matches[0]
               actual_bytes = source.stat().st_size
               actual_hash = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -323,6 +349,47 @@ jobs:
           echo "Release tag $RELEASE_TAG moved from successful build $SOURCE_SHA to $actual; installer assets were removed." >&2
           exit 1
 
+      - name: Reverify public installer asset bytes before installation smoke
+        if: steps.release.outputs.publish == 'true' && steps.assets.outputs.failed != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          rm -rf .release-final
+          mkdir .release-final
+          expected=()
+          for path in .release-upload/*; do
+            [ -f "$path" ] || continue
+            expected+=("$(basename "$path")")
+          done
+          if [ "${#expected[@]}" -ne 8 ]; then
+            echo "Expected exactly eight installer-facing release assets" >&2
+            exit 1
+          fi
+          for asset in "${expected[@]}"; do
+            if ! gh release download "$RELEASE_TAG" --pattern "$asset" --dir .release-final --clobber; then
+              echo "Public release asset disappeared before installation smoke: $asset" >&2
+              exit 1
+            fi
+            if cmp -s ".release-upload/$asset" ".release-final/$asset"; then
+              continue
+            fi
+
+            # Retry once before deleting by name: a concurrent repair between the first
+            # download and this check must not be removed as though it were still corrupt.
+            rm -f ".release-final/$asset"
+            if gh release download "$RELEASE_TAG" --pattern "$asset" --dir .release-final --clobber \
+                && cmp -s ".release-upload/$asset" ".release-final/$asset"; then
+              continue
+            fi
+            gh release delete-asset "$RELEASE_TAG" "$asset" --yes
+            echo "Public release asset changed after exact verification/upload: $asset" >&2
+            exit 1
+          done
+
   public-install-smoke:
     needs: publish
     if: needs.publish.outputs.publish == 'true'
@@ -335,14 +402,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
-      - name: Checkout release-source bootstrap for a fresh or resumed publication
-        if: needs.publish.outputs.mode != 'reuse'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-          persist-credentials: false
-      - name: Checkout the current public bootstrap when revalidating existing assets
-        if: needs.publish.outputs.mode == 'reuse'
+      - name: Checkout the current public bootstrap
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
