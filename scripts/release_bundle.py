@@ -161,27 +161,62 @@ def commit_release_inputs(
 ) -> None:
     """Atomically converge an exact archive/record pair after races or process crashes."""
     created_archive = False
+    created_record = False
+
+    def exact_archive() -> bool:
+        try:
+            return (archive.is_file() and not archive.is_symlink()
+                    and archive.stat().st_size == packed.stat().st_size
+                    and digest(archive) == expected_sha256)
+        except OSError:
+            return False
+
+    def exact_record() -> bool:
+        try:
+            return (record_path.is_file() and not record_path.is_symlink()
+                    and record_path.read_bytes() == record_ready.read_bytes())
+        except OSError:
+            return False
+
+    def unlink_our_link(path: Path, source: Path) -> None:
+        try:
+            if path.exists() and not path.is_symlink() and path.samefile(source):
+                path.unlink()
+        except (FileNotFoundError, OSError):
+            pass
+
     if archive.exists():
-        if archive.is_symlink() or archive.stat().st_size != packed.stat().st_size or digest(archive) != expected_sha256:
+        if not exact_archive():
             raise ValueError('Existing release archive differs from the exact rebuilt input')
     else:
         try:
             os.link(packed, archive)
             created_archive = True
         except FileExistsError:
-            if archive.is_symlink() or archive.stat().st_size != packed.stat().st_size or digest(archive) != expected_sha256:
+            if not exact_archive():
                 raise ValueError('Existing release archive differs from the exact rebuilt input')
     try:
         os.link(record_ready, record_path)
+        created_record = True
     except FileExistsError:
-        if record_path.is_symlink() or record_path.read_bytes() != record_ready.read_bytes():
+        if not exact_record():
             if created_archive:
-                archive.unlink(missing_ok=True)
+                unlink_our_link(archive, packed)
             raise ValueError('Existing release record differs from the exact rebuilt input')
     except Exception:
         if created_archive:
-            archive.unlink(missing_ok=True)
+            unlink_our_link(archive, packed)
         raise
+
+    # A competing process can replace a previously verified final path while the
+    # matching hard-link is being committed. Revalidate the pair after both names
+    # exist so verification and publication cannot refer to different bytes.
+    if not exact_archive() or not exact_record():
+        if created_record:
+            unlink_our_link(record_path, record_ready)
+        if created_archive:
+            unlink_our_link(archive, packed)
+        raise ValueError('Release archive/record pair changed while being committed')
 
 
 def inspect_kit(archive: Path, item: dict) -> None:
