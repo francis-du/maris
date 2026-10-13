@@ -187,6 +187,18 @@ class ToolchainRequirements(unittest.TestCase):
                 self.assertIn(runner, publish)
 
     @unittest.skipUnless(BASH, 'Bash release identity execution required')
+    def test_release_publication_reverifies_public_bytes_before_install_smoke(self):
+        publish = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
+        verify = 'Reverify public installer asset bytes before installation smoke'
+        self.assertIn(verify, publish)
+        self.assertIn('rm -rf .release-final', publish)
+        self.assertIn('cmp -s ".release-upload/$asset" ".release-final/$asset"', publish)
+        self.assertIn('Public release asset disappeared before installation smoke', publish)
+        self.assertIn('Public release asset changed after exact verification/upload', publish)
+        self.assertIn('gh release delete-asset "$RELEASE_TAG" "$asset" --yes', publish)
+        self.assertLess(publish.index(verify), publish.index('  public-install-smoke:'))
+
+
     def test_release_identity_gate_rejects_wrong_version_and_ref_before_native_matrix(self):
         text = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')
         block = re.search(
