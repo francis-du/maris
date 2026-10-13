@@ -70,6 +70,34 @@ class ReleaseKits(unittest.TestCase):
             self.assertEqual(len(output.read_text().splitlines()), 10)
             self.assertIn('channel\tcandidate', output.read_text())
 
+    def test_record_replacement_after_parse_cannot_rebind_manifest_validation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            records = make_records(root)
+            target = records[0]
+            replacement = json.loads(target.read_text(encoding='utf-8'))
+            replacement['ci_run'] = '9999'
+            original_inspect = inspect_kit
+            replaced = False
+
+            def replace_record_after_parse(archive, item):
+                nonlocal replaced
+                original_inspect(archive, item)
+                if not replaced and archive.parent == target.parent:
+                    staged = target.with_suffix('.replacement')
+                    staged.write_text(json.dumps(replacement), encoding='utf-8')
+                    os.replace(staged, target)
+                    replaced = True
+
+            output = root / 'output/maris-release.tsv'
+            with patch('release_bundle.inspect_kit', side_effect=replace_record_after_parse):
+                with self.assertRaisesRegex(ValueError, 'Release inputs changed while building the manifest'):
+                    combine(root, output)
+
+            self.assertTrue(replaced)
+            self.assertFalse(output.exists())
+            self.assertEqual(json.loads(target.read_text(encoding='utf-8'))['ci_run'], '9999')
+
     def test_portable_release_pack_is_byte_reproducible_across_wall_time_and_source_mtime(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
