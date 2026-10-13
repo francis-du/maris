@@ -361,7 +361,10 @@ jobs:
           draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"
           case "$draft:$CALLED_FROM_PUBLISH" in
             true:true) gh release edit "$RELEASE_TAG" --draft=false --prerelease ;;
-            true:false) gh release edit "$RELEASE_TAG" --draft=false ;;
+            true:false)
+              echo "Automatic release-asset validation refuses to publish a draft release" >&2
+              exit 1
+              ;;
             false:false) ;;
             false:true)
               echo "Owned stable-release workflow expected a draft release before public smoke" >&2
