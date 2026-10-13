@@ -78,43 +78,59 @@ jobs:
           import hashlib
           import shutil
           import os
+          import re
 
           root = Path('.release-download')
           manifests = list(root.rglob('maris-release.tsv'))
           if len(manifests) != 1:
               raise SystemExit(f'expected exactly one assembled manifest, found {len(manifests)}')
           manifest = manifests[0]
-          lines = manifest.read_text(encoding='ascii').splitlines()
-          values = {}
+          text = manifest.read_text(encoding='ascii')
+          if '\r' in text:
+              raise SystemExit('release manifest must use LF line endings')
+          lines = text.rstrip('\n').split('\n')
+          version = os.environ['RELEASE_TAG'].removeprefix('v')
+          if len(lines) != 11 or lines[0] != 'maris-release-v2':
+              raise SystemExit('installers require one exact 11-line v2 CLI release manifest')
+
+          metadata = [line.split('\t') for line in lines[1:5]]
+          expected_metadata = ['version', 'source_sha256', 'channel', 'interface']
+          if any(len(fields) != 2 or fields[0] != expected_metadata[index]
+                 for index, fields in enumerate(metadata)):
+              raise SystemExit('release manifest metadata rows are missing, reordered or duplicated')
+          values = {fields[0]: fields[1] for fields in metadata}
+          if (values['version'] != version
+                  or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', values['version'])
+                  or not re.fullmatch(r'[a-f0-9]{64}', values['source_sha256'])
+                  or values['channel'] != 'stable'
+                  or values['interface'] != 'cli'):
+              raise SystemExit('assembled manifest is not the exact stable CLI release for this tag')
+
           assets = []
           seen_targets = set()
-          for line in lines:
-              fields = line.split('\t')
-              if fields[0] == 'asset':
-                  if len(fields) != 7:
-                      raise SystemExit('invalid asset row in release manifest')
-                  system, arch, name, archive_hash, archive_bytes, binary_hash = fields[1:]
-                  expected_name = f"Maris-{values.get('version', '')}-{system}-{arch}" + ('.zip' if system == 'windows' else '.tar.gz')
-                  if name != expected_name:
-                      raise SystemExit(f'installer-visible asset name mismatch: {name} != {expected_name}')
-                  if (system, arch) in seen_targets:
-                      raise SystemExit(f'duplicate installer target: {system}/{arch}')
-                  seen_targets.add((system, arch))
-                  assets.append((system, arch, name, archive_hash, archive_bytes, binary_hash))
-              elif len(fields) == 2:
-                  values[fields[0]] = fields[1]
-
-          version = os.environ['RELEASE_TAG'].removeprefix('v')
           expected_targets = {
               ('macos', 'x86_64'), ('macos', 'arm64'),
               ('linux', 'x86_64'), ('linux', 'arm64'),
               ('windows', 'x86_64'), ('windows', 'arm64'),
           }
-          if lines[0] != 'maris-release-v2':
-              raise SystemExit('installers require the v2 CLI release manifest')
-          if values.get('version') != version or values.get('channel') != 'stable' or values.get('interface') != 'cli':
-              raise SystemExit('assembled manifest is not the stable CLI release for this tag')
-          if seen_targets != expected_targets or len(lines) != 11:
+          for line in lines[5:]:
+              fields = line.split('\t')
+              if len(fields) != 7 or fields[0] != 'asset':
+                  raise SystemExit('invalid asset row in release manifest')
+              system, arch, name, archive_hash, archive_bytes, binary_hash = fields[1:]
+              if (system, arch) not in expected_targets or (system, arch) in seen_targets:
+                  raise SystemExit(f'invalid or duplicate installer target: {system}/{arch}')
+              expected_name = f"Maris-{version}-{system}-{arch}" + ('.zip' if system == 'windows' else '.tar.gz')
+              if name != expected_name:
+                  raise SystemExit(f'installer-visible asset name mismatch: {name} != {expected_name}')
+              if (not re.fullmatch(r'[a-f0-9]{64}', archive_hash)
+                      or not re.fullmatch(r'[a-f0-9]{64}', binary_hash)
+                      or not re.fullmatch(r'[1-9][0-9]{0,8}', archive_bytes)
+                      or int(archive_bytes) > 134217728):
+                  raise SystemExit(f'invalid checksum or size field for {name}')
+              seen_targets.add((system, arch))
+              assets.append((system, arch, name, archive_hash, archive_bytes, binary_hash))
+          if seen_targets != expected_targets:
               raise SystemExit('manifest must contain exactly the six installer-supported native targets')
 
           out = Path('.release-upload')
