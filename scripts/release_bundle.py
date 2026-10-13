@@ -351,7 +351,12 @@ def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: di
             if path.is_symlink() or not path.is_file():
                 raise ValueError('Linked or invalid release record rejected')
             before = identity(path)
-            data = path.read_bytes()
+            if before[2] > 32768:
+                raise ValueError('Oversized release record')
+            with path.open('rb') as source:
+                data = source.read(32769)
+            if len(data) > 32768:
+                raise ValueError('Oversized release record')
             if path.is_symlink() or not path.is_file() or identity(path) != before:
                 raise ValueError('Release record changed while being read')
             return before, data
@@ -360,8 +365,6 @@ def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: di
 
     for file in sorted(directory.rglob('*.release.json')):
         record_identity, record_bytes = snapshot_record(file)
-        if len(record_bytes) > 32768:
-            raise ValueError('Oversized release record')
         item = json.loads(record_bytes.decode('utf-8'))
         if (item.get('schema_version') not in (1, 2) or item.get('channel') not in ('candidate', 'stable')
                 or (item.get('schema_version') == 2 and item.get('interface') != 'cli')
