@@ -37,7 +37,7 @@ class WindowsPackageSmokePaths(TestCase):
             self.assertEqual((destination / "Maris/bin/maris.exe").read_bytes(), b"x")
 
     def test_drive_colon_reserved_names_and_trailing_dot_are_rejected(self):
-        for name in ["Maris/C:evil", "Maris/CON", "Maris/name.", "Maris/name "]:
+        for name in ["Maris/C:evil", "Maris/CON", "Maris/name.", "Maris/name ", "__MACOSX/extra"]:
             with self.subTest(name=name):
                 self.assert_rejected(["Maris/", name])
 
