@@ -141,6 +141,11 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn('Published release tag must be vX.Y.Z', build)
         self.assertIn('Release event ref does not match its published tag', build)
         self.assertIn('workflow_run:', publish)
+        self.assertIn('workflow_call:', publish)
+        self.assertIn('source_run_id:', publish)
+        self.assertIn('source_sha:', publish)
+        self.assertIn('release_tag:', publish)
+        self.assertIn("github.event_name == 'workflow_call' || github.event.workflow_run.conclusion == 'success'", publish)
         self.assertIn("gh release upload", publish)
         self.assertNotIn('gh release upload "$RELEASE_TAG" .release-upload/* --clobber', publish)
         self.assertIn("Reuse exact existing installer assets without clobbering", publish)
@@ -164,7 +169,7 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn("& ./install.ps1 -Version", publish)
         public_smoke = publish.split('  public-install-smoke:', 1)[1].split('  remove-uninstallable-assets:', 1)[0]
         self.assertIn("if: needs.publish.outputs.mode != 'reuse'", public_smoke)
-        self.assertIn('ref: ${{ github.event.workflow_run.head_sha }}', public_smoke)
+        self.assertIn('ref: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}', public_smoke)
         self.assertIn("if: needs.publish.outputs.mode == 'reuse'", public_smoke)
         self.assertIn('ref: ${{ github.event.repository.default_branch }}', public_smoke)
         self.assertIn("mode: ${{ steps.assets.outputs.mode }}", publish)
@@ -185,6 +190,30 @@ class ToolchainRequirements(unittest.TestCase):
                        'windows-2025', 'windows-11-arm'):
             with self.subTest(runner=runner):
                 self.assertIn(runner, publish)
+
+    def test_stable_release_creation_explicitly_calls_asset_publication_with_exact_build_identity(self):
+        publish_release = (ROOT / '.github/workflows/publish-release.yml').read_text(encoding='utf-8')
+        assets = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
+
+        self.assertIn('id: validation', publish_release)
+        self.assertIn('source_run_id="$(jq -r --arg sha "$GITHUB_SHA"', publish_release)
+        self.assertIn('echo "source_run_id=$source_run_id"', publish_release)
+        self.assertIn('echo "source_sha=$GITHUB_SHA"', publish_release)
+        self.assertIn('echo "release_tag=$tag"', publish_release)
+        self.assertIn('gh release create "$RELEASE_TAG"', publish_release)
+
+        call = publish_release.split('  assets:', 1)[1]
+        self.assertIn('needs: publish', call)
+        self.assertIn('uses: ./.github/workflows/release-assets.yml', call)
+        self.assertIn('source_run_id: ${{ needs.publish.outputs.source_run_id }}', call)
+        self.assertIn('source_sha: ${{ needs.publish.outputs.source_sha }}', call)
+        self.assertIn('release_tag: ${{ needs.publish.outputs.release_tag }}', call)
+
+        self.assertIn('workflow_call:', assets)
+        self.assertIn('SOURCE_RUN_ID: ${{ inputs.source_run_id || github.event.workflow_run.id }}', assets)
+        self.assertIn('SOURCE_SHA: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}', assets)
+        self.assertIn('RELEASE_TAG_INPUT: ${{ inputs.release_tag }}', assets)
+        self.assertIn('Release tag $tag does not point at successful build $SOURCE_SHA', assets)
 
     @unittest.skipUnless(BASH, 'Bash release identity execution required')
     def test_release_identity_gate_rejects_wrong_version_and_ref_before_native_matrix(self):
