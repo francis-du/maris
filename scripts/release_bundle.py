@@ -57,6 +57,8 @@ def release_output_directory(path: Path, root: Path = ROOT) -> Path:
         relative = path.relative_to(root)
     except ValueError as error:
         raise ValueError('Release output directory must stay inside the source checkout') from error
+    if any(part in ('', '.', '..') for part in relative.parts):
+        raise ValueError('Release output directory contains an ambiguous path component')
     current = root
     for part in relative.parts:
         current = current / part
@@ -80,6 +82,8 @@ def release_input_directory(path: Path, root: Path = ROOT) -> Path:
         relative = path.relative_to(root)
     except ValueError as error:
         raise ValueError('Release input directory must stay inside the source checkout') from error
+    if any(part in ('', '.', '..') for part in relative.parts):
+        raise ValueError('Release input directory contains an ambiguous path component')
     current = root
     for part in relative.parts:
         current = current / part
