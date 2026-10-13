@@ -81,3 +81,35 @@ class ReleasePairRace(TestCase):
                 b'{"other":true}\n',
                 "cleanup deleted a concurrently replaced record it did not create",
             )
+
+
+    def test_record_replaced_by_directory_still_rolls_back_our_archive(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            packed = root / "packed.tar.gz"
+            ready = root / "ready.json"
+            archive = root / "published.tar.gz"
+            record = root / "published.json"
+
+            packed.write_bytes(b"verified archive")
+            ready.write_bytes(b'{"verified":true}\n')
+            expected = hashlib.sha256(packed.read_bytes()).hexdigest()
+            real_link = os.link
+
+            def replace_record_with_directory(source, destination):
+                real_link(source, destination)
+                if Path(destination) == record:
+                    record.unlink()
+                    record.mkdir()
+
+            with mock.patch("release_bundle.os.link", side_effect=replace_record_with_directory):
+                with self.assertRaisesRegex(
+                    ValueError, "Release archive/record pair changed while being committed"
+                ):
+                    commit_release_inputs(packed, ready, archive, record, expected)
+
+            self.assertFalse(
+                archive.exists(),
+                "archive created by this attempt survived a non-file final record",
+            )
+            self.assertTrue(record.is_dir())
