@@ -16,13 +16,16 @@ use std::{
 };
 
 struct Pipeline {
-    stream: Stream,
+    // Fields drop in declaration order. Restore the original CoreAudio path before
+    // the replacement stream can disappear if a completed pipeline is abandoned.
     tap: TapCapture,
+    stream: Stream,
     metrics: Arc<Metrics>,
     updates: Arc<ArrayQueue<Update>>,
     analysis: AnalysisWorker,
     output: String,
     binding: OutputBinding,
+    device_id: u32,
     revision: u64,
     music_revision: u64,
     capability: crate::devices::capability::Capability,
@@ -32,15 +35,16 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
     let name = device.description()?.name().to_owned();
     let mut binding = output_binding(store, output, &name, &device)?;
     ensure!(!devices::is_virtual(&name), "The active system output is a loopback device, not physical playback; original audio was not changed");
+    let device_id = binding
+        .coreaudio_id
+        .context("Selected macOS output has no CoreAudio device ID")?;
     let rate = device.default_output_config()?.sample_rate();
     let initial = devices::config(&device, false, rate)?;
     let state = store.load()?;
     let queue = Arc::new(ArrayQueue::new(192000 / 4));
     let metrics = Arc::new(Metrics::default());
     let updates = Arc::new(ArrayQueue::<Update>::new(8));
-    let initial_buffer_frames = binding
-        .coreaudio_id
-        .and_then(|device| tap_ffi::output_buffer_frames(device).ok());
+    let initial_buffer_frames = tap_ffi::output_buffer_frames(device_id).ok();
     let initial_progress_timeout =
         output_progress_timeout(initial_buffer_frames, rate, Duration::from_secs(1));
     // Register Maris as an audio process before resolving the exclusion PID. This stream emits only silence.
@@ -63,17 +67,14 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
     //
     // Keep device-scoped capture only for explicit per-application capture. System mode
     // uses a global self-excluding tap and still renders to the selected physical output.
-    let output_uid = binding
-        .coreaudio_id
-        .and_then(|device| tap_ffi::device_uid(device).ok())
+    let output_uid = tap_ffi::device_uid(device_id)
         .context("Selected macOS output has no stable CoreAudio UID")?;
     let mut tap = if processes.is_empty() {
         TapCapture::prepare_for_output_clock(queue.clone(), metrics.clone(), &output_uid)?
-    } else if let Some(uid) = binding.coreaudio_id.and_then(|device| {
-        tap_ffi::single_stereo_output_device_uid(device)
-            .ok()
-            .flatten()
-    }) {
+    } else if let Some(uid) = tap_ffi::single_stereo_output_device_uid(device_id)
+        .ok()
+        .flatten()
+    {
         TapCapture::prepare_processes_for_output(queue.clone(), metrics.clone(), processes, &uid)?
     } else {
         TapCapture::prepare_processes(queue.clone(), metrics.clone(), processes)?
@@ -135,18 +136,18 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
             .is_ok(),
         "Internal output-switch transition queue is unavailable"
     );
-    if let Some(device_id) = binding.coreaudio_id {
-        tap.watch_output(device_id, output.is_none())?;
-        // Capture the negotiated output, not the pre-construction buffer snapshot.
-        binding.buffer_frames = tap_ffi::output_buffer_frames(device_id).ok();
-        binding.latency_frames = tap_ffi::output_latency_frames(device_id).ok();
-        binding.safety_offset_frames = tap_ffi::output_safety_offset_frames(device_id).ok();
-    }
+    tap.watch_output(device_id, output.is_none())?;
+    // Capture the negotiated output, not the pre-construction buffer snapshot.
+    binding.buffer_frames = tap_ffi::output_buffer_frames(device_id).ok();
+    binding.latency_frames = tap_ffi::output_latency_frames(device_id).ok();
+    binding.safety_offset_frames = tap_ffi::output_safety_offset_frames(device_id).ok();
+    let replacement_progress_timeout =
+        output_progress_timeout(binding.buffer_frames, tap.rate, Duration::from_secs(1));
     // Prove the replacement callback while forcing it to silence. The original
     // application path stays audible during this entire preflight.
     metrics.output_quarantined.store(true, Ordering::Release);
     stream.play()?;
-    bridge::wait_output_ready(&metrics, Duration::from_secs(1))?;
+    bridge::wait_output_ready(&metrics, replacement_progress_timeout)?;
     drop(prime);
 
     // Start the tap unmuted and require real PCM before changing original playback.
@@ -155,9 +156,9 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
     metrics.output_quarantined.store(false, Ordering::Release);
     // A live tap plus a live output callback still is not enough: require the clock
     // bridge and startup envelope to observe post-handoff source frames.
-    let handoff_timeout =
-        output_progress_timeout(binding.buffer_frames, tap.rate, Duration::from_secs(1));
-    if let Err(start_error) = bridge::wait_source_started(&metrics, handoff_timeout) {
+    if let Err(start_error) =
+        bridge::wait_source_started(&metrics, replacement_progress_timeout)
+    {
         // Fail open in a deterministic order. tap was constructed before stream, so
         // ordinary stack unwinding would drop the replacement output first and only then
         // restore the original application path from TapCapture::drop. Re-quarantine the
@@ -175,13 +176,14 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
         return Err(start_error);
     }
     Ok(Pipeline {
-        stream,
         tap,
+        stream,
         metrics,
         updates,
         analysis,
         output: name,
         binding,
+        device_id,
         revision: state.revision,
         music_revision: listening.revision,
         capability,
@@ -315,9 +317,10 @@ impl Session {
         input_name: String,
     ) -> Result<Self> {
         let lease = store.session_lock()?;
+        let context = crate::analysis::context::Worker::start()?;
         let p = pipeline(&store, output, &system_processes)?;
         let sample_rate = p.tap.rate;
-        let system_device_id = p.binding.coreaudio_id.unwrap_or(tap_ffi::default_output()?);
+        let system_device_id = p.device_id;
         Ok(Self {
             streams: vec![p.stream],
             route: None,
@@ -344,7 +347,7 @@ impl Session {
             last_status: Instant::now() - Duration::from_secs(1),
             completion: None,
             analysis: p.analysis,
-            context: crate::analysis::context::Worker::start()?,
+            context,
             voice: None,
             pulse: None,
             session_id: super::new_session_id(),
@@ -374,7 +377,7 @@ impl Session {
         self.output_buffer_frames = p.binding.buffer_frames;
         self.output_latency_frames = p.binding.latency_frames;
         self.output_safety_offset_frames = p.binding.safety_offset_frames;
-        self.system_device_id = p.binding.coreaudio_id.unwrap_or(0);
+        self.system_device_id = p.device_id;
         self.sent_revision = p.revision;
         self.sent_music_revision = Some(p.music_revision);
         self.sent_capability = p.capability;
