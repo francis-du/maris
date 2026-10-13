@@ -74,6 +74,34 @@ class ReleaseCollectPathGuards(unittest.TestCase):
                 self.run_collect(root, records, output)
             self.assertFalse(output.exists())
 
+    def test_collect_rejects_output_parent_traversal_before_creating_outside_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary).resolve()
+            root = base / "checkout"
+            root.mkdir()
+            records = root / "records"
+            records.mkdir()
+            make_records(records)
+            output = root / "manifest" / ".." / ".." / "outside-created" / "maris-release.tsv"
+            with self.assertRaisesRegex(ValueError, "ambiguous path component"):
+                self.run_collect(root, records, output)
+            self.assertFalse((base / "outside-created").exists())
+            self.assertFalse((root / "manifest").exists())
+
+    def test_collect_rejects_input_parent_traversal_even_when_target_exists(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary).resolve()
+            root = base / "checkout"
+            root.mkdir()
+            outside = base / "outside-records"
+            outside.mkdir()
+            make_records(outside)
+            records = root / "placeholder" / ".." / ".." / "outside-records"
+            output = root / "manifest" / "maris-release.tsv"
+            with self.assertRaisesRegex(ValueError, "ambiguous path component"):
+                self.run_collect(root, records, output)
+            self.assertFalse(output.exists())
+
     @unittest.skipIf(os.name == "nt", "POSIX symlink fixture complements reparse fallback")
     def test_collect_rejects_linked_input_parent(self):
         with tempfile.TemporaryDirectory() as temporary:
