@@ -187,6 +187,13 @@ class ToolchainRequirements(unittest.TestCase):
                 self.assertIn(runner, publish)
 
     @unittest.skipUnless(BASH, 'Bash release identity execution required')
+    def test_release_asset_publication_is_serialized_across_source_commits(self):
+        publish = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
+        self.assertIn(r'group: release-assets-${{ github.repository }}', publish)
+        self.assertNotIn(r'group: release-assets-${{ github.event.workflow_run.head_sha }}', publish)
+        self.assertIn('cancel-in-progress: false', publish)
+
+
     def test_release_identity_gate_rejects_wrong_version_and_ref_before_native_matrix(self):
         text = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')
         block = re.search(

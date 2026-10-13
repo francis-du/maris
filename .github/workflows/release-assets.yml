@@ -9,7 +9,9 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: release-assets-${{ github.event.workflow_run.head_sha }}
+  # Release/tag mutation is repository-global state. Different source commits must
+  # never upload, verify or clean the same GitHub Release concurrently.
+  group: release-assets-${{ github.repository }}
   cancel-in-progress: false
 jobs:
   publish:
