@@ -36,18 +36,34 @@ def digest(path: Path) -> str:
     return hasher.hexdigest()
 
 
+def linked_directory(path: Path) -> bool:
+    """Detect POSIX links and Windows junction/reparse entries without following them."""
+    if path.is_symlink():
+        return True
+    junction = getattr(path, 'is_junction', None)
+    if junction is not None and junction():
+        return True
+    try:
+        attributes = path.lstat().st_file_attributes
+    except (AttributeError, FileNotFoundError, OSError):
+        return False
+    return bool(attributes & 0x400)  # Windows FILE_ATTRIBUTE_REPARSE_POINT.
+
+
 def release_output_directory(path: Path, root: Path = ROOT) -> Path:
-    """Create a fixed release output directory without following workspace symlink escapes."""
+    """Create a fixed release output directory without following workspace link escapes."""
     root = root.resolve()
     path = path.absolute()
     try:
         relative = path.relative_to(root)
     except ValueError as error:
         raise ValueError('Release output directory must stay inside the source checkout') from error
+    if any(part in ('', '.', '..') for part in relative.parts):
+        raise ValueError('Release output directory contains ambiguous path components')
     current = root
     for part in relative.parts:
         current = current / part
-        if current.is_symlink():
+        if linked_directory(current):
             raise ValueError('Linked release output directory rejected')
         if current.exists() and not current.is_dir():
             raise ValueError('Release output path contains a non-directory component')
@@ -56,6 +72,56 @@ def release_output_directory(path: Path, root: Path = ROOT) -> Path:
         path.resolve().relative_to(root)
     except ValueError as error:
         raise ValueError('Release output directory escaped the source checkout') from error
+    return path
+
+
+def release_input_directory(path: Path, root: Path = ROOT) -> Path:
+    """Open a release collection only through real directories inside the checkout."""
+    root = root.resolve()
+    path = path.absolute()
+    try:
+        relative = path.relative_to(root)
+    except ValueError as error:
+        raise ValueError('Release input directory must stay inside the source checkout') from error
+    if any(part in ('', '.', '..') for part in relative.parts):
+        raise ValueError('Release input directory contains ambiguous path components')
+    current = root
+    for part in relative.parts:
+        current = current / part
+        if linked_directory(current):
+            raise ValueError('Linked release input directory rejected')
+        if not current.is_dir():
+            raise ValueError('Release input path contains a non-directory component')
+    try:
+        path.resolve().relative_to(root)
+    except ValueError as error:
+        raise ValueError('Release input directory escaped the source checkout') from error
+    return path
+
+
+def _release_input_path(path: Path, directory: Path) -> Path:
+    """Require one release input to stay below a real, unlinked collection root."""
+    directory = directory.absolute()
+    if linked_directory(directory) or not directory.is_dir():
+        raise ValueError('Linked or invalid release input directory rejected')
+    path = path.absolute()
+    try:
+        relative = path.relative_to(directory)
+    except ValueError as error:
+        raise ValueError('Release input escaped the collection directory') from error
+    if any(part in ('', '.', '..') for part in relative.parts):
+        raise ValueError('Release input contains ambiguous path components')
+    current = directory
+    for part in relative.parts[:-1]:
+        current = current / part
+        if linked_directory(current) or not current.is_dir():
+            raise ValueError('Linked or invalid release input parent rejected')
+    if linked_directory(path):
+        raise ValueError('Linked release input rejected')
+    try:
+        path.resolve().relative_to(directory.resolve())
+    except ValueError as error:
+        raise ValueError('Release input escaped the collection directory') from error
     return path
 
 
@@ -339,6 +405,9 @@ def inspect_kit(archive: Path, item: dict) -> None:
 
 
 def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: dict | None = None) -> str:
+    directory = directory.absolute()
+    if linked_directory(directory) or not directory.is_dir():
+        raise ValueError('Linked or invalid release input directory rejected')
     records = []
     verified_inputs = []
 
@@ -364,6 +433,7 @@ def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: di
             raise ValueError('Release record changed while being read') from error
 
     for file in sorted(directory.rglob('*.release.json')):
+        file = _release_input_path(file, directory)
         record_identity, record_bytes = snapshot_record(file)
         item = json.loads(record_bytes.decode('utf-8'))
         if (item.get('schema_version') not in (1, 2) or item.get('channel') not in ('candidate', 'stable')
@@ -582,8 +652,11 @@ def main() -> None:
         if os.environ.get('GITHUB_ACTIONS') == 'true':
             expected_ci = {'run': os.environ.get('GITHUB_RUN_ID'), 'commit': os.environ.get('GITHUB_SHA'),
                            'repository': os.environ.get('GITHUB_REPOSITORY')}
-        channel = combine(args.collect, args.output, expected_ci=expected_ci)
-        print(json.dumps({'manifest': str(args.output), 'channel': channel, 'published': False}))
+        collection = release_input_directory(args.collect, ROOT)
+        output_directory = release_output_directory(args.output.parent, ROOT)
+        output = output_directory / args.output.name
+        channel = combine(collection, output, expected_ci=expected_ci)
+        print(json.dumps({'manifest': str(output), 'channel': channel, 'published': False}))
         return
     if args.output is not None or (args.candidate and any([args.bundle, args.approval, args.report])):
         parser.error('Candidate creation cannot carry approval or output overrides')
