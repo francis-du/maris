@@ -141,6 +141,15 @@ def review_directory(root: Path) -> Path:
     return review
 
 
+def evidence_output(review: Path) -> Path:
+    path = review / 'package-smoke.json'
+    if path.is_symlink():
+        raise ValueError('Linked package-smoke evidence destination rejected')
+    if path.exists() and not path.is_file():
+        raise ValueError('Package-smoke evidence destination is not a regular file')
+    return path
+
+
 def main() -> None:
     system, arch = host_target()
     source_hash = source_digest()
@@ -229,10 +238,7 @@ def main() -> None:
               'isolated_install_passed': True, 'installed_version_passed': True,
               'updater_dry_run_passed': cli, 'upgrade_passed': cli, 'failed_upgrade_preserved_previous': cli,
               'user_installation_changed': False, 'audio_started': False, 'hardware_validation': False}
-    smoke_path = review / 'package-smoke.json'
-    if smoke_path.is_symlink():
-        raise ValueError('Linked package-smoke evidence destination rejected')
-    smoke_path.write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
+    evidence_output(review).write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     print(json.dumps(report, indent=2))
 
 
