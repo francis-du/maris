@@ -871,8 +871,7 @@ impl Session {
                 json!(self.metrics.callback_calls.load(Ordering::Acquire));
             status["output_quarantined"] =
                 json!(self.metrics.output_quarantined.load(Ordering::Acquire));
-            status["audio_callback_errors"] =
-                json!(self.metrics.errors.load(Ordering::Acquire));
+            status["audio_callback_errors"] = json!(self.metrics.errors.load(Ordering::Acquire));
         }
         #[cfg(unix)]
         if let Some(pulse) = &self.pulse {
