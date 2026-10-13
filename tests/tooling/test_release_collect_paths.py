@@ -91,7 +91,7 @@ class ReleaseCollectPathGuards(unittest.TestCase):
             self.assertFalse(output.exists())
 
     @unittest.skipIf(os.name == "nt", "POSIX symlink fixture complements reparse fallback")
-    def test_combine_rejects_linked_record_parent_even_without_cli(self):
+    def test_release_input_path_rejects_linked_record_parent(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
             real = root / "real"
@@ -99,8 +99,9 @@ class ReleaseCollectPathGuards(unittest.TestCase):
             record = make_records(real)[0]
             collection = root / "collection"
             collection.mkdir()
-            (collection / record.parent.name).symlink_to(
-                record.parent, target_is_directory=True
-            )
+            linked_parent = collection / record.parent.name
+            linked_parent.symlink_to(record.parent, target_is_directory=True)
             with self.assertRaisesRegex(ValueError, "release input parent"):
-                release_bundle.combine(collection, root / "manifest.tsv")
+                release_bundle._release_input_path(
+                    linked_parent / record.name, collection
+                )
