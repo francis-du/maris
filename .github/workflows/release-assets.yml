@@ -346,6 +346,23 @@ jobs:
           echo "Release tag $RELEASE_TAG moved from successful build $SOURCE_SHA to $actual; installer assets were removed." >&2
           exit 1
 
+
+      - name: Publish validated release
+        if: steps.release.outputs.publish == 'true' && steps.assets.outputs.failed != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"
+          case "$draft" in
+            true) gh release edit "$RELEASE_TAG" --draft=false ;;
+            false) ;;
+            *) echo "Could not determine release draft state" >&2; exit 1 ;;
+          esac
+
   public-install-smoke:
     needs: publish
     if: needs.publish.outputs.publish == 'true'
