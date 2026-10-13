@@ -196,6 +196,8 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn("re.fullmatch(r'[1-9][0-9]{0,8}', archive_bytes)", publish)
         self.assertIn("int(archive_bytes) > 134217728", publish)
         self.assertIn("release manifest must use LF line endings", publish)
+        self.assertIn("not p.is_symlink() and p.resolve().is_relative_to(root)", publish)
+        self.assertIn("expected one real in-root", publish)
 
 
     def test_release_identity_gate_rejects_wrong_version_and_ref_before_native_matrix(self):
