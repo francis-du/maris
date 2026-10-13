@@ -48,3 +48,20 @@ class ReleaseRecordBaselineRace(TestCase):
                     release_bundle.combine(root, output)
 
             self.assertFalse(output.exists())
+
+    def test_release_records_are_never_read_with_unbounded_read_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            make_records(root)
+            output = root / "manifest.tsv"
+            original_read_bytes = Path.read_bytes
+
+            def guarded_read_bytes(path):
+                if path.name.endswith(".release.json"):
+                    raise AssertionError("release record used unbounded read_bytes")
+                return original_read_bytes(path)
+
+            with mock.patch.object(Path, "read_bytes", guarded_read_bytes):
+                release_bundle.combine(root, output)
+
+            self.assertTrue(output.is_file())
