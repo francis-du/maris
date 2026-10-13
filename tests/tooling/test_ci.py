@@ -163,10 +163,10 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn("bash install.sh --version", publish)
         self.assertIn("& ./install.ps1 -Version", publish)
         public_smoke = publish.split('  public-install-smoke:', 1)[1].split('  remove-uninstallable-assets:', 1)[0]
-        self.assertIn("if: needs.publish.outputs.mode != 'reuse'", public_smoke)
-        self.assertIn('ref: ${{ github.event.workflow_run.head_sha }}', public_smoke)
-        self.assertIn("if: needs.publish.outputs.mode == 'reuse'", public_smoke)
+        self.assertIn('Checkout the current public bootstrap', public_smoke)
         self.assertIn('ref: ${{ github.event.repository.default_branch }}', public_smoke)
+        self.assertNotIn("if: needs.publish.outputs.mode != 'reuse'", public_smoke)
+        self.assertNotIn('ref: ${{ github.event.workflow_run.head_sha }}', public_smoke)
         self.assertIn("mode: ${{ steps.assets.outputs.mode }}", publish)
         self.assertIn("group: release-assets-", publish)
         self.assertIn("cancel-in-progress: false", publish)
