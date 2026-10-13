@@ -82,6 +82,35 @@ fn aggregate_clock_validation_fails_closed_on_wrong_or_inactive_physical_output(
 }
 
 #[test]
+fn original_playback_restore_quarantines_replacement_before_native_update() {
+    let metrics = Metrics::default();
+    let error = quarantine_then_restore(&metrics, || {
+        assert!(metrics.output_quarantined.load(Ordering::Acquire));
+        anyhow::bail!("injected native restore failure")
+    })
+    .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("injected native restore failure"));
+    assert!(metrics.output_quarantined.load(Ordering::Acquire));
+}
+
+#[test]
+fn capture_start_window_scales_with_the_aggregate_buffer_period() {
+    assert_eq!(
+        capture_progress_timeout(Some(512), 48_000),
+        std::time::Duration::from_secs(2)
+    );
+    let large = capture_progress_timeout(Some(65_536), 44_100);
+    assert!(large > std::time::Duration::from_secs(4));
+    assert!(large <= std::time::Duration::from_secs(5));
+    assert_eq!(
+        capture_progress_timeout(None, 48_000),
+        std::time::Duration::from_secs(2)
+    );
+}
+
+#[test]
 fn capture_gate_blocks_new_callbacks_and_waits_for_existing_readers() {
     let gate = Arc::new(AtomicU64::new(0));
     let first = enter_capture(&gate).expect("initial callback should enter");
@@ -105,20 +134,6 @@ fn capture_gate_blocks_new_callbacks_and_waits_for_existing_readers() {
     worker.join().unwrap();
     assert_eq!(gate.load(Ordering::Acquire), 0);
     assert!(enter_capture(&gate).is_some());
-}
-
-#[test]
-fn original_playback_restore_quarantines_replacement_before_native_update() {
-    let metrics = Metrics::default();
-    let error = quarantine_then_restore(&metrics, || {
-        assert!(metrics.output_quarantined.load(Ordering::Acquire));
-        anyhow::bail!("injected native restore failure")
-    })
-    .unwrap_err();
-    assert!(error
-        .to_string()
-        .contains("injected native restore failure"));
-    assert!(metrics.output_quarantined.load(Ordering::Acquire));
 }
 
 fn context(capacity: usize) -> Capture {
