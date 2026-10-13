@@ -863,8 +863,7 @@ impl Session {
         {
             status["captured_process_objects"] = json!(&self.system_processes);
             status["captured_application_pids"] = json!(&self.system_process_pids);
-            status["coreaudio_tap_mode"] =
-                json!(self.tap.as_ref().map(tap::TapCapture::capture_mode));
+            system::add_runtime_diagnostics(&mut status, &self.metrics, self.tap.as_ref());
         }
         #[cfg(unix)]
         if let Some(pulse) = &self.pulse {
