@@ -15,12 +15,27 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub(super) fn add_runtime_diagnostics(
-    status: &mut serde_json::Value,
-    metrics: &Metrics,
-    tap: Option<&TapCapture>,
-) {
-    status["coreaudio_tap_mode"] = serde_json::json!(tap.map(TapCapture::capture_mode));
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ProgressStall {
+    Output,
+    Capture,
+    OutputAndCapture,
+}
+
+impl ProgressStall {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Output => "output_stalled",
+            Self::Capture => "capture_stalled",
+            Self::OutputAndCapture => "output_and_capture_stalled",
+        }
+    }
+}
+
+pub(super) fn add_runtime_diagnostics(status: &mut serde_json::Value, session: &Session) {
+    let metrics = &session.metrics;
+    status["coreaudio_tap_mode"] =
+        serde_json::json!(session.tap.as_ref().map(TapCapture::capture_mode));
     status["coreaudio_capture_callback_calls"] =
         serde_json::json!(metrics.capture_callback_calls.load(Ordering::Acquire));
     status["output_callback_calls"] =
@@ -28,6 +43,10 @@ pub(super) fn add_runtime_diagnostics(
     status["output_quarantined"] =
         serde_json::json!(metrics.output_quarantined.load(Ordering::Acquire));
     status["audio_callback_errors"] = serde_json::json!(metrics.errors.load(Ordering::Acquire));
+    status["coreaudio_fail_open_reason"] = serde_json::json!(session
+        .last_system_progress
+        .and_then(|progress| progress.failure)
+        .map(ProgressStall::label));
 }
 
 struct Pipeline {
@@ -208,6 +227,7 @@ pub(super) struct ProgressGuard {
     pub(super) capture_callbacks: u64,
     output_advanced_at: Instant,
     capture_advanced_at: Instant,
+    failure: Option<ProgressStall>,
 }
 
 fn output_progress_timeout(
@@ -231,7 +251,7 @@ fn observe_progress(
     current: (u64, u64),
     now: Instant,
     timeout: Duration,
-) -> (ProgressGuard, bool) {
+) -> (ProgressGuard, Option<ProgressStall>) {
     let Some(previous) = previous else {
         return (
             ProgressGuard {
@@ -239,8 +259,9 @@ fn observe_progress(
                 capture_callbacks: current.1,
                 output_advanced_at: now,
                 capture_advanced_at: now,
+                failure: None,
             },
-            false,
+            None,
         );
     };
     let output_advanced = current.0 != previous.output_callbacks;
@@ -255,24 +276,25 @@ fn observe_progress(
     } else {
         previous.capture_advanced_at
     };
-    // The physical replacement output must keep producing callbacks even for digital
-    // silence. If it stops, fail open regardless of whether capture also stopped.
     let output_stalled =
         !output_advanced && now.saturating_duration_since(previous.output_advanced_at) >= timeout;
-    // A running output with a dead tap IOProc would render starvation/silence while
-    // original playback remains muted. Tap callback liveness is content-independent, so
-    // a silent or paused selected application does not look like a capture failure.
-    let capture_stalled = output_advanced
-        && !capture_advanced
-        && now.saturating_duration_since(previous.capture_advanced_at) >= timeout;
+    let capture_stalled =
+        !capture_advanced && now.saturating_duration_since(previous.capture_advanced_at) >= timeout;
+    let failure = match (output_stalled, capture_stalled) {
+        (true, true) => Some(ProgressStall::OutputAndCapture),
+        (true, false) => Some(ProgressStall::Output),
+        (false, true) if output_advanced => Some(ProgressStall::Capture),
+        _ => None,
+    };
     (
         ProgressGuard {
             output_callbacks: current.0,
             capture_callbacks: current.1,
             output_advanced_at,
             capture_advanced_at,
+            failure,
         },
-        output_stalled || capture_stalled,
+        failure,
     )
 }
 
@@ -508,15 +530,16 @@ impl Session {
                 self.metrics.callback_calls.load(Ordering::Acquire),
                 self.metrics.capture_callback_calls.load(Ordering::Acquire),
             );
-            let (observed, stalled) = observe_progress(
+            let (observed, failure) = observe_progress(
                 self.last_system_progress,
                 progress,
                 now,
                 output_stall_timeout(self.output_buffer_frames, self.sample_rate),
             );
             self.last_system_progress = Some(observed);
-            if stalled {
-                // Capture is advancing while the physical replacement output has stopped.
+            if let Some(failure) = failure {
+                self.last_status = Instant::now() - Duration::from_secs(1);
+                // Capture/output progress failed while original playback is muted.
                 // Quarantine any callback that unexpectedly resumes and restore original
                 // playback while the replacement stream is still alive. If the live tap
                 // property update fails, destroy the tap immediately rather than leaving
@@ -632,76 +655,76 @@ impl Session {
 
 #[cfg(test)]
 mod progress_tests {
-    use super::{observe_progress, output_progress_timeout, output_stall_timeout};
+    use super::{observe_progress, output_progress_timeout, output_stall_timeout, ProgressStall};
     use std::time::{Duration, Instant};
 
     #[test]
     fn progress_guard_fails_open_on_output_capture_or_combined_stalls() {
         let start = Instant::now();
         let timeout = Duration::from_millis(750);
-        let (first, stalled) = observe_progress(None, (10, 100), start, timeout);
-        assert!(!stalled);
+        let (first, failure) = observe_progress(None, (10, 100), start, timeout);
+        assert_eq!(failure, None);
 
         // No side has exceeded its window yet.
-        let (early, stalled) = observe_progress(
+        let (early, failure) = observe_progress(
             Some(first),
             (10, 200),
             start + Duration::from_millis(600),
             timeout,
         );
-        assert!(!stalled);
+        assert_eq!(failure, None);
 
         // Capture advances while the replacement output is stuck.
-        let (_, stalled) = observe_progress(
+        let (_, failure) = observe_progress(
             Some(early),
             (10, 300),
             start + Duration::from_millis(800),
             timeout,
         );
-        assert!(stalled);
+        assert_eq!(failure, Some(ProgressStall::Output));
 
         // Output advances while the tap capture is stuck.
-        let (capture_base, stalled) = observe_progress(None, (20, 400), start, timeout);
-        assert!(!stalled);
-        let (_, stalled) = observe_progress(
+        let (capture_base, failure) = observe_progress(None, (20, 400), start, timeout);
+        assert_eq!(failure, None);
+        let (_, failure) = observe_progress(
             Some(capture_base),
             (21, 400),
             start + Duration::from_millis(800),
             timeout,
         );
-        assert!(stalled);
+        assert_eq!(failure, Some(ProgressStall::Capture));
 
         // If both sides stop, the physical replacement callback itself is enough evidence
         // to fail open; capture progress is not required as a witness.
-        let (both_base, stalled) = observe_progress(None, (30, 500), start, timeout);
-        assert!(!stalled);
-        let (_, stalled) = observe_progress(
+        let (both_base, failure) = observe_progress(None, (30, 500), start, timeout);
+        assert_eq!(failure, None);
+        let (_, failure) = observe_progress(
             Some(both_base),
             (30, 500),
             start + Duration::from_millis(800),
             timeout,
         );
-        assert!(stalled);
+        assert_eq!(failure, Some(ProgressStall::OutputAndCapture));
 
         // Genuine progress on both sides resets both watchdog clocks.
-        let (healthy, stalled) = observe_progress(None, (40, 600), start, timeout);
-        assert!(!stalled);
-        let (_, stalled) = observe_progress(
+        let (healthy, failure) = observe_progress(None, (40, 600), start, timeout);
+        assert_eq!(failure, None);
+        let (_, failure) = observe_progress(
             Some(healthy),
             (41, 700),
             start + Duration::from_secs(2),
             timeout,
         );
-        assert!(!stalled);
+        assert_eq!(failure, None);
 
         // Counter discontinuity/reset is still progress, not a stall.
-        let (_, stalled) = observe_progress(
+        let (_, failure) = observe_progress(
             Some(healthy),
             (39, 701),
             start + Duration::from_secs(2),
             timeout,
         );
-        assert!(!stalled);
+        assert_eq!(failure, None);
     }
 
     #[test]

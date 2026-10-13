@@ -15,6 +15,7 @@ class CoreAudioDiagnosticsContract(unittest.TestCase):
             '"output_callback_calls"',
             '"output_quarantined"',
             '"audio_callback_errors"',
+            '"coreaudio_fail_open_reason"',
         ):
             with self.subTest(field=field):
                 self.assertIn(field, source)
