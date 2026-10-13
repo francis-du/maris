@@ -105,3 +105,37 @@ class ReleaseCollectPathGuards(unittest.TestCase):
                 release_bundle._release_input_path(
                     linked_parent / record.name, collection
                 )
+
+
+    def test_release_input_path_rejects_final_reparse_point(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            collection = root / "collection"
+            collection.mkdir()
+            record = collection / "record.release.json"
+            record.write_text("{}", encoding="utf-8")
+
+            with patch.object(
+                release_bundle,
+                "linked_directory",
+                side_effect=lambda path: Path(path) == record,
+            ):
+                with self.assertRaisesRegex(ValueError, "Linked release input rejected"):
+                    release_bundle._release_input_path(record, collection)
+
+    def test_combine_rejects_archive_reparse_point(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            records = make_records(root)
+            record = records[0]
+            metadata = __import__("json").loads(record.read_text(encoding="utf-8"))
+            archive = record.parent / metadata["archive"]
+            real_guard = release_bundle.linked_directory
+
+            def reparse_guard(path):
+                path = Path(path)
+                return path == archive or real_guard(path)
+
+            with patch.object(release_bundle, "linked_directory", side_effect=reparse_guard):
+                with self.assertRaisesRegex(ValueError, "Missing, linked or oversized release archive"):
+                    release_bundle.combine(root, root / "maris-release.tsv")
