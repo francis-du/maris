@@ -93,3 +93,68 @@ class ArchiveLimitBoundaries(TestCase):
                         "windows",
                         "maris-limit",
                     )
+
+
+    def test_tar_entry_count_accepts_exact_limit_and_rejects_one_more(self):
+        exact = [_TarEntry(0) for _ in range(10_000)]
+        too_many = exact + [_TarEntry(0)]
+
+        class ManyTar:
+            def __init__(self, entries):
+                self.entries = entries
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                return False
+            def getmembers(self):
+                return self.entries
+
+        with tempfile.TemporaryDirectory() as temporary:
+            with mock.patch.object(package_smoke.tarfile, "open", return_value=ManyTar(exact)):
+                package_smoke.extract(
+                    Path("unused.tar.gz"),
+                    Path(temporary) / "exact",
+                    "linux",
+                    "maris-limit",
+                )
+            with mock.patch.object(package_smoke.tarfile, "open", return_value=ManyTar(too_many)):
+                with self.assertRaisesRegex(ValueError, "Archive file-count limit exceeded"):
+                    package_smoke.extract(
+                        Path("unused.tar.gz"),
+                        Path(temporary) / "too-many",
+                        "linux",
+                        "maris-limit",
+                    )
+
+    def test_zip_entry_count_accepts_exact_limit_and_rejects_one_more(self):
+        exact = [_ZipEntry(0) for _ in range(10_000)]
+        too_many = exact + [_ZipEntry(0)]
+
+        class ManyZip:
+            def __init__(self, entries):
+                self.entries = entries
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                return False
+            def infolist(self):
+                return self.entries
+            def testzip(self):
+                return None
+
+        with tempfile.TemporaryDirectory() as temporary:
+            with mock.patch.object(package_smoke.zipfile, "ZipFile", return_value=ManyZip(exact)):
+                package_smoke.extract(
+                    Path("unused.zip"),
+                    Path(temporary) / "exact",
+                    "windows",
+                    "maris-limit",
+                )
+            with mock.patch.object(package_smoke.zipfile, "ZipFile", return_value=ManyZip(too_many)):
+                with self.assertRaisesRegex(ValueError, "Archive file-count limit exceeded"):
+                    package_smoke.extract(
+                        Path("unused.zip"),
+                        Path(temporary) / "too-many",
+                        "windows",
+                        "maris-limit",
+                    )
