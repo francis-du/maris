@@ -168,9 +168,9 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn("bash install.sh --version", publish)
         self.assertIn("& ./install.ps1 -Version", publish)
         public_smoke = publish.split('  public-install-smoke:', 1)[1].split('  remove-uninstallable-assets:', 1)[0]
-        self.assertIn("if: needs.publish.outputs.mode != 'reuse'", public_smoke)
+        self.assertIn("if: github.event_name == 'workflow_call' || needs.publish.outputs.mode != 'reuse'", public_smoke)
         self.assertIn('ref: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}', public_smoke)
-        self.assertIn("if: needs.publish.outputs.mode == 'reuse'", public_smoke)
+        self.assertIn("if: github.event_name != 'workflow_call' && needs.publish.outputs.mode == 'reuse'", public_smoke)
         self.assertIn('ref: ${{ github.event.repository.default_branch }}', public_smoke)
         self.assertIn("mode: ${{ steps.assets.outputs.mode }}", publish)
         self.assertIn("group: release-assets-", publish)
@@ -236,6 +236,9 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn("needs.public-install-smoke.result == 'success'", promote)
         self.assertIn('gh release view "$RELEASE_TAG" --json isDraft', promote)
         self.assertIn('gh release view "$RELEASE_TAG" --json isPrerelease', promote)
+        self.assertIn('SOURCE_SHA: ${{ inputs.source_sha }}', promote)
+        self.assertIn('gh api "repos/$GH_REPO/commits/main" --jq '.sha'', promote)
+        self.assertIn('main advanced before stable promotion; refusing stale release', promote)
         self.assertIn('gh release edit "$RELEASE_TAG" --prerelease=false --latest', promote)
 
     @unittest.skipUnless(BASH, 'Bash release identity execution required')
