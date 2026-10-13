@@ -421,6 +421,7 @@ jobs:
           Remove-Item -LiteralPath $prefix -Recurse -Force
 
 
+
   promote-stable:
     needs: [publish, public-install-smoke]
     if: github.event_name == 'workflow_call' && needs.publish.outputs.publish == 'true' && needs.public-install-smoke.result == 'success'
@@ -437,8 +438,15 @@ jobs:
           RELEASE_TAG: ${{ needs.publish.outputs.tag }}
         run: |
           set -euo pipefail
-          state="$(gh release view "$RELEASE_TAG" --json isDraft,isPrerelease --jq '[.isDraft,.isPrerelease] | @tsv')"
-          if [ "$state" != 
+          draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"
+          prerelease="$(gh release view "$RELEASE_TAG" --json isPrerelease --jq '.isPrerelease')"
+          if [ "$draft" != false ] || [ "$prerelease" != true ]; then
+            echo "Release is not the expected public prerelease after installer smoke" >&2
+            exit 1
+          fi
+          gh release edit "$RELEASE_TAG" --prerelease=false --latest
+
+  remove-uninstallable-assets:
     needs: [publish, public-install-smoke]
     if: always() && needs.publish.outputs.publish == 'true' && needs.publish.outputs.cleanup == 'true' && (needs.publish.result != 'success' || needs.public-install-smoke.result != 'success')
     permissions:
