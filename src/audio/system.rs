@@ -15,6 +15,21 @@ use std::{
     time::{Duration, Instant},
 };
 
+pub(super) fn add_runtime_diagnostics(
+    status: &mut serde_json::Value,
+    metrics: &Metrics,
+    tap: Option<&TapCapture>,
+) {
+    status["coreaudio_tap_mode"] = serde_json::json!(tap.map(TapCapture::capture_mode));
+    status["coreaudio_capture_callback_calls"] =
+        serde_json::json!(metrics.capture_callback_calls.load(Ordering::Acquire));
+    status["output_callback_calls"] =
+        serde_json::json!(metrics.callback_calls.load(Ordering::Acquire));
+    status["output_quarantined"] =
+        serde_json::json!(metrics.output_quarantined.load(Ordering::Acquire));
+    status["audio_callback_errors"] = serde_json::json!(metrics.errors.load(Ordering::Acquire));
+}
+
 struct Pipeline {
     stream: Stream,
     tap: TapCapture,
