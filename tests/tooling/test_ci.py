@@ -201,6 +201,7 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn('echo "source_sha=$GITHUB_SHA"', publish_release)
         self.assertIn('echo "release_tag=$tag"', publish_release)
         self.assertIn('gh release create "$RELEASE_TAG"', publish_release)
+        self.assertIn('--draft', publish_release)
 
         call = publish_release.split('  assets:', 1)[1]
         self.assertIn('needs: publish', call)
@@ -220,6 +221,9 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn('SOURCE_SHA: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}', assets)
         self.assertIn('RELEASE_TAG_INPUT: ${{ inputs.release_tag }}', assets)
         self.assertIn('Release tag $tag does not point at successful build $SOURCE_SHA', assets)
+        publish_step = assets.split('      - name: Publish validated release', 1)[1].split('  public-install-smoke:', 1)[0]
+        self.assertIn('gh release view "$RELEASE_TAG" --json isDraft', publish_step)
+        self.assertIn('gh release edit "$RELEASE_TAG" --draft=false', publish_step)
 
     @unittest.skipUnless(BASH, 'Bash release identity execution required')
     def test_release_identity_gate_rejects_wrong_version_and_ref_before_native_matrix(self):
