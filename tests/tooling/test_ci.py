@@ -236,6 +236,8 @@ class ToolchainRequirements(unittest.TestCase):
         smoke_exposure = assets.split('      - name: Expose validated release for public smoke', 1)[1].split('  public-install-smoke:', 1)[0]
         self.assertIn('gh release view "$RELEASE_TAG" --json isDraft', smoke_exposure)
         self.assertIn('gh release edit "$RELEASE_TAG" --draft=false --prerelease', smoke_exposure)
+        self.assertIn('Automatic release-asset validation refuses to publish a draft release', smoke_exposure)
+        self.assertNotIn('true:false) gh release edit "$RELEASE_TAG" --draft=false', smoke_exposure)
 
         self.assertIn('  promote-stable:', assets)
         promote = assets.split('  promote-stable:', 1)[1].split('  remove-uninstallable-assets:', 1)[0]
