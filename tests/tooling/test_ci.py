@@ -187,6 +187,43 @@ class ToolchainRequirements(unittest.TestCase):
                 self.assertIn(runner, publish)
 
     @unittest.skipUnless(BASH, 'Bash release identity execution required')
+    def test_release_publication_reverifies_public_bytes_before_install_smoke(self):
+        publish = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
+        verify = 'Reverify public installer asset bytes before installation smoke'
+        self.assertIn(verify, publish)
+        self.assertIn('rm -rf .release-final', publish)
+        self.assertIn('cmp -s ".release-upload/$asset" ".release-final/$asset"', publish)
+        self.assertIn('Public release asset disappeared before installation smoke', publish)
+        self.assertIn('Public release asset changed after exact verification/upload', publish)
+        self.assertIn('gh release delete-asset "$RELEASE_TAG" "$asset" --yes', publish)
+        self.assertLess(publish.index(verify), publish.index('  public-install-smoke:'))
+
+    def test_release_asset_publication_is_serialized_across_source_commits(self):
+        publish = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
+        self.assertIn(r'group: release-assets-${{ github.repository }}', publish)
+        self.assertNotIn(r'group: release-assets-${{ github.event.workflow_run.head_sha }}', publish)
+        self.assertIn('cancel-in-progress: false', publish)
+
+    def test_release_asset_publication_rejects_draft_and_prerelease_targets(self):
+        publish = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
+        self.assertIn('--json isDraft,isPrerelease,publishedAt', publish)
+        self.assertIn('.isDraft == false and .isPrerelease == false and .publishedAt != null', publish)
+        self.assertIn('must already be published, non-draft and non-prerelease', publish)
+
+
+    def test_release_asset_workflow_uses_installer_strict_manifest_contract(self):
+        publish = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
+        self.assertIn("expected_metadata = ['version', 'source_sha256', 'channel', 'interface']", publish)
+        self.assertIn('metadata rows are missing, reordered or duplicated', publish)
+        self.assertIn("values['source_sha256'] != os.environ['SOURCE_SHA']", publish)
+        self.assertIn("re.fullmatch(r'[a-f0-9]{64}', values['source_sha256'])", publish)
+        self.assertIn("re.fullmatch(r'[1-9][0-9]{0,8}', archive_bytes)", publish)
+        self.assertIn("int(archive_bytes) > 134217728", publish)
+        self.assertIn("release manifest must use LF line endings", publish)
+        self.assertIn("not p.is_symlink() and p.resolve().is_relative_to(root)", publish)
+        self.assertIn("expected one real in-root", publish)
+
+
     def test_release_identity_gate_rejects_wrong_version_and_ref_before_native_matrix(self):
         text = (ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8')
         block = re.search(
