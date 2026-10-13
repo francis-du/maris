@@ -222,6 +222,14 @@ fn scoped_initializer_supported(class: &AnyClass, selected: bool) -> bool {
     }
 }
 
+fn capture_progress_timeout(buffer_frames: Option<u32>, sample_rate: u32) -> std::time::Duration {
+    let frames = buffer_frames.unwrap_or(512).max(1);
+    let period = std::time::Duration::from_secs_f64(frames as f64 / sample_rate.max(1) as f64);
+    (period * 3 + std::time::Duration::from_millis(100))
+        .max(std::time::Duration::from_secs(2))
+        .min(std::time::Duration::from_secs(5))
+}
+
 fn wait_capture_ready(
     metrics: &Metrics,
     before: u64,
@@ -663,11 +671,8 @@ impl TapCapture {
             "Start system-audio capture (allow Maris in the macOS permission dialog)",
         )?;
         self.started = true;
-        if let Err(error) =
-            wait_capture_ready(metrics, before, std::time::Duration::from_secs(2), || {
-                self.needs_rebuild()
-            })
-        {
+        let timeout = capture_progress_timeout(self.aggregate_buffer, self.rate);
+        if let Err(error) = wait_capture_ready(metrics, before, timeout, || self.needs_rebuild()) {
             // Keep started=true if native stop fails so Drop retries before
             // destroying the aggregate/tap. Never claim restoration on failure.
             ca::check(
