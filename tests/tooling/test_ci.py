@@ -202,6 +202,11 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn('echo "release_tag=$tag"', publish_release)
         self.assertIn('gh release create "$RELEASE_TAG"', publish_release)
         self.assertIn('--draft', publish_release)
+        create_block = publish_release.split('      - name: Create draft GitHub release', 1)[1].split('  assets:', 1)[0]
+        self.assertGreaterEqual(create_block.count('git fetch --no-tags --depth=1 origin main'), 2)
+        self.assertGreaterEqual(create_block.count('git rev-parse FETCH_HEAD'), 2)
+        self.assertIn('gh release delete "$RELEASE_TAG" --yes --cleanup-tag', create_block)
+        self.assertIn('main advanced while the draft release was being created; rolled it back', create_block)
 
         call = publish_release.split('  assets:', 1)[1]
         self.assertIn('needs: publish', call)
