@@ -75,20 +75,98 @@ def snapshot_tree(root: Path) -> dict:
             for path in root.rglob('*')}
 
 
+def linked_directory(path: Path) -> bool:
+    if path.is_symlink():
+        return True
+    junction = getattr(path, 'is_junction', None)
+    if junction is not None and junction():
+        return True
+    try:
+        attributes = path.lstat().st_file_attributes
+    except (AttributeError, FileNotFoundError, OSError):
+        return False
+    return bool(attributes & 0x400)
+
+
+def package_input_directory(root: Path) -> Path:
+    root = root.resolve()
+    packages = root / 'dist/packages'
+    current = root
+    for part in packages.relative_to(root).parts:
+        current = current / part
+        if linked_directory(current):
+            raise ValueError('Linked package-smoke input directory rejected')
+        if not current.is_dir():
+            raise ValueError('Package-smoke input directory is missing or invalid')
+    try:
+        packages.resolve().relative_to(root)
+    except ValueError as error:
+        raise ValueError('Package-smoke input directory escaped the source checkout') from error
+    return packages
+
+
+def package_input_file(directory: Path, path: Path) -> Path:
+    directory = directory.resolve()
+    path = path.absolute()
+    try:
+        relative = path.relative_to(directory)
+    except ValueError as error:
+        raise ValueError('Package-smoke input escaped the package directory') from error
+    current = directory
+    for part in relative.parts[:-1]:
+        current = current / part
+        if linked_directory(current) or not current.is_dir():
+            raise ValueError('Linked or invalid package-smoke input parent rejected')
+    if path.is_symlink() or not path.is_file():
+        raise ValueError('Linked or invalid package-smoke input file rejected')
+    try:
+        path.resolve().relative_to(directory)
+    except ValueError as error:
+        raise ValueError('Package-smoke input file escaped the package directory') from error
+    return path
+
+
+def review_directory(root: Path) -> Path:
+    root = root.resolve()
+    review = root / '.maris-review'
+    if linked_directory(review):
+        raise ValueError('Linked package-smoke review directory rejected')
+    if review.exists() and not review.is_dir():
+        raise ValueError('Package-smoke review path is not a directory')
+    review.mkdir(exist_ok=True)
+    try:
+        review.resolve().relative_to(root)
+    except ValueError as error:
+        raise ValueError('Package-smoke review directory escaped the source checkout') from error
+    return review
+
+
+def evidence_output(review: Path) -> Path:
+    path = review / 'package-smoke.json'
+    if path.is_symlink():
+        raise ValueError('Linked package-smoke evidence destination rejected')
+    if path.exists() and not path.is_file():
+        raise ValueError('Package-smoke evidence destination is not a regular file')
+    return path
+
+
 def main() -> None:
     system, arch = host_target()
     source_hash = source_digest()
     suffix = '.tar.gz' if system == 'linux' else '.zip'
-    archives = list((ROOT / 'dist/packages').glob(f'Maris-*-{system}-{arch}-local-{source_hash[:12]}{suffix}'))
+    packages = package_input_directory(ROOT)
+    archives = [
+        package_input_file(packages, path)
+        for path in packages.glob(f'Maris-*-{system}-{arch}-local-{source_hash[:12]}{suffix}')
+    ]
     if len(archives) != 1:
         raise ValueError('Expected exactly one current-source native archive')
     archive = archives[0]
     stem = archive.name[:-len(suffix)]
-    checksum = archive.parent / (stem + '.sha256')
+    checksum = package_input_file(packages, archive.parent / (stem + '.sha256'))
     if hashlib.sha256(archive.read_bytes()).hexdigest() != checksum.read_text(encoding='utf-8').split()[0]:
         raise ValueError('Archive checksum mismatch')
-    review = ROOT / '.maris-review'
-    review.mkdir(exist_ok=True)
+    review = review_directory(ROOT)
     # Windows enforces a user-profile prefix, not the potentially machine-wide Actions checkout.
     temporary_root = None if system == 'windows' else review
     with tempfile.TemporaryDirectory(prefix='install-smoke-', dir=temporary_root) as temporary:
@@ -160,7 +238,7 @@ def main() -> None:
               'isolated_install_passed': True, 'installed_version_passed': True,
               'updater_dry_run_passed': cli, 'upgrade_passed': cli, 'failed_upgrade_preserved_previous': cli,
               'user_installation_changed': False, 'audio_started': False, 'hardware_validation': False}
-    (review / 'package-smoke.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
+    evidence_output(review).write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     print(json.dumps(report, indent=2))
 
 
