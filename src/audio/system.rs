@@ -15,6 +15,33 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+enum ProgressStall {
+    Output = 1,
+    Capture = 2,
+    OutputAndCapture = 3,
+}
+
+impl ProgressStall {
+    fn from_code(code: u8) -> Option<Self> {
+        match code {
+            1 => Some(Self::Output),
+            2 => Some(Self::Capture),
+            3 => Some(Self::OutputAndCapture),
+            _ => None,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Output => "output_stalled",
+            Self::Capture => "capture_stalled",
+            Self::OutputAndCapture => "output_and_capture_stalled",
+        }
+    }
+}
+
 pub(super) fn add_runtime_diagnostics(
     status: &mut serde_json::Value,
     metrics: &Metrics,
@@ -28,6 +55,10 @@ pub(super) fn add_runtime_diagnostics(
     status["output_quarantined"] =
         serde_json::json!(metrics.output_quarantined.load(Ordering::Acquire));
     status["audio_callback_errors"] = serde_json::json!(metrics.errors.load(Ordering::Acquire));
+    status["coreaudio_fail_open_reason"] = serde_json::json!(
+        ProgressStall::from_code(metrics.system_fail_open_reason.load(Ordering::Acquire))
+            .map(ProgressStall::label)
+    );
 }
 
 struct Pipeline {
@@ -231,7 +262,7 @@ fn observe_progress(
     current: (u64, u64),
     now: Instant,
     timeout: Duration,
-) -> (ProgressGuard, bool) {
+) -> (ProgressGuard, Option<ProgressStall>) {
     let Some(previous) = previous else {
         return (
             ProgressGuard {
@@ -240,7 +271,7 @@ fn observe_progress(
                 output_advanced_at: now,
                 capture_advanced_at: now,
             },
-            false,
+            None,
         );
     };
     let output_advanced = current.0 != previous.output_callbacks;
@@ -255,16 +286,16 @@ fn observe_progress(
     } else {
         previous.capture_advanced_at
     };
-    // The physical replacement output must keep producing callbacks even for digital
-    // silence. If it stops, fail open regardless of whether capture also stopped.
     let output_stalled =
         !output_advanced && now.saturating_duration_since(previous.output_advanced_at) >= timeout;
-    // A running output with a dead tap IOProc would render starvation/silence while
-    // original playback remains muted. Tap callback liveness is content-independent, so
-    // a silent or paused selected application does not look like a capture failure.
-    let capture_stalled = output_advanced
-        && !capture_advanced
-        && now.saturating_duration_since(previous.capture_advanced_at) >= timeout;
+    let capture_stalled =
+        !capture_advanced && now.saturating_duration_since(previous.capture_advanced_at) >= timeout;
+    let failure = match (output_stalled, capture_stalled) {
+        (true, true) => Some(ProgressStall::OutputAndCapture),
+        (true, false) => Some(ProgressStall::Output),
+        (false, true) if output_advanced => Some(ProgressStall::Capture),
+        _ => None,
+    };
     (
         ProgressGuard {
             output_callbacks: current.0,
@@ -272,7 +303,7 @@ fn observe_progress(
             output_advanced_at,
             capture_advanced_at,
         },
-        output_stalled || capture_stalled,
+        failure,
     )
 }
 
@@ -508,15 +539,19 @@ impl Session {
                 self.metrics.callback_calls.load(Ordering::Acquire),
                 self.metrics.capture_callback_calls.load(Ordering::Acquire),
             );
-            let (observed, stalled) = observe_progress(
+            let (observed, failure) = observe_progress(
                 self.last_system_progress,
                 progress,
                 now,
                 output_stall_timeout(self.output_buffer_frames, self.sample_rate),
             );
             self.last_system_progress = Some(observed);
-            if stalled {
-                // Capture is advancing while the physical replacement output has stopped.
+            if let Some(failure) = failure {
+                self.metrics
+                    .system_fail_open_reason
+                    .store(failure as u8, Ordering::Release);
+                self.last_status = Instant::now() - Duration::from_secs(1);
+                // Capture/output progress failed while original playback is muted.
                 // Quarantine any callback that unexpectedly resumes and restore original
                 // playback while the replacement stream is still alive. If the live tap
                 // property update fails, destroy the tap immediately rather than leaving
