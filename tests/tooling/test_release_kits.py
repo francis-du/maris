@@ -3,7 +3,9 @@
 All payloads here are labeled non-executable fixtures. No release, network or audio.
 """
 from pathlib import Path
+from contextlib import redirect_stdout
 import hashlib
+import io
 import json
 import os
 import subprocess
@@ -17,7 +19,8 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from release_bundle import _normalize_pax_times, _pax_without_volatile_metadata, _tar_header_with_size, combine, inspect_kit, pack, release_output_directory, TARGETS
+import release_bundle
+from release_bundle import _normalize_pax_times, _pax_without_volatile_metadata, _release_input_path, _tar_header_with_size, combine, inspect_kit, pack, release_input_directory, release_output_directory, TARGETS
 from package_smoke import extract
 from test_online import fixture
 
@@ -50,6 +53,28 @@ class ReleaseKits(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'non-directory'):
                 release_output_directory(root / 'dist/online-approved', root)
 
+    def test_release_input_directory_rejects_non_directory_components(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            (root / 'records').write_text('not a directory', encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'non-directory'):
+                release_input_directory(root / 'records/target', root)
+
+    @unittest.skipIf(sys.platform == 'win32', 'Directory symlink fixture requires native symlink support')
+    def test_release_input_directory_rejects_linked_parent_escape(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            outside = root.parent / (root.name + '-outside')
+            outside.mkdir()
+            try:
+                (root / 'linked').symlink_to(outside, target_is_directory=True)
+                (outside / 'records').mkdir()
+                with self.assertRaisesRegex(ValueError, 'Linked release input directory'):
+                    release_input_directory(root / 'linked/records', root)
+            finally:
+                (outside / 'records').rmdir()
+                outside.rmdir()
+
     @unittest.skipIf(sys.platform == 'win32', 'Directory symlink fixture requires native symlink support')
     def test_release_output_directory_rejects_symlink_escape(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -60,6 +85,74 @@ class ReleaseKits(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Linked release output'):
                 release_output_directory(root / 'dist/online-approved', root)
             self.assertFalse((outside / 'online-approved').exists())
+
+    @unittest.skipIf(sys.platform == 'win32', 'Directory symlink fixture requires native symlink support')
+    def test_release_collection_rejects_linked_input_root(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            real = root / 'real-records'
+            real.mkdir()
+            make_records(real)
+            linked = root / 'linked-records'
+            linked.symlink_to(real, target_is_directory=True)
+            output = root / 'manifest.tsv'
+            with self.assertRaisesRegex(ValueError, 'release input directory'):
+                combine(linked, output)
+            self.assertFalse(output.exists())
+
+    @unittest.skipIf(sys.platform == 'win32', 'Directory symlink fixture requires native symlink support')
+    def test_release_collection_rejects_linked_record_parent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            real = root / 'real'
+            real.mkdir()
+            record = make_records(real)[-1]
+            collection = root / 'collection'
+            collection.mkdir()
+            linked_parent = collection / record.parent.name
+            linked_parent.symlink_to(record.parent, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, 'input parent'):
+                _release_input_path(linked_parent / record.name, collection)
+
+    def test_collect_cli_applies_checkout_anchored_input_and_output_guards(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            records = root / 'records'
+            records.mkdir()
+            make_records(records)
+            output = root / 'manifest/maris-release.tsv'
+            argv = ['release_bundle.py', '--collect', str(records), '--output', str(output)]
+            with patch.object(release_bundle, 'ROOT', root), patch.object(sys, 'argv', argv), \
+                    patch.dict(os.environ, {'GITHUB_ACTIONS': 'false'}), \
+                    redirect_stdout(io.StringIO()):
+                release_bundle.main()
+            self.assertTrue(output.is_file())
+
+    @unittest.skipIf(sys.platform == 'win32', 'Directory symlink fixture requires native symlink support')
+    def test_collect_cli_rejects_linked_checkout_parent_before_combining(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            outside = root.parent / (root.name + '-records')
+            outside.mkdir()
+            try:
+                make_records(outside)
+                (root / 'linked').symlink_to(outside, target_is_directory=True)
+                output = root / 'manifest/maris-release.tsv'
+                argv = ['release_bundle.py', '--collect', str(root / 'linked'), '--output', str(output)]
+                with patch.object(release_bundle, 'ROOT', root), patch.object(sys, 'argv', argv), \
+                        redirect_stdout(io.StringIO()):
+                    with self.assertRaisesRegex(ValueError, 'Linked release input directory'):
+                        release_bundle.main()
+                self.assertFalse(output.exists())
+            finally:
+                for child in outside.iterdir():
+                    if child.is_dir():
+                        for item in child.iterdir():
+                            item.unlink()
+                        child.rmdir()
+                    else:
+                        child.unlink()
+                outside.rmdir()
 
     def test_actual_six_target_archives_assemble_without_compilation_or_publication(self):
         with tempfile.TemporaryDirectory() as temporary:

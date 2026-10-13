@@ -75,6 +75,21 @@ def snapshot_tree(root: Path) -> dict:
             for path in root.rglob('*')}
 
 
+def review_directory(root: Path) -> Path:
+    root = root.resolve()
+    review = root / '.maris-review'
+    if review.is_symlink():
+        raise ValueError('Linked package-smoke review directory rejected')
+    if review.exists() and not review.is_dir():
+        raise ValueError('Package-smoke review path is not a directory')
+    review.mkdir(exist_ok=True)
+    try:
+        review.resolve().relative_to(root)
+    except ValueError as error:
+        raise ValueError('Package-smoke review directory escaped the source checkout') from error
+    return review
+
+
 def main() -> None:
     system, arch = host_target()
     source_hash = source_digest()
@@ -87,8 +102,7 @@ def main() -> None:
     checksum = archive.parent / (stem + '.sha256')
     if hashlib.sha256(archive.read_bytes()).hexdigest() != checksum.read_text(encoding='utf-8').split()[0]:
         raise ValueError('Archive checksum mismatch')
-    review = ROOT / '.maris-review'
-    review.mkdir(exist_ok=True)
+    review = review_directory(ROOT)
     # Windows enforces a user-profile prefix, not the potentially machine-wide Actions checkout.
     temporary_root = None if system == 'windows' else review
     with tempfile.TemporaryDirectory(prefix='install-smoke-', dir=temporary_root) as temporary:
@@ -160,7 +174,10 @@ def main() -> None:
               'isolated_install_passed': True, 'installed_version_passed': True,
               'updater_dry_run_passed': cli, 'upgrade_passed': cli, 'failed_upgrade_preserved_previous': cli,
               'user_installation_changed': False, 'audio_started': False, 'hardware_validation': False}
-    (review / 'package-smoke.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
+    smoke_path = review / 'package-smoke.json'
+    if smoke_path.is_symlink():
+        raise ValueError('Linked package-smoke evidence destination rejected')
+    smoke_path.write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     print(json.dumps(report, indent=2))
 
 

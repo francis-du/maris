@@ -16,6 +16,8 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 from dependency_notices import validate as validate_notices
 from portable_package import create_payload, validate_binary
 from release_bundle import commit_release_inputs, inspect_kit
+from cli_release import release_destination, release_evidence_file, release_package_inputs
+from package_smoke import review_directory
 from test_online import fixture
 import test_online
 from test_portable import fixture as binary_fixture
@@ -23,6 +25,78 @@ from test_dependency_notices import standard_library_fixture
 
 
 class CliContracts(unittest.TestCase):
+    @unittest.skipIf(os.name == 'nt', 'Directory symlink fixture requires native symlink support')
+    def test_cli_release_locations_reject_linked_input_and_output_paths(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            outside = root.parent / (root.name + '-outside')
+            outside.mkdir()
+            try:
+                (root / 'dist').mkdir()
+                (root / 'dist/packages').symlink_to(outside, target_is_directory=True)
+                with self.assertRaisesRegex(ValueError, 'Linked release input directory'):
+                    release_package_inputs(root, '*.zip')
+                (root / 'dist/packages').unlink()
+                (root / 'dist/packages').mkdir()
+                package = root / 'dist/packages/fixture.zip'
+                target = outside / 'fixture.zip'
+                target.write_bytes(b'outside package')
+                package.symlink_to(target)
+                with self.assertRaisesRegex(ValueError, 'Linked release input'):
+                    release_package_inputs(root, '*.zip')
+                package.unlink()
+                (root / 'dist/online-approved').symlink_to(outside, target_is_directory=True)
+                with self.assertRaisesRegex(ValueError, 'Linked release output'):
+                    release_destination(root)
+            finally:
+                for child in outside.iterdir():
+                    child.unlink()
+                outside.rmdir()
+
+    def test_missing_cli_package_does_not_create_release_output_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            self.assertEqual(release_package_inputs(root, '*.zip'), [])
+            self.assertFalse((root / 'dist/online-approved').exists())
+
+    @unittest.skipIf(os.name == 'nt', 'Directory symlink fixture requires native symlink support')
+    def test_cli_release_evidence_rejects_direct_and_parent_links(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            evidence = root / 'real/report.json'
+            evidence.parent.mkdir()
+            evidence.write_text('{}\n', encoding='utf-8')
+            direct = root / 'direct-report.json'
+            direct.symlink_to(evidence)
+            with self.assertRaisesRegex(ValueError, 'Linked release input'):
+                release_evidence_file(root, direct)
+            linked_parent = root / 'linked'
+            linked_parent.symlink_to(evidence.parent, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, 'input parent'):
+                release_evidence_file(root, linked_parent / evidence.name)
+
+    @unittest.skipIf(os.name == 'nt', 'Directory symlink fixture requires native symlink support')
+    def test_package_smoke_review_rejects_linked_directory_and_destination(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            outside = root.parent / (root.name + '-outside')
+            outside.mkdir()
+            try:
+                (root / '.maris-review').symlink_to(outside, target_is_directory=True)
+                with self.assertRaisesRegex(ValueError, 'Linked package-smoke review'):
+                    review_directory(root)
+                (root / '.maris-review').unlink()
+                review = review_directory(root)
+                target = outside / 'smoke.json'
+                target.write_text('{}\n', encoding='utf-8')
+                (review / 'package-smoke.json').symlink_to(target)
+                with self.assertRaisesRegex(ValueError, 'Linked release input'):
+                    release_evidence_file(root, review / 'package-smoke.json')
+            finally:
+                for child in outside.iterdir():
+                    child.unlink()
+                outside.rmdir()
+
     def test_all_six_cli_payloads_have_native_headers_and_a_distinct_identity(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
