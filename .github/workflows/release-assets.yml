@@ -5,15 +5,26 @@ on:
       - Build application artifacts
     types:
       - completed
+  workflow_call:
+    inputs:
+      source_run_id:
+        required: true
+        type: string
+      source_sha:
+        required: true
+        type: string
+      release_tag:
+        required: true
+        type: string
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: release-assets-${{ github.event.workflow_run.head_sha }}
+  group: release-assets-${{ inputs.source_sha || github.event.workflow_run.head_sha }}
   cancel-in-progress: false
 jobs:
   publish:
-    if: github.event.workflow_run.conclusion == 'success'
+    if: inputs.release_tag != '' || github.event.workflow_run.conclusion == 'success'
     permissions:
       contents: write
       actions: read
@@ -28,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Resolve matching version tag and published release
@@ -37,11 +48,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          SOURCE_SHA: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
           git fetch --force --tags origin
-          mapfile -t tags < <(git tag --points-at "$SOURCE_SHA" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)
+          if [ -n "$RELEASE_TAG_INPUT" ]; then
+            tags=("$RELEASE_TAG_INPUT")
+          else
+            mapfile -t tags < <(git tag --points-at "$SOURCE_SHA" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)
+          fi
           if [ "${#tags[@]}" -eq 0 ]; then
             echo "No version tag points at successful build $SOURCE_SHA; nothing to publish."
             echo "publish=false" >> "$GITHUB_OUTPUT"
@@ -52,6 +68,15 @@ jobs:
             exit 1
           fi
           tag="${tags[0]}"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid release tag: $tag" >&2
+            exit 1
+          fi
+          tag_sha="$(git rev-list -n 1 "$tag")"
+          if [ "$tag_sha" != "$SOURCE_SHA" ]; then
+            echo "Release tag $tag does not point at successful build $SOURCE_SHA" >&2
+            exit 1
+          fi
           version="${tag#v}"
           cargo_version="$(sed -n 's/^version = "\([0-9][0-9.]*\)"$/\1/p' Cargo.toml | head -n 1)"
           if [ "$cargo_version" != "$version" ]; then
@@ -66,7 +91,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id || github.event.workflow_run.id }}
         run: gh run download "$SOURCE_RUN_ID" --pattern 'maris-cli-*' --dir .release-download
       - name: Verify installer contract and prepare public assets
         if: steps.release.outputs.publish == 'true'
@@ -248,7 +273,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
-          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          SOURCE_SHA: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
           actual="$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq '.sha')"
@@ -292,7 +317,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
-          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          SOURCE_SHA: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
           actual="$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq '.sha')"
@@ -323,6 +348,31 @@ jobs:
           echo "Release tag $RELEASE_TAG moved from successful build $SOURCE_SHA to $actual; installer assets were removed." >&2
           exit 1
 
+      - name: Expose validated release for public smoke
+        if: steps.release.outputs.publish == 'true' && steps.assets.outputs.failed != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          CALLED_FROM_PUBLISH: ${{ inputs.release_tag != '' }}
+        run: |
+          set -euo pipefail
+          draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"
+          case "$draft:$CALLED_FROM_PUBLISH" in
+            true:true) gh release edit "$RELEASE_TAG" --draft=false --prerelease ;;
+            true:false)
+              echo "Automatic release-asset validation refuses to publish a draft release" >&2
+              exit 1
+              ;;
+            false:false) ;;
+            false:true)
+              echo "Owned stable-release workflow expected a draft release before public smoke" >&2
+              exit 1
+              ;;
+            *) echo "Could not determine release draft state" >&2; exit 1 ;;
+          esac
+
   public-install-smoke:
     needs: publish
     if: needs.publish.outputs.publish == 'true'
@@ -335,14 +385,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
-      - name: Checkout release-source bootstrap for a fresh or resumed publication
-        if: needs.publish.outputs.mode != 'reuse'
+      - name: Checkout release-source bootstrap for exact publication evidence
+        if: inputs.release_tag != '' || needs.publish.outputs.mode != 'reuse'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}
           persist-credentials: false
-      - name: Checkout the current public bootstrap when revalidating existing assets
-        if: needs.publish.outputs.mode == 'reuse'
+      - name: Checkout the current public bootstrap when independently revalidating existing assets
+        if: inputs.release_tag == '' && needs.publish.outputs.mode == 'reuse'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
@@ -373,6 +423,36 @@ jobs:
           & ./install.ps1 -Version $version -Prefix $prefix -Yes
           & (Join-Path $prefix 'Maris\bin\maris.exe') --version
           Remove-Item -LiteralPath $prefix -Recurse -Force
+
+  promote-stable:
+    needs: [publish, public-install-smoke]
+    if: inputs.release_tag != '' && needs.publish.outputs.publish == 'true' && needs.public-install-smoke.result == 'success'
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Promote smoke-tested prerelease to stable
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.publish.outputs.tag }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          current_main="$(gh api "repos/$GH_REPO/commits/main" --jq '.sha')"
+          if [ "$current_main" != "$SOURCE_SHA" ]; then
+            echo "main advanced before stable promotion; refusing stale release" >&2
+            exit 1
+          fi
+          draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"
+          prerelease="$(gh release view "$RELEASE_TAG" --json isPrerelease --jq '.isPrerelease')"
+          if [ "$draft" != false ] || [ "$prerelease" != true ]; then
+            echo "Release is not the expected public prerelease after installer smoke" >&2
+            exit 1
+          fi
+          gh release edit "$RELEASE_TAG" --prerelease=false --latest
 
   remove-uninstallable-assets:
     needs: [publish, public-install-smoke]
