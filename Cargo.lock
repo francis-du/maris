@@ -336,22 +336,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
-name = "audio-codec-algorithms"
-version = "0.8.1"
+name = "audio-core"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1254ebf6529f3763c491acfb5ab6e960809e3c75a38584cc664f8c5667fb7107"
+checksum = "f93ebbf82d06013f4c41fe71303feb980cddd78496d904d06be627972de51a24"
 
 [[package]]
 name = "audioadapter"
-version = "5.0.0"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1292ef9edf681b7426ed089004b021a42896492f58bd0c909ad44e5faec9ac4"
+checksum = "91f87b70b051c5866680ad79f6743a42ccab264c009d1a71f4d33a3872ae60c8"
+dependencies = [
+ "audio-core",
+ "num-traits",
+]
 
 [[package]]
 name = "audioadapter-buffers"
-version = "5.2.0"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46289a81a3bfa26d0f8b2415f8ca9decde9a66308a150568af5c102381b3c8ce"
+checksum = "9097d67933fb083d382ce980430afdb758aada60846010aee6be068c06cef0ca"
 dependencies = [
  "audioadapter",
  "audioadapter-sample",
@@ -360,11 +364,11 @@ dependencies = [
 
 [[package]]
 name = "audioadapter-sample"
-version = "5.2.0"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5258faecf4edbe35ec483bda9b1f7438e6b391891819269c6b5461aeaa0e8d7d"
+checksum = "34ab94f2bc04a14e1f49ee5f222f66460e8a1b51627bdfedf34eed394d747938"
 dependencies = [
- "audio-codec-algorithms",
+ "audio-core",
  "num-traits",
 ]
 
@@ -1475,11 +1479,12 @@ dependencies = [
 
 [[package]]
 name = "flexaudio"
-version = "0.2.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b78bf190231ce5475386a1a03fde59578675940755227aad7c6950b4e9d57c0d"
+checksum = "e2d0aee54d957a93160200fe6f03fa5427501f96a5cb0448634d15f28bca25b1"
 dependencies = [
  "flexaudio-core",
+ "flexaudio-denoise",
  "flexaudio-mic",
  "flexaudio-os-linux",
  "flexaudio-os-macos",
@@ -1488,7 +1493,9 @@ dependencies = [
 
 [[package]]
 name = "flexaudio-core"
-version = "0.2.0"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15f7a94af4088f02527070dd1379ca5482d15883c57bdd028a9738bf3d8c876b"
 dependencies = [
  "bitflags 2.13.2",
  "ringbuf",
@@ -1498,20 +1505,33 @@ dependencies = [
 ]
 
 [[package]]
-name = "flexaudio-mic"
-version = "0.2.0"
+name = "flexaudio-denoise"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b79f992a7bd74a68151962d0edcae863c127294067116ad24a81ef2182baad6c"
+checksum = "19d09954f7eeedf4e88032e135be79ccda4b8bf8769c16a013307b2f8da6b802"
 dependencies = [
+ "nnnoiseless",
+]
+
+[[package]]
+name = "flexaudio-mic"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b697d089f3729731435b11b9e1744258159b242835310675801aae6c661812b4"
+dependencies = [
+ "block2 0.6.2",
  "cpal 0.16.0",
  "flexaudio-core",
+ "objc2 0.6.4",
+ "objc2-foundation 0.3.2",
+ "windows 0.54.0",
 ]
 
 [[package]]
 name = "flexaudio-os-linux"
-version = "0.2.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "abdcfc14ad533ce1168c774cac16c3be64617295ec8c07ecd98e9158d8bee7a8"
+checksum = "98cadef95203be3cb89f04653dbd75e93e53fa63e25ff69993c6cfadedc94f1b"
 dependencies = [
  "flexaudio-core",
  "pipewire",
@@ -1519,12 +1539,13 @@ dependencies = [
 
 [[package]]
 name = "flexaudio-os-macos"
-version = "0.2.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fabd5db201956619117d6b090059e7b501d17eec83ca456948c0ec060bc135d"
+checksum = "639017ae31ecd2d5e661a1293d1cb53f17c40439c665db46a531935eb3ce3240"
 dependencies = [
  "block2 0.6.2",
  "flexaudio-core",
+ "libc",
  "objc2 0.6.4",
  "objc2-core-audio",
  "objc2-core-audio-types",
@@ -1534,9 +1555,9 @@ dependencies = [
 
 [[package]]
 name = "flexaudio-os-windows"
-version = "0.2.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48042406e3a871f4b9b29b5251fe123ab699ed64f595fa38e6fbac2b1dbb1407"
+checksum = "a41d2553041fbc6f560485f8bb32eee7cfe816090eca7dc61ec0385c34a85807"
 dependencies = [
  "flexaudio-core",
  "windows 0.54.0",
@@ -2148,9 +2169,9 @@ checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 
 [[package]]
 name = "libc"
-version = "0.2.190"
+version = "0.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
+checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
 
 [[package]]
 name = "libloading"
@@ -3699,9 +3720,9 @@ dependencies = [
 
 [[package]]
 name = "ringbuf"
-version = "0.5.2"
+version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b123165531e325df9079f56c036f2da4103a5d5abfef9e2fda4b9c34d1ef7aa"
+checksum = "fe47b720588c8702e34b5979cb3271a8b1842c7cb6f57408efa70c779363488c"
 dependencies = [
  "crossbeam-utils",
  "portable-atomic",
@@ -3710,15 +3731,15 @@ dependencies = [
 
 [[package]]
 name = "rtrb"
-version = "0.4.0"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9278fb35b3e730abe136e9b395b5b81b96d06b9f5478a50f0c8430a2237b22de"
+checksum = "fae8ee26b0371a29a77d2b2d6b3ae13aa81def6f9bf1b1b92a32d279a5e709b7"
 
 [[package]]
 name = "rubato"
-version = "5.0.1"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc1e951b9f5432ec1422f4dcfa5733fc501265902612edf5ef8bd8ecdd960930"
+checksum = "d4be9c88e3d722d3d36939e41941f6b6f52810c1235bf19998a7d4535b402892"
 dependencies = [
  "audioadapter",
  "audioadapter-buffers",
@@ -5552,3 +5573,7 @@ dependencies = [
  "syn 3.0.6",
  "winnow",
 ]
+
+[[patch.unused]]
+name = "flexaudio-core"
+version = "0.2.0"
