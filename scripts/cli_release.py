@@ -15,7 +15,15 @@ from dependency_notices import target, validate as validate_notices
 from package_smoke import extract
 from portable_package import host_target, validate_binary
 from release_gate import check_report
-from release_bundle import commit_release_inputs, digest, inspect_kit, pack
+from release_bundle import (
+    _release_input_path,
+    commit_release_inputs,
+    digest,
+    inspect_kit,
+    pack,
+    release_input_directory,
+    release_output_directory,
+)
 from source_audit import ROOT, source_digest
 
 
@@ -30,7 +38,7 @@ def software_gate(payload: Path, source: str, system: str, arch: str, version: s
         raise ValueError('CLI release is missing its local trusted updater')
     data = json.loads(report.read_text(encoding='utf-8'))
     check_report(data, source, report.parent, sys.platform)
-    smoke_path = ROOT / '.maris-review/package-smoke.json'
+    smoke_path = release_evidence_file(ROOT, ROOT / '.maris-review/package-smoke.json')
     smoke = json.loads(smoke_path.read_text(encoding='utf-8'))
     if (smoke.get('source_sha256') != source or smoke.get('platform') != system or smoke.get('architecture') != arch
             or smoke.get('interface') != 'cli' or smoke.get('binary_sha256') != digest(binary)
@@ -60,6 +68,25 @@ def software_gate(payload: Path, source: str, system: str, arch: str, version: s
             'scope': 'Native CLI/TUI archives, checksums and isolated install/upgrade/recovery; no GUI signing or physical-device certification.'}
 
 
+def release_package_inputs(root: Path, pattern: str) -> list[Path]:
+    packages = root / 'dist/packages'
+    if not packages.exists():
+        return []
+    packages = release_input_directory(packages, root)
+    return [_release_input_path(path, packages) for path in packages.glob(pattern)]
+
+
+def release_destination(root: Path) -> Path:
+    return release_output_directory(root / 'dist/online-approved', root)
+
+
+def release_evidence_file(root: Path, path: Path) -> Path:
+    path = _release_input_path(path, root)
+    if not path.is_file():
+        raise ValueError('Release evidence must be a regular file in this source checkout')
+    return path
+
+
 def prepare(report: Path | None) -> dict:
     system, arch = host_target()
     source = source_digest()
@@ -67,16 +94,16 @@ def prepare(report: Path | None) -> dict:
     reports = [report] if report else list((ROOT / '.maris-review/verification').glob('*/report.json'))
     if len(reports) != 1:
         raise ValueError('CLI preparation requires exactly one actual current-source 200-round report')
-    report = reports[0].resolve()
-    if not report.is_relative_to(ROOT.resolve()) or report.is_symlink():
-        raise ValueError('Round evidence must belong to this source checkout')
+    report = release_evidence_file(ROOT, reports[0])
     suffix = '.tar.gz' if system == 'linux' else '.zip'
-    locals = list((ROOT / 'dist/packages').glob(f'Maris-{version}-{system}-{arch}-local-{source[:12]}{suffix}'))
+    locals = release_package_inputs(
+        ROOT,
+        f'Maris-{version}-{system}-{arch}-local-{source[:12]}{suffix}',
+    )
     if len(locals) != 1:
         raise ValueError('Build and smoke-test the current native CLI package first')
+    destination = release_destination(ROOT)
     stem = f'Maris-{version}-{system}-{arch}'
-    destination = ROOT / 'dist/online-approved'
-    destination.mkdir(parents=True, exist_ok=True)
     archive = destination / (stem + ('.zip' if system == 'windows' else '.tar.gz'))
     record_path = destination / (stem + '.release.json')
     if archive.is_symlink() or record_path.is_symlink() or record_path.exists():

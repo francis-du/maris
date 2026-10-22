@@ -123,7 +123,7 @@ class CliContracts(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'record differs'):
                 commit_release_inputs(packed, ready, archive, record, expected)
 
-    def test_new_archive_is_rolled_back_when_record_conflicts_or_link_fails(self):
+    def test_conflict_is_rejected_before_linking_and_failed_record_leaves_retryable_archive(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             packed = root / 'packed.tar.gz'
@@ -149,10 +149,16 @@ class CliContracts(unittest.TestCase):
             with patch('release_bundle.os.link', side_effect=fail_record_link):
                 with self.assertRaisesRegex(OSError, 'simulated record link failure'):
                     commit_release_inputs(packed, ready, archive, record, expected)
-            self.assertFalse(archive.exists(), 'new archive survived a record-link failure')
+            # Final archive paths are shared with concurrent preparers. A failed
+            # record write must not delete a payload a peer may have committed.
+            self.assertEqual(archive.read_bytes(), packed.read_bytes())
             self.assertFalse(record.exists())
+            before_archive = archive.stat().st_ino
+            commit_release_inputs(packed, ready, archive, record, expected)
+            self.assertEqual(archive.stat().st_ino, before_archive)
+            self.assertEqual(record.read_bytes(), ready.read_bytes())
 
-            os.link(packed, archive)
+            record.unlink()
             record.write_bytes(b'different record')
             with self.assertRaisesRegex(ValueError, 'record differs'):
                 commit_release_inputs(packed, ready, archive, record, expected)

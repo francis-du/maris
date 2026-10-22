@@ -17,21 +17,23 @@ from source_audit import ROOT, source_digest
 from verify_rounds import SUITES, test_passed
 from portable_package import host_target, validate_binary
 from release_requirements import require_complete, blockers as requirement_blockers
+from release_bundle import linked_directory
 
 EVIDENCE = ("real_device_matrix", "listening_validation", "dependency_notices", "project_license", "remote_ci")
 
 
 def within_root(path: Path, root: Path = ROOT) -> Path:
+    root = root.resolve()
     absolute = path if path.is_absolute() else root / path
     if any(p == ".." for p in absolute.parts):
         raise ValueError("Evidence path traversal rejected")
     current = absolute
     while current != root and current != current.parent:
-        if current.is_symlink():
-            raise ValueError("Symlink evidence rejected")
+        if linked_directory(current):
+            raise ValueError("Linked or junction evidence rejected")
         current = current.parent
     resolved = absolute.resolve()
-    resolved.relative_to(root.resolve())
+    resolved.relative_to(root)
     return resolved
 
 
@@ -68,7 +70,7 @@ def check_report(report: dict, source: str, directory: Path, expected_platform: 
 
 def bundle_digest(bundle: Path) -> str:
     """Bind approval to all regular bundle files and permission bits, not only its name."""
-    if bundle.is_symlink() or not bundle.is_dir():
+    if linked_directory(bundle) or not bundle.is_dir():
         raise ValueError("Bundle is missing or linked")
     digest = hashlib.sha256()
     pending = [bundle]
@@ -78,6 +80,8 @@ def bundle_digest(bundle: Path) -> str:
         directory = pending.pop()
         for path in sorted(directory.iterdir()):
             count += 1
+            if linked_directory(path):
+                raise ValueError("Bundle contains a linked or junction entry")
             if count > 10000:
                 raise ValueError("Bundle file-count limit exceeded")
             info = path.lstat()
