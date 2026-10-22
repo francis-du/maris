@@ -863,8 +863,7 @@ impl Session {
         {
             status["captured_process_objects"] = json!(&self.system_processes);
             status["captured_application_pids"] = json!(&self.system_process_pids);
-            status["coreaudio_tap_mode"] =
-                json!(self.tap.as_ref().map(tap::TapCapture::capture_mode));
+            system::add_runtime_diagnostics(&mut status, self);
         }
         #[cfg(unix)]
         if let Some(pulse) = &self.pulse {
@@ -889,6 +888,7 @@ impl Session {
 }
 impl Drop for Session {
     fn drop(&mut self) {
+        let final_status = session_control::final_runtime_status(self.status());
         self.metrics.stopping.store(true, Ordering::Release);
         #[cfg(target_os = "macos")]
         {
@@ -907,10 +907,7 @@ impl Drop for Session {
         self.windows.take();
         self.voice.take();
         self.route.take();
-        let _ = self.store.write_json(
-            "runtime.json",
-            &json!({"active":false,"updated_at_ms":now_ms()}),
-        );
+        let _ = self.store.write_json("runtime.json", &final_status);
     }
 }
 fn new_session_id() -> String {
