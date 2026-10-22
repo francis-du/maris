@@ -36,18 +36,34 @@ def digest(path: Path) -> str:
     return hasher.hexdigest()
 
 
+def linked_directory(path: Path) -> bool:
+    """Detect POSIX links and Windows junction/reparse entries without following them."""
+    if path.is_symlink():
+        return True
+    junction = getattr(path, 'is_junction', None)
+    if junction is not None and junction():
+        return True
+    try:
+        attributes = path.lstat().st_file_attributes
+    except (AttributeError, FileNotFoundError, OSError):
+        return False
+    return bool(attributes & 0x400)  # Windows FILE_ATTRIBUTE_REPARSE_POINT.
+
+
 def release_output_directory(path: Path, root: Path = ROOT) -> Path:
-    """Create a fixed release output directory without following workspace symlink escapes."""
+    """Create a fixed release output directory without following workspace link escapes."""
     root = root.resolve()
     path = path.absolute()
     try:
         relative = path.relative_to(root)
     except ValueError as error:
         raise ValueError('Release output directory must stay inside the source checkout') from error
+    if any(part in ('', '.', '..') for part in relative.parts):
+        raise ValueError('Release output directory contains ambiguous path components')
     current = root
     for part in relative.parts:
         current = current / part
-        if current.is_symlink():
+        if linked_directory(current):
             raise ValueError('Linked release output directory rejected')
         if current.exists() and not current.is_dir():
             raise ValueError('Release output path contains a non-directory component')
@@ -56,6 +72,56 @@ def release_output_directory(path: Path, root: Path = ROOT) -> Path:
         path.resolve().relative_to(root)
     except ValueError as error:
         raise ValueError('Release output directory escaped the source checkout') from error
+    return path
+
+
+def release_input_directory(path: Path, root: Path = ROOT) -> Path:
+    """Open a release collection only through real directories inside the checkout."""
+    root = root.resolve()
+    path = path.absolute()
+    try:
+        relative = path.relative_to(root)
+    except ValueError as error:
+        raise ValueError('Release input directory must stay inside the source checkout') from error
+    if any(part in ('', '.', '..') for part in relative.parts):
+        raise ValueError('Release input directory contains ambiguous path components')
+    current = root
+    for part in relative.parts:
+        current = current / part
+        if linked_directory(current):
+            raise ValueError('Linked release input directory rejected')
+        if not current.is_dir():
+            raise ValueError('Release input path contains a non-directory component')
+    try:
+        path.resolve().relative_to(root)
+    except ValueError as error:
+        raise ValueError('Release input directory escaped the source checkout') from error
+    return path
+
+
+def _release_input_path(path: Path, directory: Path) -> Path:
+    """Require one release input to stay below a real, unlinked collection root."""
+    directory = directory.absolute()
+    if linked_directory(directory) or not directory.is_dir():
+        raise ValueError('Linked or invalid release input directory rejected')
+    path = path.absolute()
+    try:
+        relative = path.relative_to(directory)
+    except ValueError as error:
+        raise ValueError('Release input escaped the collection directory') from error
+    if any(part in ('', '.', '..') for part in relative.parts):
+        raise ValueError('Release input contains ambiguous path components')
+    current = directory
+    for part in relative.parts[:-1]:
+        current = current / part
+        if linked_directory(current) or not current.is_dir():
+            raise ValueError('Linked or invalid release input parent rejected')
+    if linked_directory(path):
+        raise ValueError('Linked release input rejected')
+    try:
+        path.resolve().relative_to(directory.resolve())
+    except ValueError as error:
+        raise ValueError('Release input escaped the collection directory') from error
     return path
 
 
@@ -159,64 +225,94 @@ def commit_release_inputs(
     record_path: Path,
     expected_sha256: str,
 ) -> None:
-    """Atomically converge an exact archive/record pair after races or process crashes."""
-    created_archive = False
-    created_record = False
+    """Converge an exact pair, validating both linked objects before reporting success."""
+    def identity(info: os.stat_result) -> tuple:
+        # Peers may add hard links to these same bytes. That changes ctime/nlink,
+        # not payload identity; compare content hashes as well as these fields.
+        return (info.st_dev, info.st_ino, info.st_mode, info.st_size,
+                info.st_mtime_ns, getattr(info, 'st_file_attributes', 0))
 
-    def exact_archive() -> bool:
+    def snapshot(path: Path, bound: int, retain: bool = False) -> tuple:
         try:
-            return (archive.is_file() and not archive.is_symlink()
-                    and archive.stat().st_size == packed.stat().st_size
-                    and digest(archive) == expected_sha256)
-        except OSError:
-            return False
+            before = path.lstat()
+            baseline = identity(before)
+            if (not stat.S_ISREG(before.st_mode)
+                    or getattr(before, 'st_file_attributes', 0) & 0x400
+                    or not 0 < before.st_size <= bound):
+                raise ValueError('Missing, linked, special or oversized release commit input')
+            flags = (os.O_RDONLY | getattr(os, 'O_BINARY', 0)
+                     | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0))
+            descriptor = os.open(path, flags)
+            try:
+                if identity(os.fstat(descriptor)) != baseline:
+                    raise ValueError('Release commit input changed before reading')
+                hasher, chunks, count = hashlib.sha256(), [], 0
+                while count <= before.st_size:
+                    chunk = os.read(descriptor, min(1024 * 1024, before.st_size + 1 - count))
+                    if not chunk:
+                        break
+                    count += len(chunk)
+                    if count > before.st_size:
+                        raise ValueError('Release commit input grew while reading')
+                    hasher.update(chunk)
+                    if retain:
+                        chunks.append(chunk)
+                if (count != before.st_size or identity(os.fstat(descriptor)) != baseline
+                        or identity(path.lstat()) != baseline):
+                    raise ValueError('Release commit input changed while reading')
+                return baseline, hasher.hexdigest(), b''.join(chunks)
+            finally:
+                os.close(descriptor)
+        except OSError as error:
+            raise ValueError('Unreadable or changed release commit input') from error
 
-    def exact_record() -> bool:
-        try:
-            return (record_path.is_file() and not record_path.is_symlink()
-                    and record_path.read_bytes() == record_ready.read_bytes())
-        except OSError:
-            return False
+    # Freeze the source record before linking: comparing two paths after a hard
+    # link is insufficient because a write through either mutates the same file.
+    prepared_archive = snapshot(packed, 134217728)
+    prepared_record = snapshot(record_ready, 32768, retain=True)
+    if prepared_archive[1] != expected_sha256:
+        raise ValueError('Prepared release archive differs from the reviewed digest')
 
-    def unlink_our_link(path: Path, source: Path) -> None:
-        try:
-            if path.exists() and not path.is_symlink() and path.samefile(source):
-                path.unlink()
-        except (FileNotFoundError, OSError):
-            pass
-
-    if archive.exists():
-        if not exact_archive():
+    def check_archive() -> tuple:
+        current = snapshot(archive, 134217728)
+        if current[0][3] != prepared_archive[0][3] or current[1] != expected_sha256:
             raise ValueError('Existing release archive differs from the exact rebuilt input')
-    else:
-        try:
-            os.link(packed, archive)
-            created_archive = True
-        except FileExistsError:
-            if not exact_archive():
-                raise ValueError('Existing release archive differs from the exact rebuilt input')
+        return current[0]
+
+    def check_record() -> tuple:
+        current = snapshot(record_path, 32768, retain=True)
+        if current[2] != prepared_record[2]:
+            raise ValueError('Existing release record differs from the exact rebuilt input')
+        return current[0]
+
+    # Reject an already-conflicting record before exposing an archive at all.
+    # Check again below if a peer wins the record link after this observation.
+    if record_path.exists() or record_path.is_symlink():
+        check_record()
+    try:
+        os.link(packed, archive)
+    except FileExistsError:
+        pass
+    check_archive()  # A successful link can still refer to a replaced source.
+    if snapshot(record_ready, 32768, retain=True) != prepared_record:
+        raise ValueError('Prepared release record changed before commit')
     try:
         os.link(record_ready, record_path)
-        created_record = True
     except FileExistsError:
-        if not exact_record():
-            if created_archive:
-                unlink_our_link(archive, packed)
-            raise ValueError('Existing release record differs from the exact rebuilt input')
-    except Exception:
-        if created_archive:
-            unlink_our_link(archive, packed)
-        raise
-
-    # A competing process can replace a previously verified final path while the
-    # matching hard-link is being committed. Revalidate the pair after both names
-    # exist so verification and publication cannot refer to different bytes.
-    if not exact_archive() or not exact_record():
-        if created_record:
-            unlink_our_link(record_path, record_ready)
-        if created_archive:
-            unlink_our_link(archive, packed)
-        raise ValueError('Release archive/record pair changed while being committed')
+        check_record()
+    # Never unlink the shared archive on failure: another preparer may already
+    # have validated it and committed its record. Even checking record absence
+    # before unlinking would race a peer's commit. An orphan remains retryable
+    # only after exact-byte validation; without its record it cannot pass collection.
+    committed_record = check_record()
+    committed_archive = check_archive()
+    try:
+        for path, expected in ((packed, prepared_archive[0]), (record_ready, prepared_record[0]),
+                               (archive, committed_archive), (record_path, committed_record)):
+            if identity(path.lstat()) != expected:
+                raise ValueError('Release commit input changed during final validation')
+    except OSError as error:
+        raise ValueError('Release commit input disappeared during final validation') from error
 
 
 def inspect_kit(archive: Path, item: dict) -> None:
@@ -339,6 +435,9 @@ def inspect_kit(archive: Path, item: dict) -> None:
 
 
 def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: dict | None = None) -> str:
+    directory = directory.absolute()
+    if linked_directory(directory) or not directory.is_dir():
+        raise ValueError('Linked or invalid release input directory rejected')
     records = []
     verified_inputs = []
 
@@ -364,6 +463,7 @@ def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: di
             raise ValueError('Release record changed while being read') from error
 
     for file in sorted(directory.rglob('*.release.json')):
+        file = _release_input_path(file, directory)
         record_identity, record_bytes = snapshot_record(file)
         item = json.loads(record_bytes.decode('utf-8'))
         if (item.get('schema_version') not in (1, 2) or item.get('channel') not in ('candidate', 'stable')
@@ -376,7 +476,7 @@ def combine(directory: Path, output: Path, root: Path = ROOT, *, expected_ci: di
         if not re.fullmatch(r'\d+\.\d+\.\d+', version) or (system, arch) not in TARGETS or item['archive'] != name:
             raise ValueError('Invalid native release identity')
         archive = file.parent / name
-        if archive.is_symlink() or not archive.is_file() or not 0 < archive.stat().st_size <= 134217728:
+        if linked_directory(archive) or not archive.is_file() or not 0 < archive.stat().st_size <= 134217728:
             raise ValueError('Missing, linked or oversized release archive')
         try:
             archive_identity = identity(archive)
@@ -582,8 +682,11 @@ def main() -> None:
         if os.environ.get('GITHUB_ACTIONS') == 'true':
             expected_ci = {'run': os.environ.get('GITHUB_RUN_ID'), 'commit': os.environ.get('GITHUB_SHA'),
                            'repository': os.environ.get('GITHUB_REPOSITORY')}
-        channel = combine(args.collect, args.output, expected_ci=expected_ci)
-        print(json.dumps({'manifest': str(args.output), 'channel': channel, 'published': False}))
+        collection = release_input_directory(args.collect, ROOT)
+        output_directory = release_output_directory(args.output.parent, ROOT)
+        output = output_directory / args.output.name
+        channel = combine(collection, output, expected_ci=expected_ci)
+        print(json.dumps({'manifest': str(output), 'channel': channel, 'published': False}))
         return
     if args.output is not None or (args.candidate and any([args.bundle, args.approval, args.report])):
         parser.error('Candidate creation cannot carry approval or output overrides')

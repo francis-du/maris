@@ -36,15 +36,13 @@ class ReleasePairRace(TestCase):
 
             with mock.patch("release_bundle.os.link", side_effect=replace_after_archive_validation):
                 with self.assertRaisesRegex(
-                    ValueError, "Release archive/record pair changed while being committed"
+                    ValueError, "Existing release archive differs"
                 ):
                     commit_release_inputs(packed, ready, archive, record, expected)
 
             self.assertEqual(archive.read_bytes(), b"attacker replacement")
-            self.assertFalse(
-                record.exists(),
-                "record created by this attempt survived after final pair verification failed",
-            )
+            self.assertTrue(record.samefile(ready))
+            self.assertEqual(record.read_bytes(), b'{"verified":true}\n')
 
     def test_record_replacement_after_link_is_not_deleted_as_if_it_were_ours(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -68,14 +66,12 @@ class ReleasePairRace(TestCase):
 
             with mock.patch("release_bundle.os.link", side_effect=replace_record_after_link):
                 with self.assertRaisesRegex(
-                    ValueError, "Release archive/record pair changed while being committed"
+                    ValueError, "Existing release record differs"
                 ):
                     commit_release_inputs(packed, ready, archive, record, expected)
 
-            self.assertFalse(
-                archive.exists(),
-                "archive created by this attempt survived a mismatched final record",
-            )
+            self.assertTrue(archive.samefile(packed))
+            self.assertEqual(archive.read_bytes(), b"verified archive")
             self.assertEqual(
                 record.read_bytes(),
                 b'{"other":true}\n',
@@ -83,7 +79,7 @@ class ReleasePairRace(TestCase):
             )
 
 
-    def test_record_replaced_by_directory_still_rolls_back_our_archive(self):
+    def test_record_replaced_by_directory_preserves_shared_archive(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             packed = root / "packed.tar.gz"
@@ -104,12 +100,10 @@ class ReleasePairRace(TestCase):
 
             with mock.patch("release_bundle.os.link", side_effect=replace_record_with_directory):
                 with self.assertRaisesRegex(
-                    ValueError, "Release archive/record pair changed while being committed"
+                    ValueError, "Missing, linked, special or oversized"
                 ):
                     commit_release_inputs(packed, ready, archive, record, expected)
 
-            self.assertFalse(
-                archive.exists(),
-                "archive created by this attempt survived a non-file final record",
-            )
+            self.assertTrue(archive.samefile(packed))
+            self.assertEqual(archive.read_bytes(), b"verified archive")
             self.assertTrue(record.is_dir())
