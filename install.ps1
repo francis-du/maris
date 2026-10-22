@@ -388,9 +388,17 @@ try {
     }
     $null = [IO.Directory]::CreateDirectory($Prefix)
     $candidateLock = Join-Path $Prefix '.maris-install.lock'
-    try { $lockHandle = [IO.File]::Open($candidateLock, [IO.FileMode]::CreateNew, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None) }
+    try {
+        $lockHandle = [IO.FileStream]::new(
+            $candidateLock,
+            [IO.FileMode]::CreateNew,
+            [IO.FileAccess]::ReadWrite,
+            [IO.FileShare]::None,
+            1,
+            [IO.FileOptions]::DeleteOnClose
+        )
+    }
     catch { throw 'Another installation may be active. Inspect the existing lock; never delete a live lock.' }
-    $lockPath = $candidateLock
     Check-Destination
     $stage = Join-Path $Prefix ('.maris-stage.' + [Guid]::NewGuid().ToString('N'))
     $null = [IO.Directory]::CreateDirectory($stage)
@@ -415,9 +423,14 @@ try {
     [Console]::Error.WriteLine('Maris install: ' + $_.Exception.Message)
     $exitCode = 1
 } finally {
-    if (-not $committed -and $backup -and [IO.Directory]::Exists((Join-Path $backup 'Maris')) -and -not (Test-Path -LiteralPath $destination)) {
-        try { [IO.Directory]::Move((Join-Path $backup 'Maris'), $destination) }
-        catch { [Console]::Error.WriteLine("Recovery required: $backup\Maris"); $exitCode = 1 }
+    if (-not $committed -and $backup -and [IO.Directory]::Exists((Join-Path $backup 'Maris'))) {
+        if (-not (Test-Path -LiteralPath $destination)) {
+            try { [IO.Directory]::Move((Join-Path $backup 'Maris'), $destination) }
+            catch { [Console]::Error.WriteLine("Recovery required: $backup\Maris"); $exitCode = 1 }
+        } else {
+            [Console]::Error.WriteLine("Recovery required: $backup\Maris")
+            $exitCode = 1
+        }
     }
     foreach ($owned in @($stage, $buildDirectory, $downloadDirectory)) {
         if ($owned -and [IO.Directory]::Exists($owned)) {
@@ -427,6 +440,5 @@ try {
     }
     if ($backup -and [IO.Directory]::Exists($backup) -and @(Get-ChildItem -LiteralPath $backup -Force).Count -eq 0) { [IO.Directory]::Delete($backup) }
     if ($null -ne $lockHandle) { $lockHandle.Dispose() }
-    if ($lockPath) { [IO.File]::Delete($lockPath) }
 }
 exit $exitCode

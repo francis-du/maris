@@ -147,19 +147,32 @@ fi
 mkdir -p -- "$PREFIX"
 LOCK="$PREFIX/.maris-install.lock"
 mkdir -- "$LOCK" 2>/dev/null || fail 'Another installation may be active; inspect the existing install lock before retrying'
+LOCK_OWNER="$$:$PPID"
+if ! printf '%s\n' "$LOCK_OWNER" > "$LOCK/.owner"; then
+    rmdir -- "$LOCK" 2>/dev/null || true
+    fail 'Could not record ownership of the install lock'
+fi
 STAGE=''
 BACKUP=''
 COMMITTED=0
 cleanup() {
     local code=$?
     trap - EXIT HUP INT TERM
-    if [ "$COMMITTED" -eq 0 ] && [ -n "$BACKUP" ] && [ -d "$BACKUP/Maris.app" ] && [ ! -e "$DEST" ]; then
-        mv -- "$BACKUP/Maris.app" "$DEST" || printf 'Recovery required: previous bundle remains at %s\n' "$BACKUP/Maris.app" >&2
+    if [ "$COMMITTED" -eq 0 ] && [ -n "$BACKUP" ] && [ -d "$BACKUP/Maris.app" ]; then
+        if [ ! -e "$DEST" ]; then
+            mv -- "$BACKUP/Maris.app" "$DEST" || printf 'Recovery required: previous bundle remains at %s\n' "$BACKUP/Maris.app" >&2
+        else
+            printf 'Recovery required: previous bundle remains at %s\n' "$BACKUP/Maris.app" >&2
+        fi
     fi
     # Only this invocation's mktemp staging directory is eligible for removal.
     [ -z "$STAGE" ] || rm -rf -- "$STAGE"
     [ -z "$BACKUP" ] || rmdir -- "$BACKUP" 2>/dev/null || true
-    rmdir -- "$LOCK" 2>/dev/null || true
+    if [ -f "$LOCK/.owner" ] && [ ! -L "$LOCK/.owner" ] \
+            && [ "$(cat "$LOCK/.owner" 2>/dev/null || true)" = "$LOCK_OWNER" ]; then
+        rm -f -- "$LOCK/.owner"
+        rmdir -- "$LOCK" 2>/dev/null || true
+    fi
     exit "$code"
 }
 trap cleanup EXIT

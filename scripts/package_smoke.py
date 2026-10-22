@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 import shutil
 import stat
@@ -21,18 +22,59 @@ def safe_name(name: str, stem: str) -> bool:
             and '..' not in path.parts and '\\' not in name and '\x00' not in name)
 
 
+def safe_linux_name(name: str, stem: str) -> bool:
+    path = name[:-1] if name.endswith('/') else name
+    parts = PurePosixPath(path).parts
+    return (safe_name(name, stem) and bool(parts) and parts[0] == stem
+            and bool(re.fullmatch(r'[A-Za-z0-9_./-]+', path))
+            and all(part not in ('', '.', '..') for part in parts))
+
+
+def safe_windows_name(name: str, stem: str) -> bool:
+    path = name[:-1] if name.endswith('/') else name
+    parts = PurePosixPath(path).parts
+    if (not safe_name(name, stem) or not parts or parts[0] != stem
+            or not re.fullmatch(r'[A-Za-z0-9_./-]+', path)):
+        return False
+    for component in parts:
+        if (component in ('', '.', '..') or component.endswith('.')
+                or re.fullmatch(r'(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?', component, re.I)):
+            return False
+    return True
+
+
 def extract(archive: Path, directory: Path, system: str, stem: str) -> None:
     total = 0
     if system == 'linux':
         with tarfile.open(archive, 'r:gz') as source:
             entries = source.getmembers()
-            if len(entries) > 10000:
+            if not entries or len(entries) > 10000:
                 raise ValueError('Archive file-count limit exceeded')
+            seen = set()
+            spelling = {}
             for entry in entries:
                 total += entry.size
-                if not safe_name(entry.name, stem) or not (entry.isdir() or entry.isfile()) or total > 536870912:
+                name = entry.name[:-1] if entry.name.endswith('/') else entry.name
+                parts = PurePosixPath(name).parts
+                unsafe = (not safe_linux_name(entry.name, stem)
+                          or not (entry.isdir() or entry.isfile())
+                          or entry.mode & 0o7000
+                          or total > 536870912)
+                key = name.lower()
+                if key in seen:
+                    unsafe = True
+                seen.add(key)
+                prefix = []
+                for part in parts:
+                    prefix.append(part)
+                    value = '/'.join(prefix)
+                    folded = value.lower()
+                    if folded in spelling and spelling[folded] != value:
+                        unsafe = True
+                    spelling[folded] = value
+                if unsafe:
                     raise ValueError('Unsafe archive entry')
-                path = directory.joinpath(*PurePosixPath(entry.name).parts)
+                path = directory.joinpath(*parts)
                 if entry.isdir():
                     path.mkdir(parents=True, exist_ok=True)
                 else:
@@ -45,11 +87,22 @@ def extract(archive: Path, directory: Path, system: str, stem: str) -> None:
             entries = source.infolist()
             if len(entries) > 10000:
                 raise ValueError('Archive file-count limit exceeded')
+            seen = set()
             for entry in entries:
                 total += entry.file_size
                 mode = stat.S_IFMT(entry.external_attr >> 16)
-                if (not safe_name(entry.filename, stem) or total > 536870912
-                        or mode not in (0, stat.S_IFREG, stat.S_IFDIR)):
+                unsafe = (not safe_name(entry.filename, stem) or total > 536870912
+                          or mode not in (0, stat.S_IFREG, stat.S_IFDIR))
+                if system == 'windows':
+                    normalized = entry.filename[:-1] if entry.filename.endswith('/') else entry.filename
+                    key = normalized.lower()
+                    unsafe = (unsafe or not safe_windows_name(entry.filename, stem)
+                              or key in seen or entry.external_attr & 0x400
+                              or (entry.is_dir() and mode == stat.S_IFREG)
+                              or (not entry.is_dir() and mode == stat.S_IFDIR)
+                              or (entry.is_dir() and entry.file_size != 0))
+                    seen.add(key)
+                if unsafe:
                     raise ValueError('Unsafe archive entry')
             if source.testzip() is not None:
                 raise ValueError('Archive CRC check failed')
@@ -75,20 +128,98 @@ def snapshot_tree(root: Path) -> dict:
             for path in root.rglob('*')}
 
 
+def linked_directory(path: Path) -> bool:
+    if path.is_symlink():
+        return True
+    junction = getattr(path, 'is_junction', None)
+    if junction is not None and junction():
+        return True
+    try:
+        attributes = path.lstat().st_file_attributes
+    except (AttributeError, FileNotFoundError, OSError):
+        return False
+    return bool(attributes & 0x400)
+
+
+def package_input_directory(root: Path) -> Path:
+    root = root.resolve()
+    packages = root / 'dist/packages'
+    current = root
+    for part in packages.relative_to(root).parts:
+        current = current / part
+        if linked_directory(current):
+            raise ValueError('Linked package-smoke input directory rejected')
+        if not current.is_dir():
+            raise ValueError('Package-smoke input directory is missing or invalid')
+    try:
+        packages.resolve().relative_to(root)
+    except ValueError as error:
+        raise ValueError('Package-smoke input directory escaped the source checkout') from error
+    return packages
+
+
+def package_input_file(directory: Path, path: Path) -> Path:
+    directory = directory.resolve()
+    path = path.absolute()
+    try:
+        relative = path.relative_to(directory)
+    except ValueError as error:
+        raise ValueError('Package-smoke input escaped the package directory') from error
+    current = directory
+    for part in relative.parts[:-1]:
+        current = current / part
+        if linked_directory(current) or not current.is_dir():
+            raise ValueError('Linked or invalid package-smoke input parent rejected')
+    if path.is_symlink() or not path.is_file():
+        raise ValueError('Linked or invalid package-smoke input file rejected')
+    try:
+        path.resolve().relative_to(directory)
+    except ValueError as error:
+        raise ValueError('Package-smoke input file escaped the package directory') from error
+    return path
+
+
+def review_directory(root: Path) -> Path:
+    root = root.resolve()
+    review = root / '.maris-review'
+    if linked_directory(review):
+        raise ValueError('Linked package-smoke review directory rejected')
+    if review.exists() and not review.is_dir():
+        raise ValueError('Package-smoke review path is not a directory')
+    review.mkdir(exist_ok=True)
+    try:
+        review.resolve().relative_to(root)
+    except ValueError as error:
+        raise ValueError('Package-smoke review directory escaped the source checkout') from error
+    return review
+
+
+def evidence_output(review: Path) -> Path:
+    path = review / 'package-smoke.json'
+    if path.is_symlink():
+        raise ValueError('Linked package-smoke evidence destination rejected')
+    if path.exists() and not path.is_file():
+        raise ValueError('Package-smoke evidence destination is not a regular file')
+    return path
+
+
 def main() -> None:
     system, arch = host_target()
     source_hash = source_digest()
     suffix = '.tar.gz' if system == 'linux' else '.zip'
-    archives = list((ROOT / 'dist/packages').glob(f'Maris-*-{system}-{arch}-local-{source_hash[:12]}{suffix}'))
+    packages = package_input_directory(ROOT)
+    archives = [
+        package_input_file(packages, path)
+        for path in packages.glob(f'Maris-*-{system}-{arch}-local-{source_hash[:12]}{suffix}')
+    ]
     if len(archives) != 1:
         raise ValueError('Expected exactly one current-source native archive')
     archive = archives[0]
     stem = archive.name[:-len(suffix)]
-    checksum = archive.parent / (stem + '.sha256')
+    checksum = package_input_file(packages, archive.parent / (stem + '.sha256'))
     if hashlib.sha256(archive.read_bytes()).hexdigest() != checksum.read_text(encoding='utf-8').split()[0]:
         raise ValueError('Archive checksum mismatch')
-    review = ROOT / '.maris-review'
-    review.mkdir(exist_ok=True)
+    review = review_directory(ROOT)
     # Windows enforces a user-profile prefix, not the potentially machine-wide Actions checkout.
     temporary_root = None if system == 'windows' else review
     with tempfile.TemporaryDirectory(prefix='install-smoke-', dir=temporary_root) as temporary:
@@ -160,7 +291,7 @@ def main() -> None:
               'isolated_install_passed': True, 'installed_version_passed': True,
               'updater_dry_run_passed': cli, 'upgrade_passed': cli, 'failed_upgrade_preserved_previous': cli,
               'user_installation_changed': False, 'audio_started': False, 'hardware_validation': False}
-    (review / 'package-smoke.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
+    evidence_output(review).write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     print(json.dumps(report, indent=2))
 
 
