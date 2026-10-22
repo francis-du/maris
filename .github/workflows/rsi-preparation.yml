@@ -1,0 +1,235 @@
+# Temporary source-bound preparation on the named integration branch.
+# This job only prepares reviewable artifacts; it never commits or publishes them.
+name: Prepare RSI lockfile and offline documentation
+
+on:
+  push:
+    branches: ['fix/rsi-integration-20261022']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rsi-preparation-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+  CARGO_BUILD_JOBS: '2'
+  RUSTUP_TOOLCHAIN: 1.94.0
+  PYTHONDONTWRITEBYTECODE: '1'
+  LOCK_BASE_COMMIT: '1ffe86ebedaff000377d8ce01e3cd6e6bbfd12a5'
+
+jobs:
+  prepare:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/fix/rsi-integration-20261022'
+    runs-on: macos-15
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+        working-directory: source
+    steps:
+      - name: Check out the exact preparation commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: source
+          persist-credentials: false
+
+      - name: Reject an unset lockfile baseline
+        run: |
+          set -euo pipefail
+          [[ "$LOCK_BASE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
+          test -z "$(git status --porcelain)"
+
+      - name: Read Cargo.lock from the reviewed merged main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.LOCK_BASE_COMMIT }}
+          path: lock-base
+          persist-credentials: false
+          sparse-checkout: Cargo.lock
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Install the CI Rust toolchain
+        run: rustup toolchain install 1.94.0 --profile minimal --component rustfmt --component clippy
+
+      # Existing CI has no shared Rust cache action. Keep the same policy and
+      # prebuild both probes so their runtime deadlines exclude a cold compile.
+      - name: Regenerate the lockfile from main and format the final source
+        run: |
+          set -euo pipefail
+          [[ "$(git -C ../lock-base rev-parse HEAD)" == "$LOCK_BASE_COMMIT" ]]
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          import subprocess
+          baseline = Path('../lock-base/Cargo.lock')
+          destination = Path('Cargo.lock')
+          if baseline.is_symlink() or not baseline.is_file() or destination.is_symlink():
+              raise SystemExit('Cargo.lock must be a regular file in both checkouts')
+          expected = subprocess.check_output(['git', '-C', '../lock-base', 'show',
+                                               os.environ['LOCK_BASE_COMMIT'] + ':Cargo.lock'])
+          if baseline.read_bytes() != expected:
+              raise SystemExit('The baseline lockfile differs from its fixed Git blob')
+          destination.write_bytes(expected)
+          PY
+          cargo update -p vt100 --precise 0.18.1
+          cargo fmt --all
+          cargo fmt --all --check
+          cargo metadata --locked --no-deps --format-version 1 > "$RUNNER_TEMP/rsi-cargo-metadata.json"
+
+      - name: Build the actual offline UI and AppKit probes
+        run: cargo build --locked --example ui_probe --example menu_probe
+
+      - name: Verify mixer runtime changes and actual lock ownership
+        run: cargo test --locked --lib mixer_tests -- --nocapture --test-threads=1
+
+      - name: Generate the actual offline Ratatui and AppKit assets
+        run: |
+          set -euo pipefail
+          python scripts/docs_assets.py --refresh
+          python scripts/capture_menu_docs.py --refresh
+
+      - name: Validate formatting and both source-bound asset sets
+        run: |
+          set -euo pipefail
+          cargo fmt --all --check
+          python scripts/docs_assets.py
+          python scripts/capture_menu_docs.py
+          python tests/tooling/test_docs_assets_refresh.py -v
+          python tests/tooling/test_menu_docs.py -v
+
+      - name: Export complete prepared files with exact input and output bindings
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+          import tomllib
+
+          root = Path.cwd().resolve()
+          def git(*arguments):
+              return subprocess.check_output(['git', *arguments], cwd=root)
+
+          source_commit = git('rev-parse', 'HEAD').decode().strip()
+          if source_commit != os.environ['GITHUB_SHA']:
+              raise SystemExit('The preparation checkout changed commits')
+          baseline_commit = os.environ['LOCK_BASE_COMMIT']
+          baseline = root.parent / 'lock-base' / 'Cargo.lock'
+          actual_baseline = subprocess.check_output(
+              ['git', '-C', str(baseline.parent), 'rev-parse', 'HEAD'], text=True,
+          ).strip()
+          if actual_baseline != baseline_commit:
+              raise SystemExit('The Cargo.lock baseline commit changed')
+          expected_baseline = subprocess.check_output([
+              'git', '-C', str(baseline.parent), 'show', baseline_commit + ':Cargo.lock',
+          ])
+          if baseline.read_bytes() != expected_baseline:
+              raise SystemExit('The baseline lockfile no longer matches its fixed Git blob')
+          lock = tomllib.loads((root / 'Cargo.lock').read_text(encoding='utf-8'))
+          if {p['version'] for p in lock['package'] if p['name'] == 'vt100'} != {'0.18.1'}:
+              raise SystemExit('The prepared lockfile must contain exactly vt100 0.18.1')
+
+          def paths_from_git(*arguments):
+              return {p.decode('utf-8') for p in git(*arguments).split(b'\0') if p}
+
+          deleted = paths_from_git('diff', '--name-only', '--diff-filter=D', '-z', 'HEAD', '--')
+          if deleted:
+              raise SystemExit('Preparation must not delete tracked files: ' + repr(sorted(deleted)))
+          changed = paths_from_git('diff', '--name-only', '-z', 'HEAD', '--')
+          untracked = paths_from_git('ls-files', '--others', '--exclude-standard', '-z')
+          def allowed(name):
+              return name == 'Cargo.lock' or name.endswith('.rs') or name.startswith('docs/assets/')
+          unexpected = sorted(name for name in changed | untracked if not allowed(name))
+          if unexpected:
+              raise SystemExit('Unexpected changes outside preparation outputs: ' + repr(unexpected))
+          changed_rust = sorted(name for name in changed | untracked if name.endswith('.rs'))
+          asset_files = []
+          for file in sorted((root / 'docs/assets').rglob('*')):
+              if file.is_symlink():
+                  raise SystemExit('Linked asset rejected: ' + str(file.relative_to(root)))
+              if file.is_file():
+                  asset_files.append(file.relative_to(root).as_posix())
+          exported = sorted(set(['Cargo.lock', *changed_rust, *asset_files]))
+          destination = Path(os.environ['RUNNER_TEMP']) / 'rsi-prepared'
+          destination.mkdir(exist_ok=False)
+          payload = destination / 'payload'
+          records = []
+          for name in exported:
+              file = root / name
+              if (file.is_symlink() or not file.is_file()
+                      or not file.resolve().is_relative_to(root)
+                      or any(p.is_symlink() for p in file.parents if p != root and p.is_relative_to(root))):
+                  raise SystemExit('Missing or linked preparation output: ' + name)
+              data = file.read_bytes()
+              target = payload / name
+              target.parent.mkdir(parents=True, exist_ok=True)
+              target.write_bytes(data)
+              source_blob = git('ls-tree', 'HEAD', '--', name).decode().strip()
+              match = re.match(r'^([0-7]{6}) blob ([0-9a-f]{40})\t', source_blob)
+              records.append({
+                  'path': name,
+                  'sha256': hashlib.sha256(data).hexdigest(),
+                  'bytes': len(data),
+                  'input_git_blob_sha': match.group(2) if match else None,
+                  'input_git_mode': match.group(1) if match else None,
+              })
+          illustrations = json.loads((root / 'docs/assets/illustrations.json').read_text())
+          menus = json.loads((root / 'docs/assets/menu-bar-review-manifest.json').read_text())
+          manifest = {
+              'schema': 1,
+              'scope': 'offline_documentation_preparation',
+              'hardware_validation': False,
+              'source_binding': {
+                  'repository': os.environ['GITHUB_REPOSITORY'],
+                  'ref': os.environ['GITHUB_REF'],
+                  'input_commit': source_commit,
+                  'input_tree': git('rev-parse', 'HEAD^{tree}').decode().strip(),
+                  'lockfile_base_commit': baseline_commit,
+                  'lockfile_base_sha256': hashlib.sha256(baseline.read_bytes()).hexdigest(),
+              },
+              'run': {
+                  'id': os.environ['GITHUB_RUN_ID'],
+                  'attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+                  'workflow_ref': os.environ['GITHUB_WORKFLOW_REF'],
+                  'workflow_sha': os.environ['GITHUB_WORKFLOW_SHA'],
+              },
+              'rustc': subprocess.check_output(['rustc', '--version'], text=True).strip(),
+              'changed_rust_files': changed_rust,
+              'changed_tracked_files': sorted(changed),
+              'new_files': sorted(untracked),
+              'render_source_sha256': {
+                  'ratatui': illustrations['source_sha256'],
+                  'appkit': menus['source_sha256'],
+              },
+              'files': records,
+          }
+          (destination / 'manifest.json').write_text(
+              json.dumps(manifest, indent=2, ensure_ascii=False) + '\n', encoding='utf-8',
+          )
+          print(f'Prepared {len(records)} files from {source_commit}; {len(changed_rust)} formatted Rust files.')
+          PY
+
+      - name: Upload validated preparation outputs for review
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rsi-prepared-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/rsi-prepared/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
+# Only explicit offline probes run. No app launch, routing change, audio session,
+# release build, package publication, PR creation, tag, commit, or push occurs here.

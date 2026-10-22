@@ -8,13 +8,13 @@ fn settings() -> Settings {
 #[test]
 fn source_start_wait_requires_real_renderer_progress_and_fails_on_output_error() {
     let metrics = Metrics::default();
-    assert!(wait_source_started(&metrics, Duration::ZERO).is_err());
+    assert!(wait_source_started(&metrics, Duration::ZERO, || Ok(false)).is_err());
 
     metrics.source_started.store(true, Ordering::Release);
-    wait_source_started(&metrics, Duration::ZERO).unwrap();
+    wait_source_started(&metrics, Duration::ZERO, || Ok(false)).unwrap();
 
     metrics.errors.store(1, Ordering::Release);
-    assert!(wait_source_started(&metrics, Duration::ZERO).is_err());
+    assert!(wait_source_started(&metrics, Duration::ZERO, || Ok(false)).is_err());
 }
 
 #[test]

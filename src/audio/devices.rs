@@ -8,6 +8,35 @@ use serde::Serialize;
 #[cfg(target_os = "macos")]
 use super::tap_ffi;
 
+#[cfg(target_os = "macos")]
+pub(super) fn stable_output_uid(device: &Device) -> Result<String> {
+    let uid = device
+        .id()
+        .context("Selected CPAL output has no stable CoreAudio device ID")?
+        .1;
+    anyhow::ensure!(
+        !uid.is_empty() && uid.len() <= 512 && !uid.chars().any(char::is_control),
+        "Selected CPAL output returned an invalid CoreAudio device ID"
+    );
+    Ok(uid)
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn unique_uid_index(uids: impl IntoIterator<Item = Option<String>>, target: &str) -> Result<usize> {
+    anyhow::ensure!(
+        !target.is_empty() && target.len() <= 512 && !target.chars().any(char::is_control),
+        "Invalid stable output UID"
+    );
+    let mut found = None;
+    for (index, uid) in uids.into_iter().enumerate() {
+        if uid.as_deref() == Some(target) {
+            anyhow::ensure!(found.is_none(), "Ambiguous stable output UID");
+            found = Some(index);
+        }
+    }
+    found.context("Stable output device is no longer available")
+}
+
 #[derive(Serialize, Clone)]
 pub struct DeviceInfo {
     pub id: String,
@@ -51,11 +80,13 @@ pub fn devices() -> Result<Vec<DeviceInfo>> {
                 .map(|v| v.name().to_owned())
                 .unwrap_or_else(|_| "Unnamed device".into());
             #[cfg(target_os = "macos")]
-            let coreaudio_id = (direction == "output")
-                .then(|| tap_ffi::output_device_id_at(index).ok())
+            let stable_uid = (direction == "output")
+                .then(|| stable_output_uid(&device).ok())
                 .flatten();
             #[cfg(target_os = "macos")]
-            let stable_uid = coreaudio_id.and_then(|id| tap_ffi::device_uid(id).ok());
+            let coreaudio_id = stable_uid
+                .as_deref()
+                .and_then(|uid| tap_ffi::output_device_id_for_uid(uid).ok());
             #[cfg(target_os = "macos")]
             let id = stable_uid.as_ref().map_or_else(
                 || format!("{direction}:{index}"),
@@ -112,7 +143,10 @@ pub fn select(selector: Option<&str>, input: bool) -> Result<Device> {
     #[cfg(target_os = "macos")]
     if !input {
         if let Some(uid) = selector.strip_prefix("uid:") {
-            let index = tap_ffi::output_index_for_uid(uid)?;
+            let index = unique_uid_index(
+                devices.iter().map(|device| stable_output_uid(device).ok()),
+                uid,
+            )?;
             return devices
                 .into_iter()
                 .nth(index)
@@ -258,4 +292,31 @@ pub fn is_virtual(name: &str) -> bool {
     ]
     .iter()
     .any(|term| lower.contains(term))
+}
+
+#[cfg(test)]
+mod macos_identity_tests {
+    use super::unique_uid_index;
+
+    #[test]
+    fn stable_uid_selection_does_not_depend_on_coreaudio_list_order() {
+        let cpal_order = [
+            Some("speaker-b".to_owned()),
+            None,
+            Some("speaker-a".to_owned()),
+        ];
+        assert_eq!(
+            unique_uid_index(cpal_order.clone(), "speaker-a").unwrap(),
+            2
+        );
+        assert_eq!(unique_uid_index(cpal_order, "speaker-b").unwrap(), 0);
+    }
+
+    #[test]
+    fn stable_uid_selection_fails_closed_on_missing_duplicate_or_invalid_ids() {
+        assert!(unique_uid_index([Some("a".into())], "missing").is_err());
+        assert!(unique_uid_index([Some("a".into()), Some("a".into())], "a").is_err());
+        assert!(unique_uid_index([Some("a".into())], "").is_err());
+        assert!(unique_uid_index([Some("a".into())], "bad\nuid").is_err());
+    }
 }

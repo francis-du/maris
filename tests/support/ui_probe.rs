@@ -79,6 +79,59 @@ fn fixture() -> anyhow::Result<Value> {
     }))
 }
 
+fn mixer_fixture(runtime: &mut Value) -> anyhow::Result<()> {
+    let mut state = maris::mixer::MixerState::default();
+    state.revision = 1;
+    for (id, sends) in [("Music", [1.0, 0.0]), ("Voice", [0.0, 1.0])] {
+        state.config.strips.push(maris::mixer::MixerStrip {
+            id: id.into(),
+            name: id.into(),
+            sends,
+            source_device: Some(format!("offline:{id}")),
+            ..maris::mixer::MixerStrip::default()
+        });
+    }
+    for (index, bus) in state.config.buses.iter_mut().enumerate() {
+        bus.name = if index == 0 {
+            "Main speakers"
+        } else {
+            "Monitor phones"
+        }
+        .into();
+        bus.output_device = Some(format!("offline:bus-{index}"));
+        bus.gain_db = -3.0 * (index + 1) as f64;
+    }
+    let mut matrix = maris::mixer::Processor::new(state.config.clone(), 48_000)?;
+    let mut peaks = [[0.0_f32; 2]; 2];
+    for index in 0..4800 {
+        let value = (index as f32 * std::f32::consts::TAU * 997.0 / 48_000.0).sin();
+        let outputs = matrix.process(&[[value * 0.2; 2], [value * 0.1; 2]]);
+        for (peak, frame) in peaks.iter_mut().zip(outputs) {
+            for (peak, sample) in peak.iter_mut().zip(frame) {
+                *peak = peak.max(sample.abs());
+            }
+        }
+    }
+    let buses: Vec<_> = state
+        .config
+        .buses
+        .iter()
+        .zip(peaks)
+        .map(|(bus, peak)| {
+            json!({
+                "id":bus.id,"peak_left_dbfs":20.0 * peak[0].max(1e-6).log10(),
+                "peak_right_dbfs":20.0 * peak[1].max(1e-6).log10()
+            })
+        })
+        .collect();
+    runtime["system_backend"] = json!("multi_device_mixer");
+    runtime["mixer_control"] = serde_json::to_value(&state)?;
+    runtime["mixer_strip_count"] = json!(state.config.strips.len());
+    runtime["mixer"] = json!({"revision":1,"processing_revision":1,
+        "restart_required":false,"strips":[],"buses":buses});
+    Ok(())
+}
+
 fn rgb(color: Color, background: bool) -> [u8; 3] {
     match color {
         Color::Rgb(r, g, b) => [r, g, b],
@@ -128,6 +181,11 @@ fn render(
     runtime["updated_at_ms"] = json!(analysis::now_ms());
     if active {
         runtime["visualization"]["updated_at_ms"] = json!(analysis::now_ms());
+    }
+    let mixer_mode =
+        workspace == Workspace::Apps && std::env::args().any(|argument| argument == "--mixer");
+    if mixer_mode {
+        mixer_fixture(&mut runtime)?;
     }
     let devices = vec![DeviceInfo {
         id: "uid:FixtureHeadphones".into(),
@@ -219,7 +277,7 @@ fn render(
         },
         home_row: 0,
         sound_scroll: 0,
-        app_row: 0,
+        app_row: if mixer_mode { 3 } else { 0 },
         pending_apps: &[111],
         devices: &devices,
         applications: &applications,
@@ -253,6 +311,7 @@ fn render(
             Workspace::Sound if playback_mode => "settings-playback",
             Workspace::Sound if device_mode => "settings-device",
             Workspace::Sound => "inspector-eq",
+            Workspace::Apps if mixer_mode => "inspector-mixer",
             Workspace::Apps => "inspector-apps",
             Workspace::Device => "inspector-device",
             Workspace::Intelligence => "inspector-ai",
@@ -302,6 +361,24 @@ fn main() -> anyhow::Result<()> {
         anyhow::bail!("Native compact monitor probe is macOS-only");
     }
     let measured = fixture()?;
+    if std::env::args().any(|argument| argument == "--mixer") {
+        let directory = tempfile::tempdir()?;
+        let store = maris::store::Store::at(directory.path());
+        for language in i18n::LANGUAGES {
+            i18n::configure(&store, Some(language))?;
+            for (width, height) in [(90, 26), (100, 32), (140, 40)] {
+                render(
+                    width,
+                    height,
+                    true,
+                    Overlay::None,
+                    Workspace::Apps,
+                    &measured,
+                )?;
+            }
+        }
+        return Ok(());
+    }
     if std::env::args().any(|argument| argument == "--settings") {
         let directory = tempfile::tempdir()?;
         let store = maris::store::Store::at(directory.path());

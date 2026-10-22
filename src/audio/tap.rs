@@ -246,7 +246,16 @@ fn wait_capture_ready(
             !check_configuration()?,
             "Audio configuration changed during capture startup"
         );
-        if metrics.captured_frames.load(Ordering::Acquire) > before {
+        // Native configuration queries can overlap another callback or listener.
+        // New PCM must not hide an error or a notification that arrived while checking.
+        ensure!(
+            metrics.errors.load(Ordering::Acquire) == 0,
+            "System-audio capture callback failed during startup validation"
+        );
+        if metrics.captured_frames.load(Ordering::Acquire) > before
+            && metrics.configuration_events.load(Ordering::Acquire)
+                == metrics.checked_configuration_events.load(Ordering::Acquire)
+        {
             return Ok(());
         }
         ensure!(
@@ -652,6 +661,13 @@ impl TapCapture {
         })
     }
 
+    pub(super) fn progress_timeout(
+        &self,
+        output_buffer_frames: Option<u32>,
+    ) -> std::time::Duration {
+        capture_progress_timeout(self.aggregate_buffer.max(output_buffer_frames), self.rate)
+    }
+
     pub fn start(&mut self) -> Result<()> {
         ensure!(!self.started, "Capture already started");
         // Close the read-before-listener-registration window before decoding any
@@ -671,7 +687,7 @@ impl TapCapture {
             "Start system-audio capture (allow Maris in the macOS permission dialog)",
         )?;
         self.started = true;
-        let timeout = capture_progress_timeout(self.aggregate_buffer, self.rate);
+        let timeout = self.progress_timeout(None);
         if let Err(error) = wait_capture_ready(metrics, before, timeout, || self.needs_rebuild()) {
             // Keep started=true if native stop fails so Drop retries before
             // destroying the aggregate/tap. Never claim restoration on failure.

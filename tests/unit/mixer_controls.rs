@@ -8,7 +8,10 @@ use crossterm::event::KeyCode;
 use serde_json::{json, Value};
 
 fn fixture() -> (tempfile::TempDir, Store, Value) {
-    let directory = tempfile::tempdir().unwrap();
+    fixture_in(tempfile::tempdir().unwrap())
+}
+
+fn fixture_in(directory: tempfile::TempDir) -> (tempfile::TempDir, Store, Value) {
     let store = Store::at(directory.path());
     let state = mixer::edit(&store, Some(0), |config| {
         for (id, pid, sends) in [("music", 123, [1.0, 0.0]), ("voice", 456, [0.0, 1.0])] {
@@ -183,7 +186,217 @@ fn browsing_and_enter_never_write_and_a_removed_selection_does_not_retarget() {
     after.config.strips.retain(|strip| strip.id != "music");
     assert_eq!(
         preserve_mixer_row(Some(&state), Some(&after), 0),
-        after.config.strips.len()
+        usize::MAX
+    );
+}
+
+#[test]
+fn output_bus_gain_and_mute_edit_only_the_selected_bus() {
+    for bus in 0..2 {
+        for (input, field, expected) in [
+            (KeyCode::Right, "gain_db", json!(0.5)),
+            (KeyCode::Left, "gain_db", json!(-0.5)),
+            (KeyCode::Char(' '), "mute", json!(true)),
+        ] {
+            let (_directory, store, mut runtime) = fixture();
+            let before = mixer::load(&store).unwrap();
+            fresh_key(
+                &store,
+                &mut runtime,
+                before.config.strips.len() + bus,
+                input,
+            );
+            let after = mixer::load(&store).unwrap();
+            assert_eq!(after.revision, before.revision + 1);
+            assert_eq!(after.config.strips, before.config.strips);
+            assert_eq!(after.config.buses[1 - bus], before.config.buses[1 - bus]);
+            assert_eq!(
+                serde_json::to_value(&after.config.buses[bus]).unwrap()[field],
+                expected
+            );
+            assert_eq!(
+                after.config.buses[bus].output_device,
+                before.config.buses[bus].output_device
+            );
+            assert_eq!(
+                after.config.buses[bus].delay_ms,
+                before.config.buses[bus].delay_ms
+            );
+            assert_eq!(after.previous, Some(before.config));
+            for file in ["control.json", "profile.json", "listening.json"] {
+                assert!(!store.directory.join(file).exists());
+            }
+        }
+    }
+}
+
+#[test]
+fn mixer_navigation_reaches_output_buses_without_writing() {
+    let (_directory, store, runtime) = fixture();
+    let before = std::fs::read(store.directory.join("mixer.json")).unwrap();
+    let mut selected = 1;
+    for (key, expected) in [
+        (KeyCode::Down, 2),
+        (KeyCode::Down, 3),
+        (KeyCode::Down, 3),
+        (KeyCode::Home, 0),
+        (KeyCode::End, 3),
+        (KeyCode::Up, 2),
+    ] {
+        assert!(application_key_at(
+            &store,
+            &runtime,
+            &json!({}),
+            &mut selected,
+            &mut vec![],
+            None,
+            ApplicationInput {
+                key,
+                now: crate::analysis::now_ms()
+            }
+        )
+        .unwrap()
+        .is_some());
+        assert_eq!(selected, expected);
+    }
+    assert_eq!(
+        std::fs::read(store.directory.join("mixer.json")).unwrap(),
+        before
+    );
+}
+
+#[test]
+fn output_bus_selection_survives_input_changes_by_bus_identity() {
+    let (_directory, store, _) = fixture();
+    let before = mixer::load(&store).unwrap();
+    let mut after = before.clone();
+    after.config.strips.remove(0);
+    assert_eq!(preserve_mixer_row(Some(&before), Some(&after), 3), 2);
+    after.config.buses.swap(0, 1);
+    assert_eq!(preserve_mixer_row(Some(&before), Some(&after), 3), 1);
+}
+
+#[test]
+fn removed_channel_selection_cannot_become_an_output_bus() {
+    let (_directory, store, _) = fixture();
+    let before = mixer::load(&store).unwrap();
+    let mut after = before.clone();
+    after.config.strips.remove(0);
+    assert_eq!(
+        preserve_mixer_row(Some(&before), Some(&after), 0),
+        usize::MAX
+    );
+}
+
+#[test]
+fn bus_limits_no_ops_and_undo_preserve_other_controls() {
+    for (gain, key_at_limit) in [(-60.0, KeyCode::Left), (6.0, KeyCode::Right)] {
+        let (_directory, store, mut runtime) = fixture();
+        let state = mixer::edit(&store, Some(1), |config| {
+            config.buses[1].gain_db = gain;
+            Ok(())
+        })
+        .unwrap();
+        runtime["mixer_control"] = serde_json::to_value(&state).unwrap();
+        let before = std::fs::read(store.directory.join("mixer.json")).unwrap();
+        for input in [
+            key_at_limit,
+            KeyCode::Char('x'),
+            KeyCode::Char('['),
+            KeyCode::Char(']'),
+        ] {
+            fresh_key(&store, &mut runtime, 3, input);
+            assert_eq!(
+                std::fs::read(store.directory.join("mixer.json")).unwrap(),
+                before
+            );
+        }
+        fresh_key(&store, &mut runtime, 3, KeyCode::Char('u'));
+        let after = mixer::load(&store).unwrap();
+        assert_eq!(after.config.buses[1].gain_db, 0.0);
+        assert_eq!(after.config.strips, state.config.strips);
+        assert_eq!(after.scenes, state.scenes);
+    }
+}
+
+#[test]
+fn bus_edits_reject_stale_sessions_pending_routes_and_revision_conflicts() {
+    for field in ["session_id", "updated_at_ms", "system_backend", "mixer"] {
+        let (_directory, store, displayed) = fixture();
+        let before = std::fs::read(store.directory.join("mixer.json")).unwrap();
+        let mut current = displayed.clone();
+        current[field] = match field {
+            "updated_at_ms" => json!(0),
+            "mixer" => json!({"restart_required":true}),
+            _ => json!("changed"),
+        };
+        store.write_json("runtime.json", &current).unwrap();
+        assert!(
+            key(&store, &displayed, 3, KeyCode::Right).is_err(),
+            "{field}"
+        );
+        assert_eq!(
+            std::fs::read(store.directory.join("mixer.json")).unwrap(),
+            before
+        );
+    }
+    let (_directory, store, displayed) = fixture();
+    mixer::edit(&store, Some(1), |config| {
+        config.buses[1].output_device = Some("uid:other".into());
+        Ok(())
+    })
+    .unwrap();
+    let before = std::fs::read(store.directory.join("mixer.json")).unwrap();
+    assert!(key(&store, &displayed, 3, KeyCode::Char(' ')).is_err());
+    assert_eq!(
+        std::fs::read(store.directory.join("mixer.json")).unwrap(),
+        before
+    );
+}
+
+#[test]
+fn bus_ui_changes_reach_the_real_matrix_without_altering_the_other_bus() {
+    for input in [KeyCode::Left, KeyCode::Right, KeyCode::Char(' ')] {
+        let (_directory, store, mut runtime) = fixture();
+        let before = mixer::load(&store).unwrap();
+        let pcm = [[0.1, -0.1], [0.2, -0.2]];
+        let mut engine = mixer::Processor::new(before.config, 48_000).unwrap();
+        let reference = engine.process(&pcm);
+        fresh_key(&store, &mut runtime, 3, input);
+        let after = mixer::load(&store).unwrap();
+        engine.update(mixer::engine::Settings::compile(&after.config, 48_000).unwrap());
+        let mut rendered = [[0.0; 2]; 2];
+        for _ in 0..2400 {
+            rendered = engine.process(&pcm);
+        }
+        assert_eq!(rendered[0], reference[0]);
+        let factor = match input {
+            KeyCode::Left => 10.0_f32.powf(-0.5 / 20.0),
+            KeyCode::Right => 10.0_f32.powf(0.5 / 20.0),
+            _ => 0.0,
+        };
+        for channel in 0..2 {
+            assert!((rendered[1][channel] - reference[1][channel] * factor).abs() < 1e-6);
+        }
+    }
+}
+
+#[test]
+fn strip_and_bus_ids_cannot_cross_selection_namespaces() {
+    let (_directory, store, _) = fixture();
+    let mut before = mixer::load(&store).unwrap();
+    before.config.strips[0].id = before.config.buses[0].id.clone();
+    let mut after = before.clone();
+    after.config.strips.remove(0);
+    assert_eq!(
+        preserve_mixer_row(Some(&before), Some(&after), 0),
+        usize::MAX
+    );
+    assert_eq!(preserve_mixer_row(Some(&before), Some(&after), 2), 1);
+    after.config.buses[0].id = "replacement".into();
+    assert_eq!(
+        preserve_mixer_row(Some(&before), Some(&after), 2),
+        usize::MAX
     );
 }
 
@@ -227,4 +440,264 @@ fn a_real_expired_heartbeat_rejects_a_channel_until_the_same_target_is_live_agai
     assert_eq!(mixer::load(&store).unwrap().config.strips[1].gain_db, 0.5);
     assert!(!store.directory.join("control.json").exists());
     assert!(!store.directory.join("listening.json").exists());
+}
+
+#[cfg(unix)]
+fn run_runtime_lock_child(change: &str) {
+    use std::{
+        io::Read,
+        process::{Command, Stdio},
+        sync::mpsc,
+        time::Duration,
+    };
+    const FLAG: &str = "MARIS_MIXER_LOCK_CHILD";
+    assert!(std::env::var_os(FLAG).is_none(), "child must not recurse");
+    // Parent ownership also removes FIFO fixtures when a stalled child is killed.
+    let cleanup = tempfile::tempdir().unwrap();
+    let mut child = Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "ui::tui::actions::mixer_tests::runtime_lock_handshake_child",
+            "--ignored",
+            "--nocapture",
+        ])
+        .env(FLAG, change)
+        .env("MARIS_MIXER_LOCK_ROOT", cleanup.path())
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdout = child.stdout.take().unwrap();
+    let mut stderr = child.stderr.take().unwrap();
+    let (done, completed) = mpsc::channel();
+    let output = std::thread::spawn(move || {
+        let mut text = String::new();
+        let result = stdout.read_to_string(&mut text).map(|_| text);
+        let _ = done.send(result);
+    });
+    let errors = std::thread::spawn(move || {
+        let mut text = String::new();
+        stderr.read_to_string(&mut text).map(|_| text)
+    });
+    // This is only a failure deadline. FIFO open/EOF, never elapsed time,
+    // orders the real runtime reads and lock admission inside the owned child.
+    let received = completed.recv_timeout(Duration::from_secs(30));
+    if received.is_err() && child.try_wait().unwrap().is_none() {
+        child.kill().unwrap();
+    }
+    let status = child.wait().unwrap();
+    output.join().unwrap();
+    let stderr = errors.join().unwrap().unwrap();
+    cleanup.close().expect("remove the owned FIFO fixture root");
+    let stdout = received
+        .expect("owned FIFO test child exceeded its cleanup deadline")
+        .unwrap();
+    assert!(status.success(), "{change}: {status}\n{stdout}\n{stderr}");
+    assert!(
+        stdout.contains("MIXER_RUNTIME_LOCK_HANDSHAKE_COMPLETE"),
+        "the exact child test did not execute: {stdout}\n{stderr}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn undo_rejects_session_change_before_mixer_lock_admission() {
+    run_runtime_lock_child("session_id");
+}
+
+#[cfg(unix)]
+#[test]
+fn undo_rejects_rebind_before_mixer_lock_admission() {
+    run_runtime_lock_child("rebind_count");
+}
+
+#[cfg(unix)]
+#[test]
+fn undo_rejects_pending_restart_before_mixer_lock_admission() {
+    run_runtime_lock_child("restart_required");
+}
+
+#[cfg(unix)]
+#[test]
+fn unchanged_runtime_allows_both_actions_after_mixer_lock_admission() {
+    run_runtime_lock_child("unchanged");
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "run only by the bounded, exact-name runtime-lock parent tests"]
+fn runtime_lock_handshake_child() {
+    use fs2::FileExt;
+    use std::{
+        ffi::CString,
+        fs::{self, OpenOptions},
+        io::Write,
+        os::unix::ffi::OsStrExt,
+    };
+    let change = std::env::var("MARIS_MIXER_LOCK_CHILD")
+        .expect("only the owned parent test may launch this child");
+    assert!(matches!(
+        change.as_str(),
+        "session_id" | "rebind_count" | "restart_required" | "unchanged"
+    ));
+    let cleanup_root = std::path::PathBuf::from(
+        std::env::var_os("MARIS_MIXER_LOCK_ROOT").expect("parent must own the FIFO fixture root"),
+    );
+    for input in [KeyCode::Right, KeyCode::Char('u')] {
+        let directory = tempfile::tempdir_in(&cleanup_root).unwrap();
+        let (_directory, store, displayed) = fixture_in(directory);
+        let before = mixer::load(&store).unwrap();
+        let saved = fs::read(store.directory.join("mixer.json")).unwrap();
+        let now = displayed["updated_at_ms"].as_u64().unwrap();
+        let old_runtime = serde_json::to_vec(&displayed).unwrap();
+        let mut current = displayed.clone();
+        match change.as_str() {
+            "session_id" => current["session_id"] = json!("replacement-session"),
+            "rebind_count" => current["rebind_count"] = json!(1),
+            "restart_required" => current["mixer"]["restart_required"] = json!(true),
+            _ => {}
+        }
+        let lock = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(store.directory.join("mixer.lock"))
+            .unwrap();
+        lock.lock_exclusive().unwrap();
+        let runtime = store.directory.join("runtime.json");
+        let next = store.directory.join("runtime-next.fifo");
+        fs::remove_file(&runtime).unwrap();
+        for path in [&runtime, &next] {
+            let name = CString::new(path.as_os_str().as_bytes()).unwrap();
+            // SAFETY: the terminated path lives across this call; each FIFO
+            // belongs to this test's private TempDir and has no audio endpoint.
+            assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+        }
+        let worker_store = store.clone();
+        let worker = std::thread::spawn(move || {
+            application_key_at(
+                &worker_store,
+                &displayed,
+                &json!({}),
+                &mut 0,
+                &mut vec![],
+                None,
+                ApplicationInput { key: input, now },
+            )
+            .map(|notice| notice.is_some())
+            .map_err(|error| format!("{error:#}"))
+        });
+        // The first writer opens only once ensure_displayed_output_at has
+        // opened generation A. Install B before EOF lets that read complete.
+        let mut first = OpenOptions::new().write(true).open(&runtime).unwrap();
+        fs::rename(&next, &runtime).unwrap();
+        first.write_all(&old_runtime).unwrap();
+        drop(first);
+        // The second rendezvous proves the identity guard has finished and
+        // ensure_mixer_current holds B's old read descriptor. Publish the new
+        // ordinary runtime file before EOF and before releasing mixer.lock.
+        let mut second = OpenOptions::new().write(true).open(&runtime).unwrap();
+        store.write_json("runtime.json", &current).unwrap();
+        second.write_all(&old_runtime).unwrap();
+        drop(second);
+        drop(lock);
+        let result = worker.join().unwrap();
+        if change == "unchanged" {
+            assert_eq!(result, Ok(true), "{input:?}");
+            let after = mixer::load(&store).unwrap();
+            assert_eq!(after.revision, before.revision + 1);
+            assert_eq!(after.previous, Some(before.config.clone()));
+            assert_eq!(after.scenes, before.scenes);
+            if input == KeyCode::Char('u') {
+                assert_eq!(after.config, before.previous.unwrap());
+            } else {
+                let mut expected = before.config;
+                expected.strips[0].gain_db += 0.5;
+                assert_eq!(after.config, expected);
+            }
+        } else {
+            assert!(
+                result.is_err(),
+                "{input:?} accepted {change} after the pre-lock runtime snapshot"
+            );
+            assert_eq!(fs::read(store.directory.join("mixer.json")).unwrap(), saved);
+        }
+        for name in ["control.json", "profile.json", "listening.json"] {
+            assert!(!store.directory.join(name).exists());
+        }
+    }
+    println!("MIXER_RUNTIME_LOCK_HANDSHAKE_COMPLETE");
+}
+
+#[test]
+fn cli_undo_keeps_its_history_and_revision_contract_without_live_telemetry() {
+    let (_directory, store, _) = fixture();
+    let before = mixer::load(&store).unwrap();
+    store
+        .write_json("runtime.json", &json!({"active":false}))
+        .unwrap();
+    let after = mixer::undo(&store, Some(before.revision)).unwrap();
+    assert_eq!(after.config, before.previous.unwrap());
+    assert_eq!(after.previous, Some(before.config));
+    assert_eq!(after.revision, before.revision + 1);
+    let saved = std::fs::read(store.directory.join("mixer.json")).unwrap();
+    assert!(mixer::undo(&store, Some(before.revision)).is_err());
+    assert_eq!(
+        std::fs::read(store.directory.join("mixer.json")).unwrap(),
+        saved
+    );
+
+    let mut equal = MixerState::default();
+    equal.previous = Some(equal.config.clone());
+    store.write_json("mixer.json", &equal).unwrap();
+    let after = mixer::undo(&store, Some(0)).unwrap();
+    assert_eq!(after.revision, 1, "equal history still advances Undo");
+    assert_eq!(after.config, equal.config);
+    assert_eq!(after.previous, equal.previous);
+
+    let empty = MixerState::default();
+    store.write_json("mixer.json", &empty).unwrap();
+    let saved = std::fs::read(store.directory.join("mixer.json")).unwrap();
+    let error = mixer::undo(&store, Some(0)).unwrap_err();
+    assert!(error.to_string().contains("Nothing to restore in mixer"));
+    assert_eq!(
+        std::fs::read(store.directory.join("mixer.json")).unwrap(),
+        saved
+    );
+}
+
+#[test]
+fn undo_admission_check_holds_the_mixer_lock_and_releases_it_on_rejection() {
+    use fs2::FileExt;
+    use std::fs::{self, OpenOptions};
+
+    let (_directory, store, _) = fixture();
+    let before = mixer::load(&store).unwrap();
+    let saved = fs::read(store.directory.join("mixer.json")).unwrap();
+    let probe = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(store.directory.join("mixer.lock"))
+        .unwrap();
+    let mut checked = false;
+    let error = mixer::undo_checked(&store, Some(before.revision), || {
+        checked = true;
+        let contention = FileExt::try_lock_exclusive(&probe)
+            .expect_err("Undo admission check ran without holding mixer.lock");
+        assert_eq!(
+            contention.raw_os_error(),
+            fs2::lock_contended_error().raw_os_error(),
+            "the second handle must fail because the mixer lock is held"
+        );
+        anyhow::bail!("test Undo admission rejected")
+    })
+    .unwrap_err();
+    assert!(checked, "Undo must execute its admission check");
+    assert_eq!(error.to_string(), "test Undo admission rejected");
+    assert_eq!(fs::read(store.directory.join("mixer.json")).unwrap(), saved);
+
+    FileExt::try_lock_exclusive(&probe).expect("rejected Undo must release mixer.lock");
+    FileExt::unlock(&probe).unwrap();
 }

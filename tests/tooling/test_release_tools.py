@@ -83,9 +83,18 @@ class ReleaseTools(unittest.TestCase):
                                   "passed": True, "log_sha256": hashlib.sha256(data).hexdigest()})
                 records.append({"round": i, "seed": i, "passed": True, "steps": steps})
             report = {"source_sha256": "fixture", "source_unchanged": True, "passed": True,
+                      "binaries_unchanged": True,
                       "completed_rounds": 200, "requested_rounds": 200, "passed_rounds": 200,
                       "records": records}
             release_gate.check_report(report, "fixture", root)
+            for missing in (True, False):
+                bad = dict(report)
+                if missing:
+                    bad.pop("binaries_unchanged")
+                else:
+                    bad["binaries_unchanged"] = False
+                with self.subTest(missing_binary_proof=missing), self.assertRaises(ValueError):
+                    release_gate.check_report(bad, "fixture", root)
             bad = dict(report, completed_rounds=199)
             with self.assertRaises(ValueError):
                 release_gate.check_report(bad, "fixture", root)

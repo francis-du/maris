@@ -4,9 +4,11 @@
 pub mod dashboard;
 pub mod input;
 pub mod inspector;
+mod modal;
 pub mod monitor;
 pub mod music;
 pub mod output_picker;
+pub mod picker_search;
 pub mod preset_picker;
 pub mod presets;
 mod session;
@@ -35,17 +37,14 @@ use anyhow::{ensure, Result};
 use crossterm::{
     cursor::Show,
     event::{
-        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
-        KeyModifiers,
+        self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+        Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers,
     },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
-use session::{
-    apply_output_choice, discard_application_draft, launch_system, navigate, start_initial_audio,
-    sync_application_scope,
-};
+use session::{discard_application_draft, navigate, start_initial_audio, sync_application_scope};
 use std::{
     io::{self, IsTerminal},
     path::PathBuf,
@@ -59,6 +58,7 @@ impl Drop for RestoreTerminal {
         let _ = execute!(
             io::stdout(),
             DisableMouseCapture,
+            DisableBracketedPaste,
             LeaveAlternateScreen,
             Show
         );
@@ -120,12 +120,18 @@ pub fn run(
 
     enable_raw_mode()?;
     let _restore = RestoreTerminal;
-    execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(
+        io::stdout(),
+        EnterAlternateScreen,
+        EnableMouseCapture,
+        EnableBracketedPaste
+    )?;
     let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
 
     let presets = crate::presets::console_catalog();
     let models = crate::models::models_at(&store)?;
     let mut picker_outputs = Vec::<DeviceInfo>::new();
+    let mut picker_search = picker_search::Search::default();
     let mut picker_guard: Option<control_panel::PickerGuard> = None;
     let mut press_gate = control_panel::PressGate::default();
     let mut undo_target = UndoTarget::Listening;
@@ -319,12 +325,31 @@ pub fn run(
         let mut drawn_area = ratatui::layout::Rect::default();
         terminal.draw(|frame| {
             drawn_area = frame.area();
-            tui_view::draw(frame, &view);
+            tui_view::draw_with_search(frame, &view, &picker_search);
         })?;
 
         let Some(input) = control_panel::read_input()? else {
             continue;
         };
+        let size = terminal.size()?;
+        if picker_search.handle_input(
+            &input,
+            overlay,
+            runtime["selection_invalidated"] == true,
+            ratatui::layout::Rect::new(0, 0, size.width, size.height),
+        ) {
+            let choices = picker_search.choices(overlay, &picker_outputs, &presets);
+            let selected = if overlay == Overlay::Output {
+                &mut output_choice
+            } else {
+                &mut preset_choice
+            };
+            picker_search::Search::reconcile(&choices, selected);
+            config_pointer.reset();
+            press_gate.pointer_input();
+            continue;
+        }
+        // Unhandled Paste events are discarded below, never replayed as keys.
         let mut key = match input {
             Event::Key(key) => {
                 config_pointer.reset();
@@ -352,18 +377,24 @@ pub fn run(
                 }
                 if overlay == Overlay::Preset {
                     config_pointer.reset();
-                    if let Some(choice) = preset_picker::pointer_choice(drawn_area, &view, mouse) {
+                    if let Some(choice) = preset_picker::pointer_choice_filtered(
+                        drawn_area,
+                        &view,
+                        &picker_search,
+                        mouse,
+                    ) {
                         preset_choice = choice;
                     }
                     continue;
                 }
                 if overlay == Overlay::Output {
                     config_pointer.reset();
-                    if let Some(choice) = output_picker::pointer_choice(
+                    if let Some(choice) = output_picker::pointer_choice_filtered(
                         drawn_area,
-                        picker_outputs.len().saturating_add(1),
+                        &picker_outputs,
                         output_choice,
                         runtime["selection_invalidated"] == true,
+                        &picker_search,
                         mouse,
                     ) {
                         output_choice = choice;
@@ -500,135 +531,50 @@ pub fn run(
                 notice = "Enlarge terminal to confirm. Esc cancels.".into();
                 continue;
             }
-            let result: Result<()> = (|| {
-                match overlay {
-                    Overlay::Help => {
-                        if matches!(key.code, KeyCode::Esc | KeyCode::Char('?') | KeyCode::Enter) {
-                            overlay = Overlay::None;
-                        }
-                    }
-                    Overlay::Output => match key.code {
-                        KeyCode::Esc | KeyCode::Char('o') => overlay = Overlay::None,
-                        KeyCode::Up => output_choice = output_choice.saturating_sub(1),
-                        KeyCode::Down => {
-                            output_choice = (output_choice + 1).min(picker_outputs.len());
-                        }
-                        KeyCode::Enter => {
-                            let selected = control_panel::confirmed_output(
-                                &picker_outputs,
-                                output_choice,
-                                &outputs,
-                            )?;
-                            if runtime["active"] == true {
-                                control_panel::ensure_displayed_output(&store, &runtime)?;
-                            }
-                            apply_output_choice(
-                                &store,
-                                &runtime,
-                                selected,
-                                &mut pin_output,
-                                &mut output_index,
-                                &outputs,
-                                &mut notice,
-                            )?;
-                            overlay = Overlay::None;
-                        }
-                        _ => {}
-                    },
-                    Overlay::Preset => match key.code {
-                        KeyCode::Esc | KeyCode::Char('p') => overlay = Overlay::None,
-                        KeyCode::Up => preset_choice = preset_choice.saturating_sub(1),
-                        KeyCode::Down => {
-                            preset_choice =
-                                (preset_choice + 1).min(presets.len().saturating_sub(1));
-                        }
-                        KeyCode::Enter => {
-                            if let Some(preset) = presets.get(preset_choice) {
-                                let rate = runtime["sample_rate"]
-                                    .as_u64()
-                                    .filter(|rate| (44_100..=192_000).contains(rate))
-                                    .unwrap_or(48_000)
-                                    as u32;
-                                if matches!(preset.category, "scene" | "listening") {
-                                    ensure!(
-                                        !snapshot.profile.bypass,
-                                        "Global bypass is active; enable processing first"
-                                    );
-                                    control_panel::ensure_displayed_output(&store, &runtime)?;
-                                    let applied = crate::tuning::preferences::preset(
-                                        &store,
-                                        Some(listening.revision),
-                                        profile_key.as_deref(),
-                                        preset.id.strip_prefix("listening:").unwrap_or(&preset.id),
-                                    )?;
-                                    if applied.revision != listening.revision {
-                                        undo_target = UndoTarget::Listening;
-                                    }
-                                } else {
-                                    let applied =
-                                        store.edit(Some(snapshot.revision), |current| {
-                                            *current = crate::presets::apply_tone_curve(
-                                                current, &preset.id, rate,
-                                            )?;
-                                            Ok(())
-                                        })?;
-                                    if applied.revision != snapshot.revision {
-                                        undo_target = UndoTarget::Profile;
-                                    }
-                                }
-                                notice = Notice::new("Preset applied: {preset}").label_arg(
-                                    "preset",
-                                    crate::i18n::preset_key(&preset.id, &preset.name),
-                                );
-                            }
-                            overlay = Overlay::None;
-                        }
-                        _ => {}
-                    },
-                    Overlay::Proposal => match key.code {
-                        KeyCode::Esc => {
-                            proposal = None;
-                            overlay = Overlay::None;
-                        }
-                        KeyCode::Enter => {
-                            if let Some(plan) = proposal.take() {
-                                match music_tuning::apply(&store, &plan) {
-                                    Ok(_) => {
-                                        if plan.before == plan.profile {
-                                            notice = "No adjustment needed; the last undo remains available.".into();
-                                        } else {
-                                            undo_target = UndoTarget::Listening;
-                                            notice =
-                                                "Tuning applied. B compares; U undoes it.".into();
-                                        }
-                                    }
-                                    Err(error) => notice = Notice::error(format!("{error:#}")),
-                                }
-                            }
-                            overlay = Overlay::None;
-                        }
-                        _ => {}
-                    },
-                    Overlay::StartSystem => match key.code {
-                        KeyCode::Esc => overlay = Overlay::None,
-                        KeyCode::Enter => {
-                            launch_system(
-                                &store,
-                                if pin_output {
-                                    output_index.and_then(|index| outputs.get(index))
-                                } else {
-                                    None
-                                },
-                            )?;
-                            overlay = Overlay::None;
-                            notice = "Starting native system audio.".into();
-                        }
-                        _ => {}
-                    },
-                    Overlay::None => {}
-                }
-                Ok(())
-            })();
+            let choices = picker_search.choices(overlay, &picker_outputs, &presets);
+            let selected = if overlay == Overlay::Output {
+                output_choice
+            } else {
+                preset_choice
+            };
+            let position = choices
+                .iter()
+                .position(|index| *index == selected)
+                .unwrap_or(0);
+            let page = if overlay == Overlay::Output {
+                output_picker::layout(drawn_area, choices.len(), position)
+                    .rows
+                    .height
+            } else {
+                preset_picker::layout(drawn_area, choices.len(), position)
+                    .rows
+                    .height
+            };
+            let result = modal::handle(
+                key.code,
+                modal::Context {
+                    store: &store,
+                    runtime: &runtime,
+                    snapshot: &snapshot,
+                    listening_revision: listening.revision,
+                    profile_key: profile_key.as_deref(),
+                    outputs: &outputs,
+                    picker_outputs: &picker_outputs,
+                    presets: &presets,
+                },
+                modal::State {
+                    overlay: &mut overlay,
+                    pin_output: &mut pin_output,
+                    output_index: &mut output_index,
+                    output_choice: &mut output_choice,
+                    preset_choice: &mut preset_choice,
+                    undo_target: &mut undo_target,
+                    proposal: &mut proposal,
+                    notice: &mut notice,
+                },
+                &picker_search,
+                usize::from(page),
+            );
             if let Err(error) = result {
                 notice = Notice::error(format!("{error:#}"));
             }
@@ -740,7 +686,15 @@ pub fn run(
                     if pending_apps != before {
                         pending_apps_dirty = true;
                     }
-                    mixer_state = crate::mixer::load(&store).ok();
+                    let next_mixer = crate::mixer::load(&store).ok();
+                    if actions::mixer_mode(&runtime) {
+                        app_row = actions::preserve_mixer_row(
+                            mixer_state.as_ref(),
+                            next_mixer.as_ref(),
+                            app_row,
+                        );
+                    }
+                    mixer_state = next_mixer;
                     notice = message;
                     return Ok(());
                 }
@@ -774,6 +728,7 @@ pub fn run(
                         snapshot.revision,
                         crate::analysis::now_ms(),
                     ));
+                    picker_search.clear();
                     picker_outputs = outputs.clone();
                     output_choice = if pin_output {
                         output_index.map_or(0, |index| index + 1)
@@ -808,6 +763,7 @@ pub fn run(
                         listening_changed,
                     )
                     .unwrap_or_else(|| preset_choice.min(presets.len().saturating_sub(1)));
+                    picker_search.clear();
                     preset_revisions = Some((snapshot.revision, listening.revision));
                     overlay = Overlay::Preset;
                 }
