@@ -77,13 +77,17 @@ safe_path "$SOURCE"; safe_path "$PREFIX"
 DEST="$PREFIX/lib/maris"
 LINK="$PREFIX/bin/maris"
 [ "$SOURCE" != "$DEST" ] || fail 'Source and destination must differ'
-BUILD_DIR=''; STAGE=''; BACKUP=''; LOCK=''; LINK_CREATED=0; COMMITTED=0
+BUILD_DIR=''; STAGE=''; BACKUP=''; LOCK=''; LOCK_OWNER=''; LINK_CREATED=0; COMMITTED=0
 cleanup() {
     local code=$?
     trap - EXIT HUP INT TERM
     if [ "$COMMITTED" -eq 0 ]; then
-        if [ -n "$BACKUP" ] && [ -d "$BACKUP/Maris" ] && [ ! -e "$DEST" ]; then
-            mv -- "$BACKUP/Maris" "$DEST" || printf 'Recovery required: %s/Maris\n' "$BACKUP" >&2
+        if [ -n "$BACKUP" ] && [ -d "$BACKUP/Maris" ]; then
+            if [ ! -e "$DEST" ]; then
+                mv -- "$BACKUP/Maris" "$DEST" || printf 'Recovery required: %s/Maris\n' "$BACKUP" >&2
+            else
+                printf 'Recovery required: %s/Maris\n' "$BACKUP" >&2
+            fi
         fi
         if [ "$LINK_CREATED" -eq 1 ] && [ -L "$LINK" ] && [ "$(readlink -- "$LINK")" = ../lib/maris/bin/maris ]; then
             rm -- "$LINK"
@@ -92,7 +96,11 @@ cleanup() {
     [ -z "$STAGE" ] || rm -rf -- "$STAGE"
     [ -z "$BUILD_DIR" ] || rm -rf -- "$BUILD_DIR"
     [ -z "$BACKUP" ] || rmdir -- "$BACKUP" 2>/dev/null || true
-    [ -z "$LOCK" ] || rmdir -- "$LOCK" 2>/dev/null || true
+    if [ -n "$LOCK" ] && [ -n "$LOCK_OWNER" ] && [ -f "$LOCK/.owner" ] && [ ! -L "$LOCK/.owner" ] \
+            && [ "$(cat "$LOCK/.owner" 2>/dev/null || true)" = "$LOCK_OWNER" ]; then
+        rm -f -- "$LOCK/.owner"
+        rmdir -- "$LOCK" 2>/dev/null || true
+    fi
     exit "$code"
 }
 trap cleanup EXIT
@@ -174,6 +182,12 @@ mkdir -p -- "$PREFIX"
 CANDIDATE_LOCK="$PREFIX/.maris-install.lock"
 mkdir -- "$CANDIDATE_LOCK" 2>/dev/null || fail 'Another installation may be active; do not delete a live install lock'
 LOCK=$CANDIDATE_LOCK
+LOCK_OWNER="$$:$PPID"
+if ! printf '%s\n' "$LOCK_OWNER" > "$LOCK/.owner"; then
+    rmdir -- "$LOCK" 2>/dev/null || true
+    LOCK=''
+    fail 'Could not record ownership of the install lock'
+fi
 check_destination
 mkdir -p -- "$PREFIX/lib" "$PREFIX/bin"
 STAGE=$(mktemp -d "$PREFIX/.maris-stage.XXXXXX")
