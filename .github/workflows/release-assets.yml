@@ -16,11 +16,15 @@ on:
       release_tag:
         required: true
         type: string
+      release_id:
+        required: true
+        type: string
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: release-assets-${{ inputs.source_sha || github.event.workflow_run.head_sha }}
+  # Serialize publication and cleanup across every source revision.
+  group: release-assets-${{ github.repository }}
   cancel-in-progress: false
 jobs:
   publish:
@@ -33,6 +37,7 @@ jobs:
     outputs:
       publish: ${{ steps.release.outputs.publish }}
       tag: ${{ steps.release.outputs.tag }}
+      release_id: ${{ steps.release.outputs.release_id }}
       cleanup: ${{ steps.assets.outputs.cleanup }}
       cleanup_assets: ${{ steps.assets.outputs.cleanup_assets }}
       mode: ${{ steps.assets.outputs.mode }}
@@ -50,6 +55,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
           SOURCE_SHA: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}
           RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+          RELEASE_ID_INPUT: ${{ inputs.release_id }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id || github.event.workflow_run.id }}
         run: |
           set -euo pipefail
           git fetch --force --tags origin
@@ -83,7 +90,68 @@ jobs:
             echo "Tag $tag does not match Cargo version $cargo_version" >&2
             exit 1
           fi
-          gh release view "$tag" >/dev/null
+          if [[ ! "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]] || [[ ! "$SOURCE_RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Invalid build run or commit identity" >&2
+            exit 1
+          fi
+          if [ "$(git rev-parse HEAD)" != "$SOURCE_SHA" ]; then
+            echo "Checkout does not match the selected build commit" >&2
+            exit 1
+          fi
+          gh api "repos/$GH_REPO/actions/runs/$SOURCE_RUN_ID" > "$RUNNER_TEMP/maris-source-run.json"
+          if [ -n "$RELEASE_TAG_INPUT" ]; then
+            if [[ ! "$RELEASE_ID_INPUT" =~ ^[1-9][0-9]*$ ]]; then
+              echo "Explicit publication requires its created release ID" >&2
+              exit 1
+            fi
+            gh api "repos/$GH_REPO/releases/$RELEASE_ID_INPUT" > "$RUNNER_TEMP/maris-release.json"
+          else
+            gh api "repos/$GH_REPO/releases/tags/$tag" > "$RUNNER_TEMP/maris-release.json"
+          fi
+          export RELEASE_TAG="$tag"
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import sys
+          sys.path.insert(0, 'scripts')
+          from source_audit import source_digest
+
+          run = json.loads((Path(os.environ['RUNNER_TEMP']) / 'maris-source-run.json').read_text())
+          release = json.loads((Path(os.environ['RUNNER_TEMP']) / 'maris-release.json').read_text())
+          repository = os.environ['GH_REPO']
+          if (type(run.get('id')) is not int or str(run['id']) != os.environ['SOURCE_RUN_ID']
+                  or run.get('head_sha') != os.environ['SOURCE_SHA']
+                  or run.get('status') != 'completed' or run.get('conclusion') != 'success'
+                  or run.get('name') != 'Build application artifacts'
+                  or run.get('path') != '.github/workflows/build.yml'
+                  or run.get('event') not in ('push', 'release', 'workflow_dispatch')
+                  or run.get('repository', {}).get('full_name') != repository
+                  or run.get('head_repository', {}).get('full_name') != repository):
+              raise SystemExit('Artifacts require the exact successful native build in this repository')
+          if (type(release.get('id')) is not int or release['id'] <= 0
+                  or release.get('tag_name') != os.environ['RELEASE_TAG']):
+              raise SystemExit('Release identity does not match the validated version tag')
+          owned = bool(os.environ.get('RELEASE_TAG_INPUT'))
+          if owned:
+              expected_id = os.environ.get('RELEASE_ID_INPUT', '')
+              if (not re.fullmatch(r'[1-9][0-9]*', expected_id)
+                      or str(release['id']) != expected_id
+                      or release.get('draft') is not True
+                      or release.get('prerelease') is not False
+                      or release.get('published_at') is not None
+                      or run.get('event') != 'push'
+                      or not run.get('head_branch', '').startswith('release-validation/')):
+                  raise SystemExit('Explicit publication requires this invocation\'s exact draft and preflight')
+          elif (release.get('draft') is not False or release.get('prerelease') is not False
+                  or not release.get('published_at')):
+              raise SystemExit('Automatic validation requires an already published stable release')
+          # A Git commit is 40 hex characters; this separate SHA-256 covers the
+          # actual audited checkout used to construct the six native artifacts.
+          print('source_sha256=' + source_digest())
+          print('release_id=' + str(release['id']))
+          PY
           echo "publish=true" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - name: Download exact successful run artifacts
@@ -97,49 +165,75 @@ jobs:
         if: steps.release.outputs.publish == 'true'
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          SOURCE_SHA256: ${{ steps.release.outputs.source_sha256 }}
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import hashlib
           import shutil
           import os
+          import re
 
           root = Path('.release-download')
-          manifests = list(root.rglob('maris-release.tsv'))
+          if root.is_symlink() or not root.is_dir():
+              raise SystemExit('Downloaded artifacts require a real input directory')
+          root = root.resolve()
+          manifests = [p for p in root.rglob('maris-release.tsv')
+                       if p.is_file() and not p.is_symlink() and p.resolve().is_relative_to(root)]
           if len(manifests) != 1:
-              raise SystemExit(f'expected exactly one assembled manifest, found {len(manifests)}')
+              raise SystemExit(f'expected exactly one real assembled manifest, found {len(manifests)}')
           manifest = manifests[0]
-          lines = manifest.read_text(encoding='ascii').splitlines()
-          values = {}
+          with manifest.open('rb') as source:
+              manifest_bytes = source.read(32769)
+          if len(manifest_bytes) > 32768:
+              raise SystemExit('Oversized release manifest')
+          text = manifest_bytes.decode('ascii')
+          if '\r' in text:
+              raise SystemExit('release manifest must use LF line endings')
+          lines = text.rstrip('\n').split('\n')
+          version = os.environ['RELEASE_TAG'].removeprefix('v')
+          if len(lines) != 11 or lines[0] != 'maris-release-v2':
+              raise SystemExit('installers require one exact 11-line v2 CLI release manifest')
+
+          metadata = [line.split('\t') for line in lines[1:5]]
+          expected_metadata = ['version', 'source_sha256', 'channel', 'interface']
+          if any(len(fields) != 2 or fields[0] != expected_metadata[index]
+                 for index, fields in enumerate(metadata)):
+              raise SystemExit('release manifest metadata rows are missing, reordered or duplicated')
+          values = {fields[0]: fields[1] for fields in metadata}
+          if (values['version'] != version
+                  or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', values['version'])
+                  or values['source_sha256'] != os.environ['SOURCE_SHA256']
+                  or not re.fullmatch(r'[a-f0-9]{64}', values['source_sha256'])
+                  or values['channel'] != 'stable'
+                  or values['interface'] != 'cli'):
+              raise SystemExit('assembled manifest is not the exact stable CLI release for this tag')
+
           assets = []
           seen_targets = set()
-          for line in lines:
-              fields = line.split('\t')
-              if fields[0] == 'asset':
-                  if len(fields) != 7:
-                      raise SystemExit('invalid asset row in release manifest')
-                  system, arch, name, archive_hash, archive_bytes, binary_hash = fields[1:]
-                  expected_name = f"Maris-{values.get('version', '')}-{system}-{arch}" + ('.zip' if system == 'windows' else '.tar.gz')
-                  if name != expected_name:
-                      raise SystemExit(f'installer-visible asset name mismatch: {name} != {expected_name}')
-                  if (system, arch) in seen_targets:
-                      raise SystemExit(f'duplicate installer target: {system}/{arch}')
-                  seen_targets.add((system, arch))
-                  assets.append((system, arch, name, archive_hash, archive_bytes, binary_hash))
-              elif len(fields) == 2:
-                  values[fields[0]] = fields[1]
-
-          version = os.environ['RELEASE_TAG'].removeprefix('v')
           expected_targets = {
               ('macos', 'x86_64'), ('macos', 'arm64'),
               ('linux', 'x86_64'), ('linux', 'arm64'),
               ('windows', 'x86_64'), ('windows', 'arm64'),
           }
-          if lines[0] != 'maris-release-v2':
-              raise SystemExit('installers require the v2 CLI release manifest')
-          if values.get('version') != version or values.get('channel') != 'stable' or values.get('interface') != 'cli':
-              raise SystemExit('assembled manifest is not the stable CLI release for this tag')
-          if seen_targets != expected_targets or len(lines) != 11:
+          for line in lines[5:]:
+              fields = line.split('\t')
+              if len(fields) != 7 or fields[0] != 'asset':
+                  raise SystemExit('invalid asset row in release manifest')
+              system, arch, name, archive_hash, archive_bytes, binary_hash = fields[1:]
+              if (system, arch) not in expected_targets or (system, arch) in seen_targets:
+                  raise SystemExit(f'invalid or duplicate installer target: {system}/{arch}')
+              expected_name = f"Maris-{version}-{system}-{arch}" + ('.zip' if system == 'windows' else '.tar.gz')
+              if name != expected_name:
+                  raise SystemExit(f'installer-visible asset name mismatch: {name} != {expected_name}')
+              if (not re.fullmatch(r'[a-f0-9]{64}', archive_hash)
+                      or not re.fullmatch(r'[a-f0-9]{64}', binary_hash)
+                      or not re.fullmatch(r'[1-9][0-9]{0,8}', archive_bytes)
+                      or int(archive_bytes) > 134217728):
+                  raise SystemExit(f'invalid checksum or size field for {name}')
+              seen_targets.add((system, arch))
+              assets.append((system, arch, name, archive_hash, archive_bytes, binary_hash))
+          if seen_targets != expected_targets:
               raise SystemExit('manifest must contain exactly the six installer-supported native targets')
 
           out = Path('.release-upload')
@@ -148,9 +242,10 @@ jobs:
           for system, arch, name, expected_hash, expected_bytes, binary_hash in assets:
               if len(expected_hash) != 64 or len(binary_hash) != 64:
                   raise SystemExit(f'invalid checksum field for {name}')
-              matches = [p for p in root.rglob(name) if p.is_file()]
+              matches = [p for p in root.rglob(name)
+                         if p.is_file() and not p.is_symlink() and p.resolve().is_relative_to(root)]
               if len(matches) != 1:
-                  raise SystemExit(f'expected one {name}, found {len(matches)}')
+                  raise SystemExit(f'expected one real in-root {name}, found {len(matches)}')
               source = matches[0]
               actual_bytes = source.stat().st_size
               actual_hash = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -161,7 +256,7 @@ jobs:
               copied.append(target)
 
           manifest_target = out / 'maris-release.tsv'
-          shutil.copy2(manifest, manifest_target)
+          manifest_target.write_bytes(manifest_bytes)
           copied.append(manifest_target)
           sums = []
           for path in sorted(copied, key=lambda p: p.name):
@@ -273,9 +368,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
           SOURCE_SHA: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
+          actual_id="$(gh release view "$RELEASE_TAG" --json databaseId --jq '.databaseId')"
+          if [ "$actual_id" != "$RELEASE_ID" ]; then
+            echo "Release was replaced; refusing to alter a different release" >&2
+            exit 1
+          fi
           actual="$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq '.sha')"
           if [[ ! "$actual" =~ ^[a-f0-9]{40}$ ]]; then
             echo "Could not resolve $RELEASE_TAG to one commit; refusing publication without deleting existing assets." >&2
@@ -317,9 +418,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
           SOURCE_SHA: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
+          actual_id="$(gh release view "$RELEASE_TAG" --json databaseId --jq '.databaseId')"
+          if [ "$actual_id" != "$RELEASE_ID" ]; then
+            echo "Release was replaced; refusing to alter a different release" >&2
+            exit 1
+          fi
           actual="$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq '.sha')"
           if [[ ! "$actual" =~ ^[a-f0-9]{40}$ ]]; then
             echo "Could not resolve $RELEASE_TAG to one commit; refusing publication without deleting existing assets." >&2
@@ -348,6 +455,53 @@ jobs:
           echo "Release tag $RELEASE_TAG moved from successful build $SOURCE_SHA to $actual; installer assets were removed." >&2
           exit 1
 
+      - name: Reverify public installer asset bytes before installation smoke
+        if: steps.release.outputs.publish == 'true' && steps.assets.outputs.failed != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+        run: |
+          set -euo pipefail
+          rm -rf .release-final
+          mkdir .release-final
+          expected=()
+          for path in .release-upload/*; do
+            [ -f "$path" ] || continue
+            expected+=("$(basename "$path")")
+          done
+          if [ "${#expected[@]}" -ne 8 ]; then
+            echo "Expected exactly eight installer-facing release assets" >&2
+            exit 1
+          fi
+          for asset in "${expected[@]}"; do
+            if ! gh release download "$RELEASE_TAG" --pattern "$asset" --dir .release-final --clobber; then
+              echo "Public release asset disappeared before installation smoke: $asset" >&2
+              exit 1
+            fi
+            if cmp -s ".release-upload/$asset" ".release-final/$asset"; then
+              continue
+            fi
+
+            # Retry once before deleting by name: a concurrent repair between the first
+            # download and this check must not be removed as though it were still corrupt.
+            rm -f ".release-final/$asset"
+            if gh release download "$RELEASE_TAG" --pattern "$asset" --dir .release-final --clobber \
+                && cmp -s ".release-upload/$asset" ".release-final/$asset"; then
+              continue
+            fi
+            actual_id="$(gh release view "$RELEASE_TAG" --json databaseId --jq '.databaseId')"
+            if [ "$actual_id" != "$RELEASE_ID" ]; then
+              echo "Release was replaced; refusing to remove its assets" >&2
+              exit 1
+            fi
+            gh release delete-asset "$RELEASE_TAG" "$asset" --yes
+            echo "Public release asset changed after exact verification/upload: $asset" >&2
+            exit 1
+          done
+
       - name: Expose validated release for public smoke
         if: steps.release.outputs.publish == 'true' && steps.assets.outputs.failed != 'true'
         shell: bash
@@ -355,22 +509,31 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+          SOURCE_SHA: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}
           CALLED_FROM_PUBLISH: ${{ inputs.release_tag != '' }}
         run: |
           set -euo pipefail
-          draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"
-          case "$draft:$CALLED_FROM_PUBLISH" in
-            true:true) gh release edit "$RELEASE_TAG" --draft=false --prerelease ;;
-            true:false)
-              echo "Automatic release-asset validation refuses to publish a draft release" >&2
-              exit 1
+          actual_id="$(gh release view "$RELEASE_TAG" --json databaseId --jq '.databaseId')"
+          actual_sha="$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq '.sha')"
+          if [ "$actual_id" != "$RELEASE_ID" ] || [ "$actual_sha" != "$SOURCE_SHA" ]; then
+            echo "Release identity changed before public smoke" >&2
+            exit 1
+          fi
+          state="$(gh api "repos/$GH_REPO/releases/$RELEASE_ID" \
+            --jq '[.id, .tag_name, .draft, .prerelease, (.published_at != null)] | @tsv')"
+          IFS=$'\t' read -r actual_id actual_tag draft prerelease published <<< "$state"
+          if [ "$actual_id" != "$RELEASE_ID" ] || [ "$actual_tag" != "$RELEASE_TAG" ]; then
+            echo "Release identity changed before public smoke" >&2
+            exit 1
+          fi
+          case "$draft:$prerelease:$published:$CALLED_FROM_PUBLISH" in
+            true:false:false:true)
+              gh api --method PATCH "repos/$GH_REPO/releases/$RELEASE_ID" \
+                -F draft=false -F prerelease=true -f make_latest=false >/dev/null
               ;;
-            false:false) ;;
-            false:true)
-              echo "Owned stable-release workflow expected a draft release before public smoke" >&2
-              exit 1
-              ;;
-            *) echo "Could not determine release draft state" >&2; exit 1 ;;
+            false:false:true:false) ;;
+            *) echo "Expected an owned draft or an already published automatic stable release" >&2; exit 1 ;;
           esac
 
   public-install-smoke:
@@ -382,17 +545,18 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-15, macos-15-intel, ubuntu-24.04, ubuntu-24.04-arm, windows-2025, windows-11-arm]
+        bootstrap: ${{ inputs.release_tag != '' && fromJSON('["release", "public"]') || fromJSON('["public"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
       - name: Checkout release-source bootstrap for exact publication evidence
-        if: inputs.release_tag != '' || needs.publish.outputs.mode != 'reuse'
+        if: matrix.bootstrap == 'release'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}
           persist-credentials: false
-      - name: Checkout the current public bootstrap when independently revalidating existing assets
-        if: inputs.release_tag == '' && needs.publish.outputs.mode == 'reuse'
+      - name: Checkout the current public bootstrap
+        if: matrix.bootstrap == 'public'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
@@ -439,6 +603,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ needs.publish.outputs.tag }}
           SOURCE_SHA: ${{ inputs.source_sha }}
+          RELEASE_ID: ${{ needs.publish.outputs.release_id }}
         run: |
           set -euo pipefail
           current_main="$(gh api "repos/$GH_REPO/commits/main" --jq '.sha')"
@@ -446,13 +611,19 @@ jobs:
             echo "main advanced before stable promotion; refusing stale release" >&2
             exit 1
           fi
-          draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"
-          prerelease="$(gh release view "$RELEASE_TAG" --json isPrerelease --jq '.isPrerelease')"
-          if [ "$draft" != false ] || [ "$prerelease" != true ]; then
+          actual_sha="$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq '.sha')"
+          actual_id="$(gh release view "$RELEASE_TAG" --json databaseId --jq '.databaseId')"
+          state="$(gh api "repos/$GH_REPO/releases/$RELEASE_ID" \
+            --jq '[.id, .tag_name, .draft, .prerelease, (.published_at != null)] | @tsv')"
+          IFS=$'\t' read -r recorded_id actual_tag draft prerelease published <<< "$state"
+          if [ "$actual_sha" != "$SOURCE_SHA" ] || [ "$actual_id" != "$RELEASE_ID" ] \
+              || [ "$recorded_id" != "$RELEASE_ID" ] || [ "$actual_tag" != "$RELEASE_TAG" ] \
+              || [ "$draft:$prerelease:$published" != false:true:true ]; then
             echo "Release is not the expected public prerelease after installer smoke" >&2
             exit 1
           fi
-          gh release edit "$RELEASE_TAG" --prerelease=false --latest
+          gh api --method PATCH "repos/$GH_REPO/releases/$RELEASE_ID" \
+            -F prerelease=false -f make_latest=true >/dev/null
 
   remove-uninstallable-assets:
     needs: [publish, public-install-smoke]
@@ -468,9 +639,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ needs.publish.outputs.tag }}
+          RELEASE_ID: ${{ needs.publish.outputs.release_id }}
           CLEANUP_ASSETS: ${{ needs.publish.outputs.cleanup_assets }}
         run: |
           set -euo pipefail
+          actual_id="$(gh release view "$RELEASE_TAG" --json databaseId --jq '.databaseId')"
+          if [ "$actual_id" != "$RELEASE_ID" ]; then
+            echo "Release was replaced; refusing to remove its assets" >&2
+            exit 1
+          fi
           version="${RELEASE_TAG#v}"
           existing="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
           expected=(
@@ -505,3 +682,4 @@ jobs:
               fi
             done
           fi
+

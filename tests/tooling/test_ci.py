@@ -168,9 +168,11 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn("bash install.sh --version", publish)
         self.assertIn("& ./install.ps1 -Version", publish)
         public_smoke = publish.split('  public-install-smoke:', 1)[1].split('  remove-uninstallable-assets:', 1)[0]
-        self.assertIn("if: inputs.release_tag != '' || needs.publish.outputs.mode != 'reuse'", public_smoke)
+        self.assertIn("if: matrix.bootstrap == 'release'", public_smoke)
         self.assertIn('ref: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}', public_smoke)
-        self.assertIn("if: inputs.release_tag == '' && needs.publish.outputs.mode == 'reuse'", public_smoke)
+        self.assertIn("if: matrix.bootstrap == 'public'", public_smoke)
+        self.assertIn("fromJSON('[\"release\", \"public\"]')", public_smoke)
+        self.assertIn("fromJSON('[\"public\"]')", public_smoke)
         self.assertIn('ref: ${{ github.event.repository.default_branch }}', public_smoke)
         self.assertIn("mode: ${{ steps.assets.outputs.mode }}", publish)
         self.assertIn("group: release-assets-", publish)
@@ -200,16 +202,17 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn('echo "source_run_id=$source_run_id"', publish_release)
         self.assertIn('echo "source_sha=$GITHUB_SHA"', publish_release)
         self.assertIn('echo "release_tag=$tag"', publish_release)
-        self.assertIn('gh release create "$RELEASE_TAG"', publish_release)
-        self.assertIn('--draft', publish_release)
+        self.assertIn('gh api --method POST "repos/$GH_REPO/releases"', publish_release)
+        self.assertIn('-F draft=true -F prerelease=false', publish_release)
+        self.assertIn('release_id: ${{ steps.created.outputs.release_id }}', publish_release)
         create_block = publish_release.split('      - name: Create draft GitHub release', 1)[1].split('  assets:', 1)[0]
         self.assertGreaterEqual(create_block.count('git fetch --no-tags --depth=1 origin main'), 2)
         self.assertGreaterEqual(create_block.count('git rev-parse FETCH_HEAD'), 2)
-        self.assertIn('gh release delete "$RELEASE_TAG" --yes --cleanup-tag', create_block)
-        self.assertIn('gh release delete "$RELEASE_TAG" --yes', create_block)
-        self.assertIn('Release tag ownership changed; removed only the release and preserved the tag.', create_block)
+        self.assertIn('gh api --method DELETE "repos/$GH_REPO/releases/$release_id"', create_block)
+        self.assertIn('gh api --method DELETE "repos/$GH_REPO/git/refs/tags/$RELEASE_TAG"', create_block)
+        self.assertIn('Tag ownership changed or could not be resolved; preserving the tag', create_block)
         self.assertIn('Release tag did not resolve to the validated source after creation', create_block)
-        self.assertIn('main advanced while the draft release was being created; rolled it back', create_block)
+        self.assertIn('main advanced while the draft release was being created', create_block)
 
         call = publish_release.split('  assets:', 1)[1]
         self.assertIn('needs: publish', call)
@@ -217,39 +220,85 @@ class ToolchainRequirements(unittest.TestCase):
         self.assertIn('source_run_id: ${{ needs.publish.outputs.source_run_id }}', call)
         self.assertIn('source_sha: ${{ needs.publish.outputs.source_sha }}', call)
         self.assertIn('release_tag: ${{ needs.publish.outputs.release_tag }}', call)
+        self.assertIn('release_id: ${{ needs.publish.outputs.release_id }}', call)
 
         self.assertIn('  rollback-release:', publish_release)
         self.assertIn("needs: [publish, assets]", publish_release)
         self.assertIn("always() && needs.publish.result == 'success' && needs.assets.result != 'success'", publish_release)
         self.assertIn('RELEASE_TAG: ${{ needs.publish.outputs.release_tag }}', publish_release)
         self.assertIn('SOURCE_SHA: ${{ needs.publish.outputs.source_sha }}', publish_release)
-        self.assertIn('gh release delete "$RELEASE_TAG" --yes --cleanup-tag', publish_release)
+        self.assertIn('gh api --method DELETE "repos/$GH_REPO/releases/$RELEASE_ID"', publish_release)
         self.assertIn('Release tag no longer belongs to this publication; preserved the tag while removing the release.', publish_release)
 
         self.assertIn('workflow_call:', assets)
         self.assertIn('SOURCE_RUN_ID: ${{ inputs.source_run_id || github.event.workflow_run.id }}', assets)
         self.assertIn('SOURCE_SHA: ${{ inputs.source_sha || github.event.workflow_run.head_sha }}', assets)
         self.assertIn('RELEASE_TAG_INPUT: ${{ inputs.release_tag }}', assets)
+        self.assertIn('RELEASE_ID_INPUT: ${{ inputs.release_id }}', assets)
         self.assertNotIn("github.event_name == 'workflow_call'", assets)
         self.assertNotIn("github.event_name != 'workflow_call'", assets)
         self.assertIn('Release tag $tag does not point at successful build $SOURCE_SHA', assets)
         smoke_exposure = assets.split('      - name: Expose validated release for public smoke', 1)[1].split('  public-install-smoke:', 1)[0]
-        self.assertIn('gh release view "$RELEASE_TAG" --json isDraft', smoke_exposure)
-        self.assertIn('gh release edit "$RELEASE_TAG" --draft=false --prerelease', smoke_exposure)
-        self.assertIn('Automatic release-asset validation refuses to publish a draft release', smoke_exposure)
-        self.assertNotIn('true:false) gh release edit "$RELEASE_TAG" --draft=false', smoke_exposure)
+        self.assertIn('gh release view "$RELEASE_TAG" --json databaseId', smoke_exposure)
+        self.assertIn('gh api --method PATCH "repos/$GH_REPO/releases/$RELEASE_ID"', smoke_exposure)
+        self.assertIn('-F draft=false -F prerelease=true -f make_latest=false', smoke_exposure)
+        self.assertIn('Expected an owned draft or an already published automatic stable release', smoke_exposure)
+        self.assertIn('false:false:true:false) ;;', smoke_exposure)
 
         self.assertIn('  promote-stable:', assets)
         promote = assets.split('  promote-stable:', 1)[1].split('  remove-uninstallable-assets:', 1)[0]
         self.assertIn("needs: [publish, public-install-smoke]", promote)
         self.assertIn("inputs.release_tag != ''", promote)
         self.assertIn("needs.public-install-smoke.result == 'success'", promote)
-        self.assertIn('gh release view "$RELEASE_TAG" --json isDraft', promote)
-        self.assertIn('gh release view "$RELEASE_TAG" --json isPrerelease', promote)
+        self.assertIn('gh release view "$RELEASE_TAG" --json databaseId', promote)
+        self.assertIn('[.id, .tag_name, .draft, .prerelease, (.published_at != null)]', promote)
         self.assertIn('SOURCE_SHA: ${{ inputs.source_sha }}', promote)
         self.assertIn("gh api \"repos/$GH_REPO/commits/main\" --jq '.sha'", promote)
         self.assertIn('main advanced before stable promotion; refusing stale release', promote)
-        self.assertIn('gh release edit "$RELEASE_TAG" --prerelease=false --latest', promote)
+        self.assertIn('gh api --method PATCH "repos/$GH_REPO/releases/$RELEASE_ID"', promote)
+        self.assertIn('-F prerelease=false -f make_latest=true', promote)
+
+    def test_release_publication_reverifies_public_bytes_before_install_smoke(self):
+        publish = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
+        verify = 'Reverify public installer asset bytes before installation smoke'
+        self.assertIn(verify, publish)
+        self.assertIn('rm -rf .release-final', publish)
+        self.assertIn('cmp -s ".release-upload/$asset" ".release-final/$asset"', publish)
+        self.assertIn('Public release asset disappeared before installation smoke', publish)
+        self.assertIn('Public release asset changed after exact verification/upload', publish)
+        self.assertIn('gh release delete-asset "$RELEASE_TAG" "$asset" --yes', publish)
+        self.assertLess(publish.index(verify), publish.index('  public-install-smoke:'))
+
+    def test_release_asset_publication_is_serialized_across_source_commits(self):
+        publish = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
+        caller = (ROOT / '.github/workflows/publish-release.yml').read_text(encoding='utf-8')
+        self.assertIn(r'group: release-assets-${{ github.repository }}', publish)
+        self.assertNotIn(r'group: release-assets-${{ github.event.workflow_run.head_sha }}', publish)
+        self.assertIn(r'group: stable-release-${{ github.repository }}', caller)
+        self.assertNotIn(r'group: stable-release-${{ github.sha }}', caller)
+        self.assertIn('cancel-in-progress: false', publish)
+        self.assertIn('cancel-in-progress: false', caller)
+
+    def test_release_asset_publication_separates_automatic_stable_from_owned_draft(self):
+        publish = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
+        self.assertIn("release.get('draft') is not False", publish)
+        self.assertIn("release.get('prerelease') is not False", publish)
+        self.assertIn("not release.get('published_at')", publish)
+        self.assertIn('Automatic validation requires an already published stable release', publish)
+        self.assertIn("str(release['id']) != expected_id", publish)
+        self.assertIn("release.get('draft') is not True", publish)
+
+    def test_release_asset_workflow_uses_installer_strict_manifest_contract(self):
+        publish = (ROOT / '.github/workflows/release-assets.yml').read_text(encoding='utf-8')
+        self.assertIn("expected_metadata = ['version', 'source_sha256', 'channel', 'interface']", publish)
+        self.assertIn('metadata rows are missing, reordered or duplicated', publish)
+        self.assertIn("values['source_sha256'] != os.environ['SOURCE_SHA256']", publish)
+        self.assertIn("re.fullmatch(r'[a-f0-9]{64}', values['source_sha256'])", publish)
+        self.assertIn("re.fullmatch(r'[1-9][0-9]{0,8}', archive_bytes)", publish)
+        self.assertIn('int(archive_bytes) > 134217728', publish)
+        self.assertIn('release manifest must use LF line endings', publish)
+        self.assertIn('not p.is_symlink() and p.resolve().is_relative_to(root)', publish)
+        self.assertIn('expected one real in-root', publish)
 
     @unittest.skipUnless(BASH, 'Bash release identity execution required')
     def test_release_identity_gate_rejects_wrong_version_and_ref_before_native_matrix(self):
@@ -485,7 +534,10 @@ class ToolchainRequirements(unittest.TestCase):
                 '#!/bin/sh\n'
                 'set -eu\n'
                 'if [ "$1" = api ]; then printf "%s\\n" "$GH_COMMIT"; exit 0; fi\n'
-                'if [ "$1:$2" = release:view ]; then cat "$GH_FIXTURE/assets"; exit 0; fi\n'
+                'if [ "$1:$2" = release:view ]; then\n'
+                '  if [ "${5:-}" = databaseId ]; then printf "%s\\n" "$GH_RELEASE_ID";\n'
+                '  else cat "$GH_FIXTURE/assets"; fi; exit 0\n'
+                'fi\n'
                 'if [ "$1:$2" = release:delete-asset ]; then\n'
                 '  printf "%s\\n" "$4" >> "$GH_FIXTURE/deleted"\n'
                 '  [ "${FAIL_ASSET:-}" != "$4" ] || exit 23\n'
@@ -509,6 +561,7 @@ class ToolchainRequirements(unittest.TestCase):
                 RELEASE_TAG='v1.2.3',
                 SOURCE_SHA=source,
                 GH_COMMIT=source,
+                RELEASE_ID='29', GH_RELEASE_ID='29',
             )
             result = subprocess.run(
                 [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', scripts[0]],
@@ -516,6 +569,15 @@ class ToolchainRequirements(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertFalse((root / 'deleted').exists())
+
+            environment['GH_RELEASE_ID'] = '30'
+            result = subprocess.run(
+                [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', scripts[0]],
+                env=environment, capture_output=True, text=True, encoding='utf-8', timeout=10,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse((root / 'deleted').exists())
+            environment['GH_RELEASE_ID'] = '29'
 
             environment['GH_COMMIT'] = 'd' * 40
             result = subprocess.run(
@@ -562,7 +624,10 @@ class ToolchainRequirements(unittest.TestCase):
             gh.write_text(
                 '#!/bin/sh\n'
                 'set -eu\n'
-                'if [ "$1:$2" = release:view ]; then cat "$GH_FIXTURE/assets"; exit 0; fi\n'
+                'if [ "$1:$2" = release:view ]; then\n'
+                '  if [ "${5:-}" = databaseId ]; then printf "%s\\n" "$GH_RELEASE_ID";\n'
+                '  else cat "$GH_FIXTURE/assets"; fi; exit 0\n'
+                'fi\n'
                 'if [ "$1:$2" = release:delete-asset ]; then\n'
                 '  printf "%s\\n" "$4" >> "$GH_FIXTURE/deleted"\n'
                 '  [ "${FAIL_ASSET:-}" != "$4" ] || exit 23\n'
@@ -580,6 +645,7 @@ class ToolchainRequirements(unittest.TestCase):
                 GH_REPO='francis-du/maris',
                 RELEASE_TAG='v1.2.3',
                 CLEANUP_ASSETS=','.join([expected[0], expected[-1]]),
+                RELEASE_ID='29', GH_RELEASE_ID='29',
             )
             result = subprocess.run(
                 [BASH, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script],
@@ -631,3 +697,4 @@ class ToolchainRequirements(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
