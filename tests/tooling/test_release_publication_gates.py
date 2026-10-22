@@ -259,6 +259,33 @@ else:
         self.run['head_branch'] = 'untrusted-branch'
         self.assertNotEqual(self.resolve().returncode, 0)
 
+    def test_manifest_trailing_line_endings_match_public_unix_installer(self):
+        path, valid = self.manifest()
+        installer = (ROOT / 'install.sh').read_text(encoding='utf-8')
+        start = installer.index('function bad() {')
+        end = installer.index('\n\' "$WORK/manifest.tsv")', start)
+        awk_program = installer[start:end]
+        for trailing_lf in range(4):
+            with self.subTest(trailing_lf=trailing_lf):
+                path.write_bytes(valid[:-1] + b'\n' * trailing_lf)
+                shutil.rmtree(self.root / '.release-upload', ignore_errors=True)
+                parsed = subprocess.run(
+                    [BASH, '--noprofile', '--norc', '-c',
+                     'awk -F "\\t" -v target_os=linux -v arch=x86_64 '
+                     '-v requested=1.2.3 "$1" "$2"',
+                     'installer-manifest-fixture', awk_program, path.as_posix()],
+                    cwd=self.root, env=self.environment, capture_output=True,
+                    text=True, timeout=30,
+                )
+                self.assertEqual(parsed.returncode, 0 if trailing_lf <= 1 else 2,
+                                 parsed.stderr)
+                result = self.execute('Verify installer contract and prepare public assets')
+                self.assertEqual(
+                    result.returncode == 0, parsed.returncode == 0,
+                    f'Publication and installer disagreed for {trailing_lf} trailing LF: '
+                    + result.stderr,
+                )
+
     def test_wrong_source_digest_and_crlf_manifest_are_rejected(self):
         path, original = self.manifest()
         for data in (original.replace(SOURCE.encode(), b'd' * 64),

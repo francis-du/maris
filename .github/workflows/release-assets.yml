@@ -190,7 +190,7 @@ jobs:
           text = manifest_bytes.decode('ascii')
           if '\r' in text:
               raise SystemExit('release manifest must use LF line endings')
-          lines = text.rstrip('\n').split('\n')
+          lines = text.removesuffix('\n').split('\n')
           version = os.environ['RELEASE_TAG'].removeprefix('v')
           if len(lines) != 11 or lines[0] != 'maris-release-v2':
               raise SystemExit('installers require one exact 11-line v2 CLI release manifest')
