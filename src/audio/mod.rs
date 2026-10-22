@@ -133,6 +133,8 @@ pub(super) struct Metrics {
     peak_right: AtomicU32,
     frames: AtomicU64,
     captured_frames: AtomicU64,
+    #[cfg(target_os = "macos")]
+    capture_callback_calls: AtomicU64,
     callback_processing_nanos: AtomicU64,
     callback_max_nanos: AtomicU64,
     callback_frames: AtomicU64,
@@ -311,6 +313,8 @@ pub struct Session {
     system_device_id: u32,
     #[cfg(target_os = "macos")]
     last_device_check: Instant,
+    #[cfg(target_os = "macos")]
+    last_system_progress: Option<system::ProgressGuard>,
 }
 impl Session {
     pub fn live(store: Store, input: &str, output: Option<&str>) -> Result<Self> {
@@ -437,6 +441,8 @@ impl Session {
             system_device_id: 0,
             #[cfg(target_os = "macos")]
             last_device_check: Instant::now(),
+            #[cfg(target_os = "macos")]
+            last_system_progress: None,
         })
     }
     pub fn play(store: Store, path: &Path, output: Option<&str>, repeat: bool) -> Result<Self> {
@@ -534,6 +540,8 @@ impl Session {
             system_device_id: 0,
             #[cfg(target_os = "macos")]
             last_device_check: Instant::now(),
+            #[cfg(target_os = "macos")]
+            last_system_progress: None,
         })
     }
     pub fn system(store: Store, output: Option<&str>) -> Result<Self> {
@@ -855,8 +863,7 @@ impl Session {
         {
             status["captured_process_objects"] = json!(&self.system_processes);
             status["captured_application_pids"] = json!(&self.system_process_pids);
-            status["coreaudio_tap_mode"] =
-                json!(self.tap.as_ref().map(tap::TapCapture::capture_mode));
+            system::add_runtime_diagnostics(&mut status, self);
         }
         #[cfg(unix)]
         if let Some(pulse) = &self.pulse {
@@ -881,21 +888,26 @@ impl Session {
 }
 impl Drop for Session {
     fn drop(&mut self) {
-        self.metrics.stopping.store(true, Ordering::Relaxed);
+        let final_status = session_control::final_runtime_status(self.status());
+        self.metrics.stopping.store(true, Ordering::Release);
+        #[cfg(target_os = "macos")]
+        {
+            let deadline = Instant::now() + Duration::from_millis(75);
+            while !self.metrics.faded_out.load(Ordering::Acquire) && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            self.tap.take();
+        }
+        #[cfg(not(target_os = "macos"))]
         std::thread::sleep(Duration::from_millis(40));
         self.streams.clear();
         #[cfg(unix)]
         self.pulse.take();
         #[cfg(target_os = "windows")]
         self.windows.take();
-        #[cfg(target_os = "macos")]
-        self.tap.take();
         self.voice.take();
         self.route.take();
-        let _ = self.store.write_json(
-            "runtime.json",
-            &json!({"active":false,"updated_at_ms":now_ms()}),
-        );
+        let _ = self.store.write_json("runtime.json", &final_status);
     }
 }
 fn new_session_id() -> String {

@@ -4,6 +4,16 @@ use super::Session;
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
 
+/// Keep CoreAudio failure evidence after teardown; normal stops keep their compact status.
+pub(super) fn final_runtime_status(mut status: Value) -> Value {
+    if status["coreaudio_fail_open_reason"].as_str().is_some() {
+        status["active"] = json!(false);
+        status
+    } else {
+        json!({"active":false,"updated_at_ms":status["updated_at_ms"]})
+    }
+}
+
 /// Poll saved configuration on the control thread. A full queue must not
 /// acknowledge a revision that the renderer never received; the next tick retries it.
 pub(super) fn queue_settings(
@@ -251,3 +261,7 @@ impl Session {
         !self.streams.is_empty()
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/terminal_runtime_status.rs"]
+mod terminal_runtime_status_tests;
