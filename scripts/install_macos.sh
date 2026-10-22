@@ -147,7 +147,7 @@ fi
 mkdir -p -- "$PREFIX"
 LOCK="$PREFIX/.maris-install.lock"
 mkdir -- "$LOCK" 2>/dev/null || fail 'Another installation may be active; inspect the existing install lock before retrying'
-LOCK_OWNER="$:$PPID"
+LOCK_OWNER="$$:$PPID"
 if ! printf '%s\n' "$LOCK_OWNER" > "$LOCK/.owner"; then
     rmdir -- "$LOCK" 2>/dev/null || true
     fail 'Could not record ownership of the install lock'

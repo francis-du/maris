@@ -178,7 +178,7 @@ mkdir -p -- "$PREFIX"
 CANDIDATE_LOCK="$PREFIX/.maris-install.lock"
 mkdir -- "$CANDIDATE_LOCK" 2>/dev/null || fail 'Another installation may be active; do not delete a live install lock'
 LOCK=$CANDIDATE_LOCK
-LOCK_OWNER="$:$PPID"
+LOCK_OWNER="$$:$PPID"
 if ! printf '%s\n' "$LOCK_OWNER" > "$LOCK/.owner"; then
     rmdir -- "$LOCK" 2>/dev/null || true
     LOCK=''
