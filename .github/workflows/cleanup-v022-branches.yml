@@ -1,0 +1,215 @@
+name: Clean reviewed branches after v0.2.2
+
+on:
+  workflow_run:
+    workflows: ['Publish stable release']
+    types: [completed]
+    branches: ['release-publish/v0.2.2']
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: maris-reviewed-branch-cleanup-v0.2.2
+  cancel-in-progress: false
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  RELEASE_SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+  PUBLICATION_RUN_ID: ${{ github.event.workflow_run.id }}
+  CLEANUP_SCRIPT_SHA256: '622fe6d006ba27805f7330ef38a5678e4864d89f61d77839f8fdfdc4f2e07261'
+  CLEANUP_PLAN_SHA256: '740764c87f79e669fbddf0df7b8a755286cd786be825a56ed948fc17ae043b24'
+
+jobs:
+  cleanup:
+    if: >-
+      github.repository == 'francis-du/maris' &&
+      github.event.repository.full_name == 'francis-du/maris' &&
+      github.event.workflow_run.head_repository.full_name == 'francis-du/maris' &&
+      github.event.workflow_run.status == 'completed' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.path == '.github/workflows/publish-release.yml' &&
+      github.event.workflow_run.head_branch == 'release-publish/v0.2.2'
+    permissions:
+      contents: write
+      actions: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out the exact published source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Bind the checkout and reviewed cleanup inputs
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+
+          destination = Path(os.environ['RUNNER_TEMP']) / 'maris-v022-cleanup'
+          destination.mkdir(exist_ok=True)
+          report = {'schema_version': 1, 'inputs_bound': False, 'inputs': [], 'error': None}
+          try:
+              expected = os.environ['RELEASE_SOURCE_SHA']
+              report['expected_source_sha'] = expected
+              if not re.fullmatch(r'[0-9a-f]{40}', expected):
+                  raise ValueError('Invalid published source SHA')
+              actual = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+              report['checkout_source_sha'] = actual
+              if actual != expected:
+                  raise ValueError('Cleanup checkout differs from the published source')
+              for name, key in (
+                  ('scripts/cleanup_v022_branches.py', 'CLEANUP_SCRIPT_SHA256'),
+                  ('scripts/cleanup_v022_branches.json', 'CLEANUP_PLAN_SHA256'),
+              ):
+                  path = Path(name)
+                  if path.is_symlink() or not path.is_file():
+                      raise ValueError('Cleanup input is missing or linked: ' + name)
+                  digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                  report['inputs'].append({'path': name, 'sha256': digest})
+                  if digest != os.environ[key]:
+                      raise ValueError('Reviewed cleanup input changed: ' + name)
+              report['inputs_bound'] = True
+          except Exception as error:
+              report['error'] = type(error).__name__ + ': ' + str(error)
+              raise
+          finally:
+              with (destination / 'input-binding.json').open('x', encoding='utf-8') as output:
+                  json.dump(report, output, indent=2)
+                  output.write('\n')
+          PY
+
+      - name: Wait briefly for publication and rollback workflows to settle
+        id: idle
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import signal
+          import sys
+          import time
+
+          sys.path.insert(0, str(Path('scripts').resolve()))
+          import cleanup_v022_branches as cleanup
+
+          # A hard 285-second alarm leaves room to retain a failure receipt
+          # before the outer five-minute step deadline. Each sleep is <=20s.
+          started = time.monotonic()
+          deadline = started + 285
+          report = {
+              'schema_version': 1,
+              'scope': 'read_only_wait_for_publication_idle',
+              'repository': cleanup.REPOSITORY,
+              'source_sha': os.environ['RELEASE_SOURCE_SHA'],
+              'publication_run_id': int(os.environ['PUBLICATION_RUN_ID']),
+              'started_at': cleanup.now(),
+              'maximum_wait_seconds': 285,
+              'maximum_single_sleep_seconds': 20,
+              'publication_idle': False,
+              'observations': [],
+              'error': None,
+          }
+          destination = Path(os.environ['RUNNER_TEMP']) / 'maris-v022-cleanup'
+          destination.mkdir(exist_ok=True)
+
+          def expired(_signal, _frame):
+              raise TimeoutError('Publishing workflows did not settle within the bounded wait')
+
+          signal.signal(signal.SIGALRM, expired)
+          signal.setitimer(signal.ITIMER_REAL, 285)
+          try:
+              api = cleanup.GitHub(os.environ['GH_TOKEN'])
+              while True:
+                  workflows = cleanup.workflow_inventory(api)
+                  publishing = [
+                      run for run in workflows['active_runs']
+                      if run['path'].split('@', 1)[0] in (cleanup.PUBLISH_PATH, cleanup.RELEASE_PATH)
+                  ]
+                  report['observations'].append({
+                      'at': cleanup.now(),
+                      'active_publication_runs': [
+                          {key: run[key] for key in ('id', 'head_branch', 'head_sha', 'path', 'status')}
+                          for run in publishing
+                      ],
+                      'active_state_query_order': workflows['active_state_query_order'],
+                      'recent_run_window': workflows['recent_run_window'],
+                  })
+                  if not publishing:
+                      release = api.get('/releases/tags/' + cleanup.TAG)
+                      release_id = release['id']
+                      if type(release_id) is not int or release_id <= 0:
+                          raise ValueError('Invalid release ID')
+                      report['publication_idle'] = True
+                      report['release_id'] = release_id
+                      with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+                          output.write(f'release_id={release_id}\n')
+                      break
+                  remaining = deadline - time.monotonic()
+                  if remaining <= 0:
+                      raise TimeoutError('Publishing workflows are still active; no deletion attempted')
+                  print(json.dumps({
+                      'waiting_for_publication_runs': [run['id'] for run in publishing],
+                      'remaining_seconds': round(remaining, 1),
+                  }), flush=True)
+                  time.sleep(min(20, remaining))
+          except Exception as error:
+              report['error'] = type(error).__name__ + ': ' + str(error)
+              raise
+          finally:
+              signal.setitimer(signal.ITIMER_REAL, 0)
+              report['finished_at'] = cleanup.now()
+              report['elapsed_seconds'] = round(time.monotonic() - started, 3)
+              with (destination / 'publication-idle.json').open('x', encoding='utf-8') as output:
+                  json.dump(report, output, indent=2)
+                  output.write('\n')
+          PY
+
+      - name: Revalidate the release and delete only reviewed unchanged refs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.idle.outputs.release_id }}
+        run: |
+          set -euo pipefail
+          python scripts/cleanup_v022_branches.py \
+            --plan scripts/cleanup_v022_branches.json \
+            --plan-sha256 "$CLEANUP_PLAN_SHA256" \
+            --source-sha "$RELEASE_SOURCE_SHA" \
+            --release-id "$RELEASE_ID" \
+            --publication-run-id "$PUBLICATION_RUN_ID" \
+            --output "$RUNNER_TEMP/maris-v022-cleanup/cleanup-result.json" \
+            --execute
+
+      - name: Retain the actual wait and cleanup receipts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: maris-v022-branch-cleanup-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/maris-v022-cleanup/
+          if-no-files-found: error
+          retention-days: 14
+
+# Publication success only triggers revalidation. The script independently
+# requires the stable release, all twelve native public installation jobs,
+# unchanged exact refs, branch rules and inactive publication workflows.
+# It never starts audio, changes tags/releases, or retries a deletion batch.

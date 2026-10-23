@@ -54,6 +54,20 @@ jobs:
             exit 1
           fi
 
+          # Read the reviewed version-specific scope before creating any tag or release.
+          release_notes=".github/release-notes/$tag.md"
+          notes_entry="$(git ls-tree "$GITHUB_SHA" -- "$release_notes")"
+          if [[ ! "$notes_entry" =~ ^100644[[:space:]]blob[[:space:]][0-9a-f]{40}[[:space:]] ]]; then
+            echo "Release notes must be a regular tracked file at $GITHUB_SHA: $release_notes" >&2
+            exit 1
+          fi
+          notes_bytes="$(git cat-file -s "$GITHUB_SHA:$release_notes")"
+          if [ "$notes_bytes" -lt 1 ] || [ "$notes_bytes" -gt 60000 ]; then
+            echo "Release notes must contain between 1 and 60000 bytes" >&2
+            exit 1
+          fi
+          git show "$GITHUB_SHA:$release_notes" > "$RUNNER_TEMP/maris-release-notes.md"
+
           git fetch --no-tags --depth=1 origin main
           current_main="$(git rev-parse FETCH_HEAD)"
           if [ "$GITHUB_SHA" != "$current_main" ]; then
@@ -148,6 +162,7 @@ jobs:
           release_id="$(gh api --method POST "repos/$GH_REPO/releases" \
             -f "tag_name=$RELEASE_TAG" -f "target_commitish=$GITHUB_SHA" \
             -f "name=Maris $RELEASE_VERSION" -F draft=true -F prerelease=false \
+            -F "body=@$RUNNER_TEMP/maris-release-notes.md" \
             -F generate_release_notes=true --jq '.id')"
           if [[ ! "$release_id" =~ ^[1-9][0-9]*$ ]]; then
             echo "Draft creation did not return a release ID" >&2
