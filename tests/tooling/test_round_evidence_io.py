@@ -1,10 +1,12 @@
 """Adversarial verification evidence fixtures; never execute fixture payloads."""
+from contextlib import contextmanager
 import io
 import json
 import os
 from pathlib import Path
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -14,6 +16,68 @@ import verify_rounds
 
 
 class RoundEvidenceIO(unittest.TestCase):
+    def test_ctime_sources_allow_stable_windows_files_and_reject_hidden_rewrites(self):
+        # Windows path ctime can mean creation time while fstat means change time.
+        # Inject only metadata clocks; open/read/rewrite the actual temporary file.
+        cases = [
+            ('nt', 200, 200, 100, None),
+            ('nt', 200, 201, 100, 'while'),
+            ('nt', 200, 200, 101, 'while'),
+            ('posix', 100, 100, 100, None),
+            ('posix', 101, 101, 100, 'before'),
+            ('posix', 100, 101, 100, 'while'),
+            ('posix', 100, 100, 101, 'while'),
+        ]
+        for platform, fd_before, fd_after, path_after, error in cases:
+            with self.subTest(case=(platform, fd_before, fd_after, path_after, error)):
+                with tempfile.TemporaryDirectory() as temporary:
+                    path = Path(temporary) / 'evidence.log'
+                    path.write_bytes(b'good')
+                    original = path.lstat()
+                    original_lstat, original_fstat, original_fdopen = Path.lstat, os.fstat, os.fdopen
+                    read_complete, read_sizes = False, []
+
+                    def clocked(info, ctime):
+                        fields = ('st_dev', 'st_ino', 'st_mode', 'st_size', 'st_mtime_ns')
+                        return SimpleNamespace(**{key: getattr(info, key) for key in fields},
+                                               st_ctime_ns=ctime,
+                                               st_file_attributes=getattr(info, 'st_file_attributes', 0))
+
+                    def path_stat(file, *args, **kwargs):
+                        info = original_lstat(file, *args, **kwargs)
+                        return clocked(info, path_after if read_complete else 100) if file == path else info
+
+                    def fd_stat(fd):
+                        return clocked(original_fstat(fd), fd_after if read_complete else fd_before)
+
+                    @contextmanager
+                    def open_file(*args):
+                        with original_fdopen(*args) as file:
+                            def read(size):
+                                nonlocal read_complete
+                                read_sizes.append(size)
+                                data = file.read(size)
+                                if error == 'while':
+                                    path.write_bytes(b'evil')
+                                    os.utime(path, ns=(original.st_atime_ns, original.st_mtime_ns))
+                                read_complete = True
+                                return data
+                            yield SimpleNamespace(fileno=file.fileno, read=read)
+
+                    platform_os = SimpleNamespace(**vars(os))
+                    platform_os.name, platform_os.fstat, platform_os.fdopen = platform, fd_stat, open_file
+                    with mock.patch.object(verify_rounds, 'os', platform_os), mock.patch.object(Path, 'lstat', path_stat):
+                        if error:
+                            with self.assertRaisesRegex(ValueError, f'changed {error} reading'):
+                                verify_rounds.read_owned(path, 4)
+                        else:
+                            self.assertEqual(verify_rounds.read_owned(path, 4), b'good')
+                    self.assertEqual(read_sizes, [] if error == 'before' else [5])
+                    if error == 'while':
+                        self.assertEqual(path.read_bytes(), b'evil')
+                        self.assertEqual(path.stat().st_size, original.st_size)
+                        self.assertEqual(path.stat().st_mtime_ns, original.st_mtime_ns)
+
     def test_regular_evidence_accepts_exact_bound_and_empty_file(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / 'evidence.log'
