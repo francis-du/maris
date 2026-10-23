@@ -321,6 +321,7 @@ fn visible_preset_row(process: &ConsoleProcess, expected: &str) -> Option<u16> {
         })
 }
 
+#[track_caller]
 fn wait_for_preset(
     process: &mut ConsoleProcess,
     expected: Option<&str>,
@@ -330,11 +331,6 @@ fn wait_for_preset(
     loop {
         process.drain(&mut output);
         assert!(process.child.try_wait().unwrap().is_none());
-        assert!(
-            Instant::now() < deadline,
-            "selected preset was not rendered: {expected:?}; screen: {}",
-            process.terminal.screen().contents()
-        );
         if let Some(name) = highlighted_preset(process) {
             if maris::presets::console_catalog()
                 .iter()
@@ -344,8 +340,24 @@ fn wait_for_preset(
                 return name;
             }
         }
+        assert!(
+            Instant::now() < deadline,
+            "selected preset was not rendered: {expected:?}; screen: {}",
+            process.terminal.screen().contents()
+        );
         std::thread::sleep(Duration::from_millis(10));
     }
+}
+
+#[track_caller]
+fn open_preset(process: &mut ConsoleProcess, expected: Option<&str>) -> String {
+    // A persisted confirmation can precede its closing redraw. Consume that
+    // frame before reopening so an old highlighted row cannot acknowledge P.
+    wait_screen(process, "previous preset picker did not close", |text| {
+        !text.contains("PRESETS")
+    });
+    process.send("p");
+    wait_for_preset(process, expected, Instant::now() + Duration::from_secs(5))
 }
 
 fn select_preset(process: &mut ConsoleProcess, id: &str) {
@@ -354,24 +366,7 @@ fn select_preset(process: &mut ConsoleProcess, id: &str) {
         .iter()
         .position(|p| p.id == id)
         .expect("known preset");
-    let deadline = Instant::now() + Duration::from_secs(5);
-    // A persisted confirmation can precede its closing redraw. Consume that
-    // frame before reopening so an old highlighted row cannot acknowledge P.
-    let mut output = String::new();
-    loop {
-        process.drain(&mut output);
-        assert!(process.child.try_wait().unwrap().is_none());
-        assert!(
-            Instant::now() < deadline,
-            "previous preset picker did not close"
-        );
-        if highlighted_preset(process).is_none() {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(10));
-    }
-    process.send("p");
-    let current = wait_for_preset(process, None, deadline);
+    let current = open_preset(process, None);
     let mut current = catalog
         .iter()
         .position(|preset| preset.name.eq_ignore_ascii_case(&current))
@@ -382,6 +377,7 @@ fn select_preset(process: &mut ConsoleProcess, id: &str) {
     // Do not call the preset implementation or synthesize internal KeyEvents.
     // Retain both keyboard directions: reach the first row with real Up keys,
     // then move down to the requested scene. No saturated no-op keys are queued.
+    // Bound each acknowledged move, not the sum of up to two catalog traversals.
     for destination in [0, selected] {
         while current != destination {
             if current < destination {
@@ -391,7 +387,11 @@ fn select_preset(process: &mut ConsoleProcess, id: &str) {
                 process.send("\x1b[A");
                 current -= 1;
             }
-            wait_for_preset(process, Some(&catalog[current].name), deadline);
+            wait_for_preset(
+                process,
+                Some(&catalog[current].name),
+                Instant::now() + Duration::from_secs(5),
+            );
         }
     }
 }
@@ -479,14 +479,8 @@ fn real_terminal_reopening_preset_starts_on_the_last_applied_matching_layer() {
     wait_until(&mut process, "Dialogue scene did not apply", || {
         listening::load(&store).unwrap().revision == 1
     });
-    process.send("p");
-    wait_for_preset(
-        &mut process,
-        Some("Dialogue"),
-        Instant::now() + Duration::from_secs(5),
-    );
+    open_preset(&mut process, Some("Dialogue"));
     process.send("\x1b");
-    idle(&mut process, Duration::from_millis(150));
 
     select_preset(&mut process, "warm");
     process.send("\r");
@@ -501,12 +495,7 @@ fn real_terminal_reopening_preset_starts_on_the_last_applied_matching_layer() {
         1.0,
         "EQ preset must not erase the active listening scene"
     );
-    process.send("p");
-    wait_for_preset(
-        &mut process,
-        Some("warm"),
-        Instant::now() + Duration::from_secs(5),
-    );
+    open_preset(&mut process, Some("warm"));
 }
 
 #[test]
