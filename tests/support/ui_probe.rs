@@ -80,8 +80,10 @@ fn fixture() -> anyhow::Result<Value> {
 }
 
 fn mixer_fixture(runtime: &mut Value) -> anyhow::Result<()> {
-    let mut state = maris::mixer::MixerState::default();
-    state.revision = 1;
+    let mut state = maris::mixer::MixerState {
+        revision: 1,
+        ..maris::mixer::MixerState::default()
+    };
     for (id, sends) in [("Music", [1.0, 0.0]), ("Voice", [0.0, 1.0])] {
         state.config.strips.push(maris::mixer::MixerStrip {
             id: id.into(),
