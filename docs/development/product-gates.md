@@ -48,7 +48,7 @@ Pushing source to the owner's repository, producing test packages, publishing th
 cargo run --release --locked --example engine_probe -- --ablation
 ```
 
-The probe writes `.maris-review/feature-ablation.json`. It runs three generated signals at four sample rates through the real processor, comparing an all-effects reference with eight versions that each omit one effect. It reports level-matched differences and processing time. The all-effects reference is not a default preset.
+The probe writes `.maris-review/feature-ablation.json`. It runs three generated signals at four sample rates through the real processor, comparing an all-effects reference with ten versions that each omit one effect. It reports level-matched differences and processing time. The all-effects reference is not a default preset.
 
 A difference shows what a component changes, not that listeners prefer it. An effect can correctly have no contribution to a particular input; stereo width on mono is one example. Keep the gain calculation and limiter in every variant.
 

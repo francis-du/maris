@@ -75,12 +75,14 @@ fn renew_telemetry(store: &Store, displayed: &mut Value) {
 }
 
 fn fresh_key(store: &Store, runtime: &mut Value, row: usize, input: KeyCode) {
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     renew_telemetry(store, runtime);
     key(store, runtime, row, input).unwrap();
 }
 
 #[test]
 fn channel_controls_change_only_the_selected_strip_and_never_start_audio() {
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     for (input, field, expected) in [
         (KeyCode::Right, "gain_db", json!(0.5)),
         (KeyCode::Left, "gain_db", json!(-0.5)),
