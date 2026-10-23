@@ -98,6 +98,7 @@ fn global_controls_reject_invalid_direction_before_mutation() {
 
 #[test]
 fn settings_entry_stages_first_band_and_requires_explicit_apply() {
+    let _clock = crate::analysis::test_clock::Clock::freeze();
     let directory = tempfile::tempdir().unwrap();
     let store = Store::at(directory.path());
     let mut workspace = Workspace::Now;
