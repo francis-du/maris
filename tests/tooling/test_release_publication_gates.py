@@ -67,7 +67,7 @@ class ReleasePublicationGates(unittest.TestCase):
             GITHUB_SHA=COMMIT, MAIN_SHA=COMMIT, RELEASE_VERSION='1.2.3',
             GITHUB_OUTPUT=(self.runner / 'outputs').as_posix(), RUNNER_TEMP=self.runner.as_posix(),
             FIXTURE_RUNNER=self.runner.as_posix(), FIXTURE_PYTHON=Path(sys.executable).as_posix(),
-            TAG_SHA=COMMIT)
+            TAG_SHA=COMMIT, FIXTURE_VERSION_TAGS='v1.2.3')
         (self.runner / 'gh_fixture.py').write_text(self.gh_client(), encoding='utf-8', newline='\n')
         # Always use the invoking interpreter, including Git Bash on Windows.
         for name, command in (
@@ -159,7 +159,7 @@ else:
     case "$*" in
       'fetch --force --tags origin') return 0 ;;
       'fetch --no-tags --depth=1 origin main') return 0 ;;
-      'tag --points-at '*) printf 'v1.2.3\\n' ;;
+      'tag --points-at '*) printf '%s\\n' "$FIXTURE_VERSION_TAGS" ;;
       'rev-list -n 1 '*) printf '%s\\n' "$TAG_SHA" ;;
       'rev-parse HEAD') printf '%s\\n' "$SOURCE_SHA" ;;
       'rev-parse FETCH_HEAD')
@@ -220,6 +220,25 @@ else:
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('publish=true', (self.runner / 'outputs').read_text())
 
+    def test_automatic_without_version_tags_skips_before_github_lookup(self):
+        for tags in ('', 'nightly\nv1.2\nv1.2.3-rc.1'):
+            with self.subTest(tags=tags):
+                self.environment['FIXTURE_VERSION_TAGS'] = tags
+                output = self.runner / 'outputs'
+                output.unlink(missing_ok=True)
+                result = self.resolve()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(output.read_text(), 'publish=false\n')
+                self.assertEqual(self.calls(), [])
+
+    def test_automatic_multiple_version_tags_rejects_before_github_lookup(self):
+        self.environment['FIXTURE_VERSION_TAGS'] = 'v1.2.3\nv1.2.4'
+        result = self.resolve()
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn('Expected exactly one version tag', result.stderr)
+        self.assertFalse((self.runner / 'outputs').exists())
+        self.assertEqual(self.calls(), [])
+
     def test_wrong_run_identity_is_rejected_before_asset_work(self):
         original = dict(self.run)
         mutations = [('id', 18), ('head_sha', 'b' * 40), ('conclusion', 'failure'),
@@ -245,7 +264,8 @@ else:
 
     def test_explicit_path_requires_exact_owned_draft(self):
         self.environment.update(RELEASE_TAG_INPUT='v1.2.3', RELEASE_ID_INPUT='29',
-                                CALLED_FROM_PUBLISH='true')
+                                CALLED_FROM_PUBLISH='true',
+                                FIXTURE_VERSION_TAGS='v1.2.3\nv1.2.4')
         self.release.update(draft=True, prerelease=False, published_at=None)
         result = self.resolve()
         self.assertEqual(result.returncode, 0, result.stderr)
