@@ -40,8 +40,11 @@ def read_owned(path: Path, bound: int) -> bytes:
         raise ValueError('Invalid verification evidence bound')
 
     def identity(info: os.stat_result) -> tuple:
+        # Windows path ctime can be birth time while fstat ctime is change time.
+        # Compare each API's ctime with its own earlier snapshot below.
         return (info.st_dev, info.st_ino, info.st_mode, info.st_size,
-                info.st_mtime_ns, info.st_ctime_ns, getattr(info, 'st_file_attributes', 0))
+                info.st_mtime_ns, None if os.name == 'nt' else info.st_ctime_ns,
+                getattr(info, 'st_file_attributes', 0))
 
     try:
         before = path.lstat()
@@ -54,14 +57,19 @@ def read_owned(path: Path, bound: int) -> bytes:
         flags = (os.O_RDONLY | getattr(os, 'O_BINARY', 0)
                  | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0))
         with os.fdopen(os.open(path, flags), 'rb') as file:
-            if identity(os.fstat(file.fileno())) != identity(before):
+            opened = os.fstat(file.fileno())
+            if identity(opened) != identity(before):
                 raise ValueError('Verification evidence changed before reading')
             data = file.read(bound + 1)
             if len(data) > bound:
                 raise ValueError('Oversized verification evidence')
+            after = os.fstat(file.fileno())
+            current = path.lstat()
             if (len(data) != before.st_size
-                    or identity(os.fstat(file.fileno())) != identity(before)
-                    or identity(path.lstat()) != identity(before)):
+                    or identity(after) != identity(opened)
+                    or after.st_ctime_ns != opened.st_ctime_ns
+                    or identity(current) != identity(before)
+                    or current.st_ctime_ns != before.st_ctime_ns):
                 raise ValueError('Verification evidence changed while reading')
         return data
     except OSError as error:

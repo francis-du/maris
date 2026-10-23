@@ -97,15 +97,34 @@ jobs:
       - name: Install Linux audio build headers and open-file checker
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config psmisc pulseaudio pulseaudio-utils
-      - name: Full non-hardware checks
+      - name: Audit package source
         shell: bash
         run: |
           python scripts/source_audit.py
+      - name: Validate packaged documentation
+        shell: bash
+        run: |
           python scripts/site.py --check
+      - name: Native packaging and workflow tooling
+        shell: bash
+        timeout-minutes: 5
+        run: |
           python -m unittest discover -s tests/tooling -v
+      - name: Formatting
+        shell: bash
+        run: |
           cargo fmt --all --check
+      - name: Default-feature regression tests
+        shell: bash
+        run: |
           cargo test --locked --all-targets
+      - name: Minimal-feature regression tests
+        shell: bash
+        run: |
           cargo test --locked --all-targets --no-default-features
+      - name: Clippy
+        shell: bash
+        run: |
           cargo clippy --locked --all-targets -- -D warnings
       - name: Verify bundled semantic model and AutoEq profile pack
         shell: bash
