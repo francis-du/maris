@@ -29,6 +29,7 @@ pub struct LiveSource {
     voice_recovery: Option<Arc<super::voice::Recovery>>,
 }
 impl LiveSource {
+    #[cfg(any(target_os = "macos", test))]
     pub fn new(queue: Arc<ArrayQueue<[f32; 2]>>, rate: u32) -> Self {
         Self {
             bridge: crate::dsp::resample::ClockBridge::new(queue, (rate / 100) as usize),
