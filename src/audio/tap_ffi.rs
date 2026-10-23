@@ -488,13 +488,6 @@ pub fn output_device_id_for_uid(uid: &str) -> Result<u32> {
     }
     found.context("Pinned CoreAudio output is no longer available")
 }
-pub fn output_index_for_uid(uid: &str) -> Result<usize> {
-    let target = output_device_id_for_uid(uid)?;
-    output_device_ids()?
-        .into_iter()
-        .position(|device| device == target)
-        .context("Pinned CoreAudio output is no longer available")
-}
 pub fn output_device_id_for_selector(selector: Option<&str>, expected_name: &str) -> Result<u32> {
     let device = if let Some(uid) = selector.and_then(|selector| selector.strip_prefix("uid:")) {
         output_device_id_for_uid(uid)?

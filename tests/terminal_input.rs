@@ -1,6 +1,8 @@
 //! Exercise the actual TUI process using an owned pseudo-terminal and isolated offline state.
 //! A parent-held session lease prevents the console from starting an audio engine.
 #![cfg(unix)]
+#[path = "unit/terminal_mixer.rs"]
+mod terminal_mixer;
 use maris::{configuration, control_panel, listening, store::Store, studio_controls};
 use ratatui::layout::Rect;
 use serde_json::json;
@@ -30,14 +32,17 @@ struct Heartbeat {
 }
 impl Heartbeat {
     fn start(store: Store) -> Self {
-        heartbeat(&store);
+        Self::start_with(store, heartbeat)
+    }
+    fn start_with(store: Store, publish: fn(&Store)) -> Self {
+        publish(&store);
         let (stop, receiver) = std::sync::mpsc::channel();
         let thread = std::thread::spawn(move || {
             while matches!(
                 receiver.recv_timeout(Duration::from_millis(100)),
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout)
             ) {
-                heartbeat(&store);
+                publish(&store);
             }
         });
         Self {
@@ -211,7 +216,11 @@ fn spawn_console(dir: &std::path::Path) -> ConsoleProcess {
         child,
         master,
         first_output: String::new(),
-        terminal: vt100::Parser::new(size.ws_row, size.ws_col, 0),
+        terminal: vt100::Parser::new(
+            std::num::NonZeroU16::new(size.ws_row).expect("nonempty fixture rows"),
+            std::num::NonZeroU16::new(size.ws_col).expect("nonempty fixture columns"),
+            0,
+        ),
     };
     let start = Instant::now();
     let mut output = String::new();

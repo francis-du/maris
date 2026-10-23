@@ -14,7 +14,7 @@ import re
 import stat
 import subprocess
 from source_audit import ROOT, source_digest
-from verify_rounds import SUITES, test_passed
+from verify_rounds import SUITES, read_owned, test_passed
 from portable_package import host_target, validate_binary
 from release_requirements import require_complete, blockers as requirement_blockers
 from release_bundle import linked_directory
@@ -38,9 +38,21 @@ def within_root(path: Path, root: Path = ROOT) -> Path:
 
 
 def check_report(report: dict, source: str, directory: Path, expected_platform: str | None = None) -> None:
+    def require_settled() -> None:
+        for name in (".batch.lock", "invalidated.json"):
+            try:
+                (directory / name).lstat()
+            except FileNotFoundError:
+                continue
+            # Reject any entry, including a dangling link or malformed marker.
+            # Permission/IO failures propagate; they are not evidence of absence.
+            raise ValueError("Active, interrupted or invalidated verification cannot be released")
+
+    require_settled()
     if expected_platform is not None and report.get("platform") != expected_platform:
         raise ValueError("Round evidence must come from the native release platform")
     if (report.get("source_sha256") != source or report.get("source_unchanged") is not True
+            or report.get("binaries_unchanged") is not True
             or report.get("passed") is not True or report.get("completed_rounds", 0) < 200
             or report.get("completed_rounds") != report.get("requested_rounds")
             or report.get("passed_rounds") != report.get("completed_rounds")):
@@ -62,10 +74,12 @@ def check_report(report: dict, source: str, directory: Path, expected_platform: 
             path = directory / name
             if path.is_symlink() or not path.is_file():
                 raise ValueError("Round log is missing or linked")
-            data = path.read_bytes()
+            data = read_owned(path, 32 * 1024 * 1024)
             if (step.get("passed") is not True or not test_passed(data, step.get("exit_code"))
                     or hashlib.sha256(data).hexdigest() != step.get("log_sha256")):
                 raise ValueError("Failed, empty, ignored or modified round log")
+    # A batch or invalidation may have started while the retained logs were read.
+    require_settled()
 
 
 def bundle_digest(bundle: Path) -> str:

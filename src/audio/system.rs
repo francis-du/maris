@@ -50,8 +50,8 @@ pub(super) fn add_runtime_diagnostics(status: &mut serde_json::Value, session: &
 }
 
 struct Pipeline {
-    // Fields drop in declaration order. Restore the original CoreAudio path before
-    // the replacement stream can disappear if a completed pipeline is abandoned.
+    // Struct fields drop in declaration order: restore original playback while
+    // the replacement output is still owned, including assembly-error paths.
     tap: TapCapture,
     stream: Stream,
     metrics: Arc<Metrics>,
@@ -190,7 +190,10 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
     metrics.output_quarantined.store(false, Ordering::Release);
     // A live tap plus a live output callback still is not enough: require the clock
     // bridge and startup envelope to observe post-handoff source frames.
-    if let Err(start_error) = bridge::wait_source_started(&metrics, replacement_progress_timeout) {
+    let handoff_timeout = tap.progress_timeout(binding.buffer_frames);
+    if let Err(start_error) =
+        bridge::wait_source_started(&metrics, handoff_timeout, || tap.needs_rebuild())
+    {
         // Fail open in a deterministic order. tap was constructed before stream, so
         // ordinary stack unwinding would drop the replacement output first and only then
         // restore the original application path from TapCapture::drop. Re-quarantine the
@@ -222,12 +225,39 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
     })
 }
 #[derive(Clone, Copy)]
-pub(super) struct ProgressGuard {
-    pub(super) output_callbacks: u64,
-    pub(super) capture_callbacks: u64,
-    output_advanced_at: Instant,
-    capture_advanced_at: Instant,
+pub(super) struct CallbackProgress {
+    output: (u64, Instant),
+    capture: (u64, Instant),
     failure: Option<ProgressStall>,
+}
+impl CallbackProgress {
+    fn new(now: Instant, current: (u64, u64)) -> Self {
+        Self {
+            output: (current.0, now),
+            capture: (current.1, now),
+            failure: None,
+        }
+    }
+
+    fn stalled(&mut self, now: Instant, current: (u64, u64), timeout: Duration) -> bool {
+        for (last, count) in [
+            (&mut self.output, current.0),
+            (&mut self.capture, current.1),
+        ] {
+            if last.0 != count {
+                *last = (count, now);
+            }
+        }
+        let output_stalled = now.saturating_duration_since(self.output.1) >= timeout;
+        let capture_stalled = now.saturating_duration_since(self.capture.1) >= timeout;
+        self.failure = match (output_stalled, capture_stalled) {
+            (true, true) => Some(ProgressStall::OutputAndCapture),
+            (true, false) => Some(ProgressStall::Output),
+            (false, true) => Some(ProgressStall::Capture),
+            (false, false) => None,
+        };
+        self.failure.is_some()
+    }
 }
 
 fn output_progress_timeout(
@@ -247,55 +277,17 @@ fn output_stall_timeout(buffer_frames: Option<u32>, sample_rate: u32) -> Duratio
 }
 
 fn observe_progress(
-    previous: Option<ProgressGuard>,
+    previous: Option<CallbackProgress>,
     current: (u64, u64),
     now: Instant,
     timeout: Duration,
-) -> (ProgressGuard, Option<ProgressStall>) {
-    let Some(previous) = previous else {
-        return (
-            ProgressGuard {
-                output_callbacks: current.0,
-                capture_callbacks: current.1,
-                output_advanced_at: now,
-                capture_advanced_at: now,
-                failure: None,
-            },
-            None,
-        );
+) -> (CallbackProgress, Option<ProgressStall>) {
+    let Some(mut observed) = previous else {
+        return (CallbackProgress::new(now, current), None);
     };
-    let output_advanced = current.0 != previous.output_callbacks;
-    let capture_advanced = current.1 != previous.capture_callbacks;
-    let output_advanced_at = if output_advanced {
-        now
-    } else {
-        previous.output_advanced_at
-    };
-    let capture_advanced_at = if capture_advanced {
-        now
-    } else {
-        previous.capture_advanced_at
-    };
-    let output_stalled =
-        !output_advanced && now.saturating_duration_since(previous.output_advanced_at) >= timeout;
-    let capture_stalled =
-        !capture_advanced && now.saturating_duration_since(previous.capture_advanced_at) >= timeout;
-    let failure = match (output_stalled, capture_stalled) {
-        (true, true) => Some(ProgressStall::OutputAndCapture),
-        (true, false) => Some(ProgressStall::Output),
-        (false, true) if output_advanced => Some(ProgressStall::Capture),
-        _ => None,
-    };
-    (
-        ProgressGuard {
-            output_callbacks: current.0,
-            capture_callbacks: current.1,
-            output_advanced_at,
-            capture_advanced_at,
-            failure,
-        },
-        failure,
-    )
+    observed.stalled(now, current, timeout);
+    let failure = observed.failure;
+    (observed, failure)
 }
 
 impl Session {
@@ -352,6 +344,7 @@ impl Session {
         input_name: String,
     ) -> Result<Self> {
         let lease = store.session_lock()?;
+        // Finish fallible auxiliary setup before any original playback is muted.
         let context = crate::analysis::context::Worker::start()?;
         let p = pipeline(&store, output, &system_processes)?;
         let sample_rate = p.tap.rate;
@@ -531,12 +524,19 @@ impl Session {
                 self.metrics.callback_calls.load(Ordering::Acquire),
                 self.metrics.capture_callback_calls.load(Ordering::Acquire),
             );
-            let (observed, failure) = observe_progress(
-                self.last_system_progress,
-                progress,
-                now,
-                output_stall_timeout(self.output_buffer_frames, self.sample_rate),
-            );
+            // Honor the slower native callback period. The aggregate budget keeps
+            // the two-second startup allowance even on a fast physical output.
+            let timeout = self
+                .tap
+                .as_ref()
+                .expect("native tap checked above")
+                .progress_timeout(None)
+                .max(output_stall_timeout(
+                    self.output_buffer_frames,
+                    self.sample_rate,
+                ));
+            let (observed, failure) =
+                observe_progress(self.last_system_progress, progress, now, timeout);
             self.last_system_progress = Some(observed);
             if failure.is_some() {
                 self.last_status = Instant::now() - Duration::from_secs(1);
@@ -655,5 +655,9 @@ impl Session {
 }
 
 #[cfg(test)]
-#[path = "../../tests/unit/coreaudio_progress.rs"]
+#[path = "../../tests/unit/system_progress.rs"]
 mod progress_tests;
+
+#[cfg(test)]
+#[path = "../../tests/unit/coreaudio_progress.rs"]
+mod coreaudio_progress_tests;

@@ -4,7 +4,7 @@
   "audio_started": false,
   "whole_desktop_captured": false,
   "source_sha256": {
-    "Cargo.toml": "9f6a0b0cc295100cbdf694761936e4aeb9c74ee92c031e53162df536b58e5265",
+    "Cargo.toml": "ef534b848687dcdbcf8cd36cba796119ade13e59d04a0a1d8f3b7b8820cfe774",
     "src/ui/desktop/native.rs": "c5932cc6df9aca97e95e979e30d61399d7ff64337556da3b6513fcb82441b335",
     "src/ui/desktop/menu_header.rs": "e76197797c5b66ae0acb5ffe451769a2074172dc27baedc4abcae612f3bca57d",
     "src/ui/desktop/native_mark.rs": "1b721a31705f5690188151921a729b0bd692cb0f90c144ca9482c815e64e91d2",
@@ -13,8 +13,8 @@
     "src/ui/desktop/controls.rs": "7bd9e41b2ba7d565786f8fdf3785d43067b1ae499cdf4e8fbd77c058fcde5690",
     "src/presets/scenes.rs": "4b4803a821f17e521ecb8699d5905f0f3818aa2412c0eab62074621bd2a8194e",
     "src/i18n/mod.rs": "52dad2f6e7ffeeab6dc852c442e2de5d02be021c628b802bc571fccbf0e6f01f",
-    "src/i18n/console.rs": "221f3e6d4e647e5681a11302f62c0e3342ceeb19b8bfff75126b93af653173eb",
-    "src/i18n/surface.rs": "02f8ff5343c057964514fd2e0af86775799fe1ed6bec46badc79a69d0ccfe99a",
+    "src/i18n/console.rs": "ced7090821cd31389d1b0aa5f10b286f989cd2dca4a28ad190f5fbfa6f56a7a3",
+    "src/i18n/surface.rs": "715b740cd3ad47267400bc797fa98eeadd3c28dd2e272ebec7a75d1291ee602b",
     "src/i18n/messages.rs": "f523252bfe6c4bfe21d828959ec33019fb2b1f1fc1383f336e2bb4e2b9ae144d"
   },
   "probe_sha256": "5e5350e0b8748a2e240d2f9c427f2c33cae4b3a994bf4ef74a23bf78e43e2121",

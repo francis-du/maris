@@ -229,6 +229,39 @@ fn unexpected_extra_active_inputs_fail_without_enqueuing_audio() {
 }
 
 #[test]
+fn capture_preflight_rejects_error_arriving_during_configuration_validation() {
+    let metrics = Metrics::default();
+    let result = wait_capture_ready(&metrics, 0, std::time::Duration::ZERO, || {
+        metrics.captured_frames.store(2, Ordering::Release);
+        metrics.errors.store(1, Ordering::Release);
+        Ok(false)
+    });
+    assert!(
+        result.is_err(),
+        "new PCM hid a capture error during validation"
+    );
+}
+
+#[test]
+fn capture_preflight_requires_the_exact_validated_configuration_generation() {
+    let metrics = Metrics::default();
+    metrics.captured_frames.store(2, Ordering::Release);
+    let zero = std::time::Duration::ZERO;
+    assert!(
+        wait_capture_ready(&metrics, 0, zero, || {
+            metrics.configuration_events.store(1, Ordering::Release);
+            Ok(false)
+        })
+        .is_err(),
+        "unvalidated notification was accepted as capture readiness"
+    );
+    metrics
+        .checked_configuration_events
+        .store(1, Ordering::Release);
+    wait_capture_ready(&metrics, 0, zero, || Ok(false)).unwrap();
+}
+
+#[test]
 fn startup_requires_new_pcm_and_accepts_digital_silence() {
     let mut context = context(8);
     let mut samples = [0.0_f32; 4];

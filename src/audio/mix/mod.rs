@@ -1,5 +1,7 @@
 //! Explicit multi-input, two-output sessions. Never changes OS volume or default devices.
+mod health;
 mod render;
+mod startup;
 use super::{bridge, devices, output_binding, Metrics, OutputBinding, Update};
 use crate::{
     analysis,
@@ -14,6 +16,7 @@ use cpal::{
 };
 use crossbeam_queue::ArrayQueue;
 use serde_json::{json, Value};
+use startup::CaptureLifecycle;
 use std::{
     collections::BTreeSet,
     fs::File,
@@ -102,7 +105,7 @@ enum Capture {
     #[cfg(target_os = "windows")]
     ApplicationWindows(super::windows::ApplicationCapture),
 }
-impl Capture {
+impl CaptureLifecycle for Capture {
     fn start(&mut self) -> Result<()> {
         match self {
             Self::Device(stream) => Ok(stream.play()?),
@@ -113,6 +116,13 @@ impl Capture {
             #[cfg(target_os = "windows")]
             Self::ApplicationWindows(capture) => capture.start(),
         }
+    }
+    fn arm(&mut self) -> Result<()> {
+        #[cfg(target_os = "macos")]
+        if let Self::ApplicationMac { tap, .. } = self {
+            return tap.arm_replacement();
+        }
+        Ok(())
     }
     fn check(&mut self) -> Result<()> {
         match self {
@@ -209,8 +219,16 @@ impl Session {
             .context("Missing mixer output")?;
         let analysis = analysis::AnalysisWorker::start(rate)?;
         let context = crate::analysis::context::Worker::start()?;
+        let two_phase = cfg!(target_os = "macos")
+            && state.config.strips.iter().any(|strip| {
+                strip
+                    .source_device
+                    .as_deref()
+                    .is_some_and(|source| source.starts_with("pid:"))
+            });
         let output_metrics: [Arc<Metrics>; BUS_COUNT] = std::array::from_fn(|index| {
             Arc::new(Metrics {
+                output_quarantined: AtomicBool::new(two_phase),
                 analysis_dropped: if index == primary {
                     analysis.dropped.clone()
                 } else {
@@ -346,18 +364,14 @@ impl Session {
                         metrics.clone(),
                     )?));
                 }
-                let (source_queue, voice_worker) = if strip.speech_denoise {
-                    ensure!(
-                        input_rate == 48_000,
-                        "Speech denoise requires a 48 kHz mixer source"
-                    );
-                    let worker = super::voice::VoiceWorker::start(queue.clone(), input_rate)?;
-                    (worker.output.clone(), Some(worker))
-                } else {
-                    (queue, None)
-                };
-                let input =
-                    render::Input::with_rates(source_queue, input_rate, rate, metrics.clone())?;
+                let (voice_worker, source) = super::voice::prepare(
+                    queue,
+                    input_rate,
+                    rate,
+                    strip.speech_denoise,
+                    metrics.clone(),
+                )?;
+                let input = render::Input::from_source(source, metrics.clone());
                 input_rates.push(Some(input_rate));
                 input_peaks.push(Some(input.peak.clone()));
                 inputs.push(Some(input));
@@ -379,7 +393,7 @@ impl Session {
             }
             if let Some(output) = output {
                 let queue = Arc::new(ArrayQueue::new(rate as usize / 4));
-                streams.push(bridge::output(
+                streams.push(bridge::output_guarded(
                     &output.device,
                     &output.format,
                     bridge::Source::Live(bridge::LiveSource::with_rates(
@@ -390,6 +404,7 @@ impl Session {
                     output.settings,
                     output.updates.clone(),
                     output_metrics[bus].clone(),
+                    &input_metrics,
                 )?);
                 sends[bus] = Some(queue);
             }
@@ -418,6 +433,7 @@ impl Session {
             output,
             graph,
             output_metrics[primary].clone(),
+            &input_metrics,
         )?);
         // The session owns all resources before the first play call, so any startup failure tears them down.
         let mut result = Self {
@@ -451,10 +467,9 @@ impl Session {
         let deadline = Instant::now() + Duration::from_secs(2);
         while result.outputs.iter().enumerate().any(|(bus, output)| {
             output.is_some()
-                && result.output_metrics[bus]
-                    .callback_calls
+                && !result.output_metrics[bus]
+                    .callback_ready
                     .load(Ordering::Acquire)
-                    == 0
         }) {
             ensure!(
                 Instant::now() < deadline,
@@ -462,17 +477,76 @@ impl Session {
             );
             std::thread::sleep(Duration::from_millis(2));
         }
-        ensure!(
-            mixer::load(&result.store)?.revision == result.sent,
-            "Mixer changed during startup; confirm the current configuration again"
-        );
-        for capture in &mut result.captures {
-            capture.start()?;
+        let active_outputs: Vec<_> = result
+            .outputs
+            .iter()
+            .enumerate()
+            .filter_map(|(bus, output)| output.as_ref().map(|_| &*result.output_metrics[bus]))
+            .collect();
+        startup::start(&mut result.captures, &active_outputs, two_phase, || {
+            ensure!(
+                mixer::load(&result.store)?.revision == result.sent,
+                "Mixer changed during startup; confirm the current configuration again"
+            );
+            ensure!(
+                result
+                    .input_metrics
+                    .iter()
+                    .all(|metrics| metrics.errors.load(Ordering::Acquire) == 0),
+                "Mixer input failed during startup"
+            );
+            Ok(())
+        })?;
+        #[cfg(target_os = "macos")]
+        if two_phase {
+            let inputs: Vec<_> = result
+                .input_metrics
+                .iter()
+                .zip(&result.topology.strips)
+                .filter_map(|(metrics, strip)| strip.source_device.as_ref().map(|_| &**metrics))
+                .collect();
+            let output_buffer = result
+                .outputs
+                .iter()
+                .flatten()
+                .filter_map(|output| output.binding.buffer_frames)
+                .max();
+            let timeout = result
+                .captures
+                .iter()
+                .map(|capture| match capture {
+                    Capture::ApplicationMac { tap, .. } => tap.progress_timeout(output_buffer),
+                    _ => Duration::from_secs(2),
+                })
+                .max()
+                .unwrap_or(Duration::from_secs(2));
+            startup::wait_ready(&inputs, &active_outputs, timeout, || {
+                for capture in &mut result.captures {
+                    capture.check()?;
+                }
+                ensure!(
+                    mixer::load(&result.store)?.revision == result.sent,
+                    "Mixer changed during application takeover"
+                );
+                ensure!(
+                    result
+                        .voice_workers
+                        .iter()
+                        .flatten()
+                        .all(super::voice::VoiceWorker::healthy),
+                    "Mixer speech worker failed during application takeover"
+                );
+                Ok(())
+            })?;
         }
         result.publish(true)?;
         Ok(result)
     }
     pub fn tick(&mut self) -> Result<bool> {
+        let result = self.tick_once();
+        health::finish_tick(result, &mut self.stop, &self.output_metrics)
+    }
+    fn tick_once(&mut self) -> Result<bool> {
         match take_mixer_stop(&self.store, &self.id) {
             Ok(stop) => self.stop |= stop,
             Err(error) => self.notice = Some(format!("Invalid mixer command: {error:#}")),
@@ -480,34 +554,36 @@ impl Session {
         if self.stop {
             return Ok(false);
         }
-        for capture in &mut self.captures {
-            capture.check()?;
-        }
-        for (bus, output) in self.outputs.iter().enumerate() {
-            if output.is_none() {
-                continue;
-            }
-            let metrics = &self.output_metrics[bus];
-            ensure!(
-                metrics.errors.load(Ordering::Relaxed) == 0,
-                "Mixer output stream failed"
-            );
-            let frames = metrics.frames.load(Ordering::Relaxed);
-            if frames != self.last_frames[bus] {
-                self.progress[bus] = Instant::now();
-                self.last_frames[bus] = frames;
-            }
-            ensure!(
-                self.progress[bus].elapsed() < Duration::from_secs(3),
-                "Mixer output stopped delivering callbacks"
-            );
-        }
-        ensure!(
-            self.input_metrics
-                .iter()
-                .all(|m| m.errors.load(Ordering::Relaxed) == 0),
-            "Mixer input stream failed"
-        );
+        health::check(
+            &self.input_metrics,
+            &self.output_metrics,
+            || {
+                self.voice_workers
+                    .iter()
+                    .flatten()
+                    .all(super::voice::VoiceWorker::healthy)
+            },
+            || {
+                for capture in &mut self.captures {
+                    capture.check()?;
+                }
+                for (bus, output) in self.outputs.iter().enumerate() {
+                    if output.is_none() {
+                        continue;
+                    }
+                    let frames = self.output_metrics[bus].frames.load(Ordering::Relaxed);
+                    if frames != self.last_frames[bus] {
+                        self.progress[bus] = Instant::now();
+                        self.last_frames[bus] = frames;
+                    }
+                    ensure!(
+                        self.progress[bus].elapsed() < Duration::from_secs(3),
+                        "Mixer output stopped delivering callbacks"
+                    );
+                }
+                Ok(())
+            },
+        )?;
         let current = mixer::load(&self.store)?;
         if current.revision != self.sent {
             if !same_routes(&self.topology, &current.config) {
@@ -660,17 +736,21 @@ impl Drop for Session {
         {
             std::thread::sleep(Duration::from_millis(2));
         }
-        self.captures.clear();
-        self.streams.clear();
+        startup::release(&mut self.captures, &mut self.streams, &self.output_metrics);
         let _ = self.publish(false);
     }
 }
-fn master_stream(output: &Output, graph: render::Graph, metrics: Arc<Metrics>) -> Result<Stream> {
+fn master_stream(
+    output: &Output,
+    graph: render::Graph,
+    metrics: Arc<Metrics>,
+    captures: &[Arc<Metrics>],
+) -> Result<Stream> {
     match output.format.sample_format() {
-        SampleFormat::F32 => master_typed::<f32>(output, graph, metrics),
-        SampleFormat::I16 => master_typed::<i16>(output, graph, metrics),
-        SampleFormat::U16 => master_typed::<u16>(output, graph, metrics),
-        SampleFormat::I32 => master_typed::<i32>(output, graph, metrics),
+        SampleFormat::F32 => master_typed::<f32>(output, graph, metrics, captures),
+        SampleFormat::I16 => master_typed::<i16>(output, graph, metrics, captures),
+        SampleFormat::U16 => master_typed::<u16>(output, graph, metrics, captures),
+        SampleFormat::I32 => master_typed::<i32>(output, graph, metrics, captures),
         _ => anyhow::bail!("Unsupported mixer sample format"),
     }
 }
@@ -678,6 +758,7 @@ fn master_typed<T: SizedSample + FromSample<f32>>(
     output: &Output,
     mut graph: render::Graph,
     metrics: Arc<Metrics>,
+    captures: &[Arc<Metrics>],
 ) -> Result<Stream> {
     let channels = output.format.channels() as usize;
     let mut renderer = bridge::Renderer::new(
@@ -685,7 +766,8 @@ fn master_typed<T: SizedSample + FromSample<f32>>(
         output.format.sample_rate(),
         output.updates.clone(),
         metrics.clone(),
-    );
+    )
+    .with_capture_configurations(captures);
     Ok(output.device.build_output_stream(
         &output.format.config(),
         move |data: &mut [T], _| {

@@ -1,6 +1,7 @@
 //! Single-page Maris console with optional focused detail views.
 //! Common actions stay in one footer; risky routing actions use explicit pickers.
 
+use super::picker_search::Search;
 use crate::{
     audio::DeviceInfo,
     control::store::Snapshot,
@@ -94,6 +95,10 @@ pub fn popup(area: Rect, lines: &[Line<'_>]) -> Rect {
 }
 
 pub fn draw(frame: &mut Frame<'_>, view: &Console<'_>) {
+    draw_with_search(frame, view, &Search::default());
+}
+
+pub fn draw_with_search(frame: &mut Frame<'_>, view: &Console<'_>, search: &Search) {
     let area = frame.area();
     frame.render_widget(
         Block::default().style(Style::default().bg(view.palette.bg).fg(view.palette.text)),
@@ -125,7 +130,7 @@ pub fn draw(frame: &mut Frame<'_>, view: &Console<'_>) {
                 footer,
             );
         }
-        draw_overlay(frame, area, view);
+        draw_overlay(frame, area, view, search);
         crate::ui::tui::studio::appearance::Appearance::from_environment()
             .apply(frame.buffer_mut());
         return;
@@ -136,7 +141,7 @@ pub fn draw(frame: &mut Frame<'_>, view: &Console<'_>) {
     draw_actions(frame, shell.actions, view);
     crate::ui::tui::dashboard::draw(frame, shell.content, view);
     draw_footer(frame, shell.footer, view);
-    draw_overlay(frame, area, view);
+    draw_overlay(frame, area, view, search);
     crate::ui::tui::studio::appearance::Appearance::from_environment().apply(frame.buffer_mut());
 }
 
@@ -303,7 +308,15 @@ fn draw_footer(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
         Workspace::Now => "Click / ↑↓ select · ←→ adjust",
         Workspace::Sound => "Arrows select · +/− draft · Enter apply · Esc cancel",
         Workspace::Apps if super::actions::mixer_mode(view.runtime) => {
-            "←/→ volume · Space mute · X solo · [/] balance · U undo"
+            let bus = view
+                .app_row
+                .checked_sub(super::actions::mixer_rows(view.runtime).len())
+                .and_then(|index| super::actions::mixer_bus_rows(view.runtime).get(index));
+            if bus.is_some() {
+                "←/→ volume · Space mute · Home/End select · U undo"
+            } else {
+                "←/→ volume · Space mute · X solo · [/] balance · U undo"
+            }
         }
         Workspace::Apps => "↑↓ choose · Space mark · A mark all · Enter apply",
         Workspace::Device => "O output",
@@ -344,7 +357,7 @@ fn draw_footer(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
     );
 }
 
-fn draw_overlay(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
+fn draw_overlay(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>, search: &Search) {
     if view.overlay != Overlay::None && (area.width < 30 || area.height < 8) {
         frame.render_widget(Clear, area);
         frame.render_widget(
@@ -406,8 +419,8 @@ fn draw_overlay(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
             ],
             view.palette,
         ),
-        Overlay::Output => draw_output_picker(frame, area, view),
-        Overlay::Preset => draw_preset_picker(frame, area, view),
+        Overlay::Output => draw_output_picker(frame, area, view, search),
+        Overlay::Preset => draw_preset_picker(frame, area, view, search),
         Overlay::Proposal => draw_proposal(frame, area, view),
         Overlay::StartSystem => modal(
             frame,
@@ -427,42 +440,64 @@ fn draw_overlay(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
     }
 }
 
-fn draw_output_picker(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
-    let outputs = view
+fn draw_output_picker(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>, search: &Search) {
+    let outputs: Vec<_> = view
         .devices
         .iter()
         .filter(|device| device.direction == "output")
-        .collect::<Vec<_>>();
-    let mut rows = vec![Row::new([
-        if view.output_choice == 0 { "▶" } else { " " }.to_owned(),
-        t("Follow system default").into(),
-        t("Automatic").into(),
-    ])];
-    rows.extend(outputs.iter().enumerate().map(|(index, device)| {
-        let selected = view.output_choice == index + 1;
-        Row::new([
-            if selected { "▶" } else { " " }.to_owned(),
-            crate::ui::theme::clean(&device.name),
-            if device.is_default {
-                t("System default").into()
-            } else {
-                t("Physical output").into()
-            },
-        ])
-        .style(if selected {
-            Style::default()
-                .fg(view.palette.accent)
-                .bg(view.palette.selected)
+        .collect();
+    let choices = search.outputs(view.devices);
+    let selected = choices
+        .iter()
+        .position(|index| *index == view.output_choice);
+    let rows = choices.iter().map(|&index| {
+        let (name, mode) = if index == 0 {
+            (t("Follow system default").to_owned(), t("Automatic"))
         } else {
-            Style::default().fg(view.palette.text)
-        })
-    }));
-    let areas =
-        super::output_picker::layout(area, outputs.len().saturating_add(1), view.output_choice);
-    let rect = areas.modal;
-    frame.render_widget(Clear, rect);
+            let device = outputs[index - 1];
+            (
+                crate::ui::theme::clean(&device.name),
+                t(if device.is_default {
+                    "System default"
+                } else {
+                    "Physical output"
+                }),
+            )
+        };
+        Row::new([
+            if index == view.output_choice {
+                "▶"
+            } else {
+                " "
+            }
+            .to_owned(),
+            name,
+            mode.to_owned(),
+        ])
+    });
+    let areas = super::output_picker::layout(area, choices.len(), selected.unwrap_or(0));
+    frame.render_widget(Clear, areas.modal);
+    frame.render_widget(
+        modal_block_with_hint(
+            if search.active() {
+                "OUTPUT"
+            } else {
+                "OUTPUT · Enter switches · Esc cancels"
+            },
+            view.palette,
+            search.hint(selected.is_some() && areas.rows.height > 0),
+        ),
+        areas.modal,
+    );
+    search.draw(
+        frame,
+        areas.search,
+        choices.len(),
+        outputs.len() + 1,
+        view.palette,
+    );
     let mut state = TableState::default()
-        .with_selected(Some(view.output_choice))
+        .with_selected(selected)
         .with_offset(areas.offset);
     frame.render_stateful_widget(
         Table::new(
@@ -486,24 +521,51 @@ fn draw_output_picker(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
                 .fg(view.palette.accent)
                 .bg(view.palette.selected)
                 .add_modifier(Modifier::BOLD),
-        )
-        .block(modal_block(
-            "OUTPUT · Enter switches · Esc cancels",
-            view.palette,
-        )),
-        rect,
+        ),
+        areas.table,
         &mut state,
     );
+    if choices.is_empty() {
+        frame.render_widget(
+            Paragraph::new(t("No matches")).style(Style::default().fg(view.palette.warning)),
+            Rect::new(
+                areas.table.x,
+                areas.table.y.saturating_add(1),
+                areas.table.width,
+                areas.table.height.saturating_sub(1),
+            ),
+        );
+    }
 }
 
-fn draw_preset_picker(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
-    let areas = super::preset_picker::layout(area, view.presets.len(), view.preset_choice);
+fn draw_preset_picker(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>, search: &Search) {
+    let choices = search.presets(view.presets);
+    let selected = choices
+        .iter()
+        .position(|index| *index == view.preset_choice);
+    let areas = super::preset_picker::layout(area, choices.len(), selected.unwrap_or(0));
     let rect = areas.modal;
     let zones = [areas.table, areas.preview];
     frame.render_widget(Clear, rect);
-    let block = modal_block("PRESETS · Enter applies · Esc cancels", view.palette);
+    let block = modal_block_with_hint(
+        if search.active() {
+            "PRESET"
+        } else {
+            "PRESETS · Enter applies · Esc cancels"
+        },
+        view.palette,
+        search.hint(selected.is_some() && areas.rows.height > 0),
+    );
     frame.render_widget(block, rect);
-    let rows = view.presets.iter().enumerate().map(|(index, preset)| {
+    search.draw(
+        frame,
+        areas.search,
+        choices.len(),
+        view.presets.len(),
+        view.palette,
+    );
+    let rows = choices.iter().map(|&index| {
+        let preset = &view.presets[index];
         Row::new([
             if index == view.preset_choice {
                 "▶"
@@ -532,7 +594,7 @@ fn draw_preset_picker(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
         }))
     });
     let mut state = TableState::default()
-        .with_selected(Some(view.preset_choice))
+        .with_selected(selected)
         .with_offset(areas.offset);
     frame.render_stateful_widget(
         Table::new(
@@ -551,7 +613,27 @@ fn draw_preset_picker(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
         zones[0],
         &mut state,
     );
-    if let Some(preset) = view.presets.get(view.preset_choice) {
+    if choices.is_empty() || areas.rows.height == 0 {
+        frame.render_widget(
+            Paragraph::new(t(if choices.is_empty() {
+                "No matches"
+            } else {
+                "Enlarge terminal to choose"
+            }))
+            .style(Style::default().fg(view.palette.warning)),
+            if zones[1].height > 0 {
+                zones[1]
+            } else {
+                zones[0]
+            },
+        );
+        return;
+    }
+    if let Some(preset) = view
+        .presets
+        .get(view.preset_choice)
+        .filter(|_| selected.is_some())
+    {
         let mut lines = vec![Line::from(t(&preset.description).to_owned())];
         if matches!(preset.category, "scene" | "listening") {
             let capability = serde_json::from_value(view.runtime["device_capability"].clone())
@@ -632,6 +714,18 @@ fn modal(frame: &mut Frame<'_>, area: Rect, title: &str, lines: Vec<Line<'_>>, p
 }
 
 fn modal_block(title: &str, palette: Palette) -> Block<'static> {
+    modal_block_with_hint(
+        title,
+        palette,
+        if title == "Selection details" {
+            "Esc cancels"
+        } else {
+            "Enter confirms · Esc cancels"
+        },
+    )
+}
+
+fn modal_block_with_hint(title: &str, palette: Palette, hint: &str) -> Block<'static> {
     Block::default()
         .title(
             Line::from(format!(" {} ", t(title))).style(
@@ -641,7 +735,7 @@ fn modal_block(title: &str, palette: Palette) -> Block<'static> {
                     .add_modifier(Modifier::BOLD),
             ),
         )
-        .title_bottom(format!(" {} ", t("Enter confirms · Esc cancels")))
+        .title_bottom(format!(" {} ", t(hint)))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(palette.accent))

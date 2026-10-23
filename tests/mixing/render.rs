@@ -1,6 +1,13 @@
 use super::*;
 use crate::mixer::MixerStrip;
 
+#[path = "configuration.rs"]
+mod configuration_tests;
+#[path = "delay_drain.rs"]
+mod delay_drain_tests;
+#[path = "recovery.rs"]
+mod recovery_tests;
+
 fn config() -> MixerConfig {
     let mut config = MixerConfig {
         strips: vec![
@@ -30,20 +37,19 @@ struct Fixture {
     changes: Arc<ArrayQueue<render::Update>>,
     revision: Arc<AtomicU64>,
     meters: [Arc<Metrics>; 2],
+    input_meters: [Arc<Metrics>; 2],
+    input_peaks: [Arc<AtomicU64>; 2],
 }
 impl Fixture {
     fn new(config: &MixerConfig) -> Self {
         let sources = std::array::from_fn(|_| Arc::new(ArrayQueue::new(16_384)));
+        let input_meters = std::array::from_fn(|_| Arc::new(Metrics::default()));
         let inputs: Vec<_> = sources
             .iter()
-            .map(|queue| {
-                Some(render::Input::new(
-                    queue.clone(),
-                    48000,
-                    Arc::new(Metrics::default()),
-                ))
-            })
+            .zip(&input_meters)
+            .map(|(queue, metrics)| Some(render::Input::new(queue.clone(), 48000, metrics.clone())))
             .collect();
+        let input_peaks = std::array::from_fn(|index| inputs[index].as_ref().unwrap().peak.clone());
         let secondary = Arc::new(ArrayQueue::new(8192));
         let changes = Arc::new(ArrayQueue::new(2));
         let revision = Arc::new(AtomicU64::new(u64::MAX));
@@ -69,6 +75,8 @@ impl Fixture {
             changes,
             revision,
             meters,
+            input_meters,
+            input_peaks,
         }
     }
     fn fill(&self, frames: impl Iterator<Item = [[f32; 2]; 2]>) {
@@ -78,6 +86,171 @@ impl Fixture {
             }
         }
     }
+}
+
+#[test]
+fn quarantined_preflight_proves_callback_without_consuming_inputs_or_secondary_bus() {
+    let mut f = Fixture::new(&config());
+    f.fill((0..6000).map(|_| [[0.1; 2], [0.2; 2]]));
+    let metrics = f.meters[0].clone();
+    metrics.output_quarantined.store(true, Ordering::Release);
+    let settings = Settings::compile(&crate::profile::Profile::default(), 48_000).unwrap();
+    let mut renderer = bridge::Renderer::new(
+        settings,
+        48_000,
+        Arc::new(ArrayQueue::new(8)),
+        metrics.clone(),
+    );
+    let mut data = [1.0_f32; 512];
+    f.graph.begin_block();
+    renderer.render(&mut data, 2, || f.graph.frame());
+    f.graph.end_block();
+    assert!(metrics.callback_ready.load(Ordering::Acquire));
+    assert_eq!(metrics.callback_calls.load(Ordering::Acquire), 0);
+    assert!(!metrics.source_started.load(Ordering::Acquire));
+    assert!(f.sources.iter().all(|source| source.len() == 6000));
+    assert!(f.secondary.is_empty());
+    assert!(data.iter().all(|sample| *sample == 0.0));
+
+    metrics.output_quarantined.store(false, Ordering::Release);
+    f.graph.begin_block();
+    renderer.render(&mut data, 2, || f.graph.frame());
+    f.graph.end_block();
+    assert!(metrics.source_started.load(Ordering::Acquire));
+    assert_eq!(metrics.callback_calls.load(Ordering::Acquire), 1);
+    assert!(f.sources.iter().all(|source| source.len() < 6000));
+    assert!(!f.secondary.is_empty());
+    assert!(data.iter().any(|sample| sample.abs() > 1e-6));
+}
+
+#[test]
+fn actual_graph_and_both_renderers_confirm_silence_but_reject_one_missing_input() {
+    for missing in [false, true] {
+        let mut f = Fixture::new(&config());
+        let input_meters = f.input_meters.clone();
+        let outputs = f.meters.clone();
+        let settings = Settings::compile(&crate::profile::Profile::default(), 48_000).unwrap();
+        let mut renderers: [_; 2] = std::array::from_fn(|bus| {
+            bridge::Renderer::new(
+                settings,
+                48_000,
+                Arc::new(ArrayQueue::new(8)),
+                outputs[bus].clone(),
+            )
+        });
+        let mut secondary =
+            bridge::LiveSource::with_rates(f.secondary.clone(), 48_000, 48_000).unwrap();
+        let mut data = [[1.0_f32; 2048]; 2];
+        let result = startup::wait_ready(
+            &input_meters.iter().map(AsRef::as_ref).collect::<Vec<_>>(),
+            &outputs.iter().map(AsRef::as_ref).collect::<Vec<_>>(),
+            Duration::ZERO,
+            || {
+                for (index, meter) in input_meters.iter().enumerate() {
+                    if missing && index == 0 {
+                        continue;
+                    }
+                    for _ in 0..4096 {
+                        f.sources[index].push([0.0; 2]).unwrap();
+                    }
+                    meter.captured_frames.fetch_add(4096, Ordering::Release);
+                }
+                f.graph.begin_block();
+                renderers[0].render(&mut data[0], 2, || f.graph.frame());
+                f.graph.end_block();
+                renderers[1].render(&mut data[1], 2, || secondary.frame(&outputs[1]));
+                Ok(())
+            },
+        );
+        // The old aggregate-ready condition is true even in the missing-input case.
+        assert!(outputs
+            .iter()
+            .all(|m| m.source_started.load(Ordering::Acquire)));
+        assert_eq!(result.is_err(), missing, "missing={missing}");
+        assert!(outputs
+            .iter()
+            .all(|m| m.output_quarantined.load(Ordering::Acquire) == missing));
+        assert!(data.iter().flatten().all(|sample| *sample == 0.0));
+    }
+}
+
+#[test]
+fn mid_block_quarantine_cannot_publish_input_readiness_from_discarded_pcm() {
+    let mut f = Fixture::new(&config());
+    f.fill((0..4000).map(|_| [[0.1; 2], [0.2; 2]]));
+    let metrics = f.meters[0].clone();
+    let settings = Settings::compile(&crate::profile::Profile::default(), 48_000).unwrap();
+    let mut renderer = bridge::Renderer::new(
+        settings,
+        48_000,
+        Arc::new(ArrayQueue::new(8)),
+        metrics.clone(),
+    );
+    let mut data = [1.0_f32; 512];
+    let mut frames = 0;
+    f.graph.begin_block();
+    renderer.render(&mut data, 2, || {
+        frames += 1;
+        if frames == 128 {
+            metrics.output_quarantined.store(true, Ordering::Release);
+        }
+        f.graph.frame()
+    });
+    f.graph.end_block();
+    assert_eq!(frames, 256);
+    assert!(data.iter().all(|sample| *sample == 0.0));
+    assert!(f
+        .input_meters
+        .iter()
+        .all(|m| !m.source_started.load(Ordering::Acquire)));
+}
+
+#[test]
+fn ready_peer_cannot_acknowledge_a_starved_mixer_input() {
+    let mut f = Fixture::new(&config());
+    for _ in 0..4000 {
+        f.sources[1].push([0.0; 2]).unwrap();
+    }
+    f.graph.begin_block();
+    for _ in 0..256 {
+        assert!(f.graph.frame().1, "valid digital silence is a ready source");
+    }
+    f.graph.end_block();
+    assert!(!f.input_meters[0].source_started.load(Ordering::Acquire));
+    assert!(
+        f.input_meters[1].source_started.load(Ordering::Acquire),
+        "the graph must acknowledge the exact input it actually consumed"
+    );
+}
+
+#[test]
+fn quarantine_clears_each_inputs_readiness_instead_of_retaining_preflight_progress() {
+    let mut f = Fixture::new(&config());
+    f.fill((0..4000).map(|_| [[0.0; 2], [0.0; 2]]));
+    let metrics = f.meters[0].clone();
+    let settings = Settings::compile(&crate::profile::Profile::default(), 48_000).unwrap();
+    let mut renderer = bridge::Renderer::new(
+        settings,
+        48_000,
+        Arc::new(ArrayQueue::new(8)),
+        metrics.clone(),
+    );
+    let mut data = [0.0_f32; 512];
+    f.graph.begin_block();
+    renderer.render(&mut data, 2, || f.graph.frame());
+    f.graph.end_block();
+    assert!(f
+        .input_meters
+        .iter()
+        .all(|m| m.source_started.load(Ordering::Acquire)));
+    metrics.output_quarantined.store(true, Ordering::Release);
+    f.graph.begin_block();
+    renderer.render(&mut data, 2, || f.graph.frame());
+    f.graph.end_block();
+    assert!(f
+        .input_meters
+        .iter()
+        .all(|m| !m.source_started.load(Ordering::Acquire)));
 }
 
 #[test]

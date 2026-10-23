@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 import time
 from source_audit import ROOT, source_digest
@@ -21,7 +22,8 @@ SUITES = ["config_editor", "config_layout", "config_interaction", "config_safety
 
 def test_passed(data: bytes, returncode: int | None) -> bool:
     results = re.findall(rb"test result: ok\. ([0-9]+) passed; ([0-9]+) failed; ([0-9]+) ignored;", data)
-    return returncode == 0 and len(results) == 1 and int(results[0][0]) > 0 and results[0][1:] == (b"0", b"0")
+    return (type(returncode) is int and returncode == 0 and len(results) == 1
+            and int(results[0][0]) > 0 and results[0][1:] == (b"0", b"0"))
 
 
 def digest(path: Path) -> str:
@@ -33,9 +35,37 @@ def digest(path: Path) -> str:
 
 
 def read_owned(path: Path, bound: int) -> bytes:
-    if path.is_symlink() or not path.is_file() or path.stat().st_size > bound:
-        raise ValueError('Missing, linked or oversized verification evidence')
-    return path.read_bytes()
+    """Read one bounded, unchanged regular file; path metadata alone is not a read limit."""
+    if type(bound) is not int or bound < 0:
+        raise ValueError('Invalid verification evidence bound')
+
+    def identity(info: os.stat_result) -> tuple:
+        return (info.st_dev, info.st_ino, info.st_mode, info.st_size,
+                info.st_mtime_ns, info.st_ctime_ns, getattr(info, 'st_file_attributes', 0))
+
+    try:
+        before = path.lstat()
+        if (not stat.S_ISREG(before.st_mode) or linked_directory(path)
+                or before.st_size > bound):
+            raise ValueError('Missing, linked or oversized verification evidence')
+        # NOFOLLOW rejects a final-component link swap. NONBLOCK prevents a FIFO
+        # replacement from hanging before fstat can reject it. Windows still gets
+        # descriptor/path identity checks where these flags are unavailable.
+        flags = (os.O_RDONLY | getattr(os, 'O_BINARY', 0)
+                 | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0))
+        with os.fdopen(os.open(path, flags), 'rb') as file:
+            if identity(os.fstat(file.fileno())) != identity(before):
+                raise ValueError('Verification evidence changed before reading')
+            data = file.read(bound + 1)
+            if len(data) > bound:
+                raise ValueError('Oversized verification evidence')
+            if (len(data) != before.st_size
+                    or identity(os.fstat(file.fileno())) != identity(before)
+                    or identity(path.lstat()) != identity(before)):
+                raise ValueError('Verification evidence changed while reading')
+        return data
+    except OSError as error:
+        raise ValueError('Missing, linked or unreadable verification evidence') from error
 
 
 def checkpoint_binaries(binaries: dict[str, str], root: Path = ROOT) -> dict:
@@ -59,7 +89,23 @@ def checkpoint_binaries(binaries: dict[str, str], root: Path = ROOT) -> dict:
     return result
 
 
+def binary_state(binaries: dict[str, str]) -> dict:
+    """Cheap per-batch drift guard; full hashes are still required at both run boundaries."""
+    result = {}
+    for name, value in binaries.items():
+        path = Path(value)
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode) or linked_directory(path):
+            raise ValueError('Regression binary is no longer a regular file')
+        result[name] = (info.st_dev, info.st_ino, info.st_mode, info.st_size,
+                        info.st_mtime_ns, info.st_ctime_ns, getattr(info, 'st_file_attributes', 0))
+    return result
+
+
 def resume_records(output: Path, checkpoint: dict, revision: str, root: Path = ROOT) -> tuple[dict[str, str], list[dict]]:
+    invalidated = output / 'invalidated.json'
+    if invalidated.exists() or invalidated.is_symlink():
+        raise ValueError('Invalidated verification evidence cannot resume; start a new run')
     if checkpoint.get('schema_version') != 1 or checkpoint.get('source_sha256') != revision:
         raise ValueError('Source changed; this verification run cannot resume')
     rounds = checkpoint.get('requested_rounds')
@@ -182,6 +228,7 @@ def main() -> int:
     # An interrupted live batch is never unlocked automatically. Inspect it before recovery.
     with lock.open('x', encoding='ascii') as file:
         file.write(str(os.getpid()))
+    settled = False
     try:
         if args.resume:
             checkpoint = json.loads(read_owned(output / 'run.json', 65536))
@@ -199,12 +246,28 @@ def main() -> int:
             (output / 'run.json').write_text(json.dumps(checkpoint, indent=2) + '\n', encoding='utf-8')
             (output / 'rounds.jsonl').touch(exist_ok=False)
             records = []
+        binary_baseline = binary_state(binaries)
+        if (checkpoint_binaries(binaries) != checkpoint['binaries']
+                or binary_state(binaries) != binary_baseline):
+            raise ValueError('Compiled binaries changed before verification')
         stop_reason = None
+
+        def binary_drift() -> str | None:
+            try:
+                if binary_state(binaries) == binary_baseline:
+                    return None
+            except (OSError, ValueError) as error:
+                return f'Compiled binaries became unavailable during verification: {error}'
+            return 'Compiled binaries changed during verification; evidence invalidated'
+
         end = min(rounds, len(records) + args.batch_size) if args.batch_size else rounds
         with ThreadPoolExecutor(max_workers=args.jobs) as workers:
             for first in range(len(records) + 1, end + 1, args.jobs):
                 if source_digest() != revision:
                     stop_reason = 'Source changed during verification; evidence invalidated'
+                    break
+                stop_reason = binary_drift()
+                if stop_reason:
                     break
                 futures = [workers.submit(run_round, index, binaries, output)
                            for index in range(first, min(first + args.jobs, end + 1))]
@@ -216,12 +279,30 @@ def main() -> int:
                         print(f"Round {record['round']}/{rounds}: {'PASS' if record['passed'] else 'FAIL'}", flush=True)
                     if not record['passed'] and stop_reason is None:
                         stop_reason = f"Round {record['round']} failed; no automatic retry or failure suppression"
+                drift = binary_drift()
+                if drift and stop_reason is None:
+                    stop_reason = drift
                 if stop_reason:
                     break
         stable = source_digest() == revision
-        healthy = stable and stop_reason is None and all(r['passed'] for r in records)
+        try:
+            binaries_stable = (binary_drift() is None
+                               and checkpoint_binaries(binaries) == checkpoint['binaries']
+                               and binary_drift() is None)
+        except (OSError, ValueError):
+            binaries_stable = False
+        if not binaries_stable and stop_reason is None:
+            stop_reason = 'Compiled binaries changed during verification; evidence invalidated'
+        healthy = stable and binaries_stable and stop_reason is None and all(r['passed'] for r in records)
         complete = len(records) == rounds
+        if not healthy:
+            # Restoring original binaries/source later must not turn invalid rounds
+            # into reusable success. Retain this fail-closed marker across resumes.
+            with (output / 'invalidated.json').open('x', encoding='utf-8') as file:
+                json.dump({'reason': stop_reason or 'Source changed during verification'}, file)
+                file.write('\n')
         report = {'schema_version': 1, 'source_sha256': revision, 'source_unchanged': stable,
+                  'binaries_unchanged': binaries_stable,
                   'requested_rounds': rounds, 'completed_rounds': len(records),
                   'passed_rounds': sum(r['passed'] for r in records), 'passed': healthy and complete,
                   'complete': complete, 'stop_reason': stop_reason, 'platform': os.sys.platform,
@@ -233,9 +314,14 @@ def main() -> int:
         (output / 'report.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
         print(json.dumps({'passed': report['passed'], 'complete': complete, 'batch_ok': healthy,
                           'rounds': len(records), 'report': str((output / 'report.json').relative_to(ROOT))}))
+        settled = True
         return 0 if healthy and (complete or args.batch_size is not None) else 1
     finally:
-        lock.unlink()
+        # An exception can follow an executed test but precede its retained record
+        # or final report. Keep the lock on every abnormal exit (including Ctrl-C),
+        # preserving the cause and evidence instead of silently retrying that round.
+        if settled:
+            lock.unlink()
 
 
 if __name__ == '__main__':

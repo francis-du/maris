@@ -1,6 +1,9 @@
 //! Presentation strings only. Identifiers, user names and serialized state stay unchanged.
 #[rustfmt::skip]
 pub const TRANSLATIONS: &[(&str, [&str; 5])] = &[
+    ("Inputs and output buses", ["输入通道与输出总线", "輸入聲道與輸出匯流排", "入力チャンネルと出力バス", "Eingänge und Ausgangsbusse", "Entradas y buses de salida"]),
+    ("+ Volume", ["+ 音量", "+ 音量", "+ 音量", "+ Pegel", "+ Volumen"]),
+    ("←/→ volume · Space mute · Home/End select · U undo", ["←/→ 音量 · 空格静音 · Home/End 首尾 · U 撤销", "←/→ 音量 · 空白鍵靜音 · Home/End 首尾 · U 復原", "←/→ 音量 · Space 消音 · Home/End 選択 · U 戻す", "←/→ Pegel · Leertaste stumm · Home/End wählen · U zurück", "←/→ volumen · Espacio silenciar · Home/End elegir · U deshacer"]),
     ("Mixer controls", ["混音控制", "混音控制", "ミキサー操作", "Mixer-Steuerung", "Controles del mezclador"]),
     ("Mixer channels", ["混音声道", "混音聲道", "ミキサーチャンネル", "Mixer-Kanäle", "Canales del mezclador"]),
     ("No mixer channels", ["没有混音声道", "沒有混音聲道", "ミキサーチャンネルなし", "Keine Mixer-Kanäle", "Sin canales de mezcla"]),

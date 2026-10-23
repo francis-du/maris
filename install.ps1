@@ -331,7 +331,7 @@ function Check-Destination {
         $probe.Dispose()
     }
 }
-$stage = ''; $backup = ''; $buildDirectory = ''; $downloadDirectory = ''; $lockPath = ''; $lockHandle = $null; $committed = $false
+$stage = ''; $backup = ''; $buildDirectory = ''; $downloadDirectory = ''; $lockHandle = $null; $committed = $false
 $exitCode = 0
 try {
     if ($online) {
