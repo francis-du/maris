@@ -58,7 +58,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         if: runner.os == 'Windows' || runner.os == 'macOS'
         with:
-          python-version: '3.12'
+          python-version: '3.13'
       - name: Native Windows download regression
         if: runner.os == 'Windows'
         run: python -m unittest discover -s tests/tooling -p test_online.py -v
@@ -67,6 +67,14 @@ jobs:
         run: python -m unittest discover -s tests/tooling -p test_release_publication_gates.py -v
       - name: Install declared Rust toolchain
         run: rustup toolchain install 1.94.0 --profile minimal --component rustfmt --component clippy
+      - name: Native packaging and workflow tooling
+        if: runner.os == 'macOS' || runner.os == 'Windows'
+        shell: bash
+        timeout-minutes: 5
+        env:
+          PYTHONUTF8: '0'
+        run: |
+          python -m unittest discover -s tests/tooling -v
       - name: Reject vulnerable dependencies reachable on this native target
         shell: bash
         run: |
