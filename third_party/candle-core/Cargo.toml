@@ -229,7 +229,7 @@ version = "0.3.1"
 optional = true
 
 [dependencies.rand]
-version = "0.9.0"
+version = "0.10.3"
 
 [dependencies.rand_distr]
 version = "0.5.1"
