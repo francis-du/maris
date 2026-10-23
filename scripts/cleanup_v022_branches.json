@@ -1,0 +1,406 @@
+{
+  "schema_version": 1,
+  "repository": "francis-du/maris",
+  "default_branch": "main",
+  "main_sha": "841e59e4f70fe99df59d63fca61f8e69c36dc338",
+  "tag_precondition": "v0.2.2",
+  "scope": "Reviewed historical refs only, after actual successful v0.2.2 stable publication and twelve native public installation jobs. New refs are excluded. No deletion has been executed.",
+  "full_review_plan_sha256": "77a688504fdbfea56cbb931096627b39d4b6ff54159c21c422f0c90f11d6d0fe",
+  "full_review_plan_path": "rsi-post-release-branch-cleanup-plan-v4-proposed-20261024.json",
+  "root_adoption_required": false,
+  "branches": [
+    {
+      "name": "dependabot/cargo/flexaudio-0.4.0",
+      "sha": "9829a6264fa067cbe4e9907818c6d45c952a2018",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact tip is the expressly rejected, incomplete automatic flexaudio 0.4 candidate in closed PR #85. It may be retired after the new release under the unused-branch cleanup authorization. It was not merged; supported flexaudio/CPAL migration work remains unfinished in the Worklist.",
+      "candidate_basis": "explicitly_rejected_unmerged_exact_head"
+    },
+    {
+      "name": "feat/coreaudio-fail-open-reason-20261013",
+      "sha": "43edf063900af8e0efd67247dc1617cf2e27af20",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Current tip equals explicitly disposed PR #75 head. Its reviewed changes are superseded by merged canonical PR #49. The canonical merge commit(s) are proven ancestors of snapshot main. The duplicate PR itself was not merged; this is explicit obsolescence evidence, not byte identity or reachability of its original branch commits.",
+      "candidate_basis": "explicitly_superseded_unmerged_exact_head"
+    },
+    {
+      "name": "feat/coreaudio-runtime-diagnostics-20261013",
+      "sha": "6b97749d8809f262733486316fe55759e2ac2a5f",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Current tip equals explicitly disposed PR #73 head. Its reviewed changes are superseded by merged canonical PR #49. The canonical merge commit(s) are proven ancestors of snapshot main. The duplicate PR itself was not merged; this is explicit obsolescence evidence, not byte identity or reachability of its original branch commits.",
+      "candidate_basis": "explicitly_superseded_unmerged_exact_head"
+    },
+    {
+      "name": "fix/cli-release-path-guards-20261013",
+      "sha": "57e72cd2ada1660317e446a452aba06d8d89760c",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Complete branch changed-file scope reviewed and preserved by exact main content plus stronger guards; original branch commits are not claimed merged.",
+      "candidate_basis": "exact_tip_content_preserved_or_strictly_superseded_on_main"
+    },
+    {
+      "name": "fix/coreaudio-clock-validation-20261011",
+      "sha": "d839bbf26c4af28db1d0ae0f95d2c0c9469a9cd2",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "fix/installer-lock-ownership-20261013",
+      "sha": "71f0431ada0063237a08c4a619bc2da309ace569",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "fix/installer-recovery-diagnostics-20261013",
+      "sha": "26a0a0ede221634800a3f8d7dbcd58d67c1ba605",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "fix/linux-package-smoke-path-contract-20261013",
+      "sha": "a466b1d47c9b78492d5fd01213d4c09c242b34ef",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Current tip equals explicitly disposed PR #62 head. Its reviewed changes are superseded by merged canonical PR #68. The canonical merge commit(s) are proven ancestors of snapshot main. The duplicate PR itself was not merged; this is explicit obsolescence evidence, not byte identity or reachability of its original branch commits.",
+      "candidate_basis": "explicitly_superseded_unmerged_exact_head"
+    },
+    {
+      "name": "fix/macos-post-capture-output-progress",
+      "sha": "73985a9b680bcec28057eee2f5da0a4d3f544cb8",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Current tip equals explicitly disposed PR #48 head. Its reviewed changes are superseded by merged canonical PR #49. The canonical merge commit(s) are proven ancestors of snapshot main. The duplicate PR itself was not merged; this is explicit obsolescence evidence, not byte identity or reachability of its original branch commits.",
+      "candidate_basis": "explicitly_superseded_unmerged_exact_head"
+    },
+    {
+      "name": "fix/package-smoke-input-guards-20261013",
+      "sha": "e86567a45a9a9ec683c1adc98de028561dc8569f",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Current tip equals explicitly disposed PR #55 head. Its reviewed changes are superseded by merged canonical PR #78. The canonical merge commit(s) are proven ancestors of snapshot main. The duplicate PR itself was not merged; this is explicit obsolescence evidence, not byte identity or reachability of its original branch commits.",
+      "candidate_basis": "explicitly_superseded_unmerged_exact_head"
+    },
+    {
+      "name": "fix/package-smoke-installer-parity-20261013",
+      "sha": "b78d6639cd12d1b5b298a4ef0967d517fe30aaf2",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "fix/package-smoke-path-guards-20261013",
+      "sha": "66f6913b8de6ae55b5ce0c89f3f6f6d023142633",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "fix/release-asset-postpublish-reverify-20261013",
+      "sha": "38f415282e7bcfc4029d853a6078a9d807be5a70",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Current tip equals explicitly disposed PR #63 head. Its reviewed changes are superseded by merged canonical PR #80. The canonical merge commit(s) are proven ancestors of snapshot main. The duplicate PR itself was not merged; this is explicit obsolescence evidence, not byte identity or reachability of its original branch commits.",
+      "candidate_basis": "explicitly_superseded_unmerged_exact_head"
+    },
+    {
+      "name": "fix/release-assets-trigger-20261013",
+      "sha": "aa1a25619871166cd2dc8c76a2d4af8116e0cca5",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "fix/release-collect-path-guards-20261013",
+      "sha": "3100feae3be6d0a5525f7de8dc836ea60e85cea0",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Complete branch changed-file scope reviewed and preserved by exact main content plus stronger guards; original branch commits are not claimed merged.",
+      "candidate_basis": "exact_tip_content_preserved_or_strictly_superseded_on_main"
+    },
+    {
+      "name": "fix/release-collect-path-guards-main-20261013",
+      "sha": "c6686a3ba3c29409a9663d56857db70ef7928b4c",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Current tip equals explicitly disposed PR #76 head. Its reviewed changes are superseded by merged canonical PR #53. The canonical merge commit(s) are proven ancestors of snapshot main. The duplicate PR itself was not merged; this is explicit obsolescence evidence, not byte identity or reachability of its original branch commits.",
+      "candidate_basis": "explicitly_superseded_unmerged_exact_head"
+    },
+    {
+      "name": "fix/release-combine-race-20261013",
+      "sha": "dc1698af9e47c39abf1f422eb79c67897a3a76e9",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "fix/release-combine-toctou-20261013",
+      "sha": "78dc8c536cfff9598ec9b9cc2952cff0881c7c70",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact current tip equals the reviewed PR head; that PR was merged and its exact merge commit is independently reachable from current main. Covers squash/rebase history and aliases of the same tip.",
+      "candidate_basis": "exact_merged_pr_head_including_squash_or_alias"
+    },
+    {
+      "name": "fix/release-gate-junction-guards-20261013",
+      "sha": "8df73be931e297deb97d5ca5fdd73232e8c3495d",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Current tip equals explicitly disposed PR #57 head. Its reviewed changes are superseded by merged canonical PR #53. The canonical merge commit(s) are proven ancestors of snapshot main. The duplicate PR itself was not merged; this is explicit obsolescence evidence, not byte identity or reachability of its original branch commits.",
+      "candidate_basis": "explicitly_superseded_unmerged_exact_head"
+    },
+    {
+      "name": "fix/release-gate-reparse-guards-20261013",
+      "sha": "408a84d8a6d45a432d57623a4cc7d506b0323437",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Current tip equals explicitly disposed PR #79 head. Its reviewed changes are superseded by merged canonical PR #53. The canonical merge commit(s) are proven ancestors of snapshot main. The duplicate PR itself was not merged; this is explicit obsolescence evidence, not byte identity or reachability of its original branch commits.",
+      "candidate_basis": "explicitly_superseded_unmerged_exact_head"
+    },
+    {
+      "name": "fix/release-input-containment-20261013",
+      "sha": "aa5d8db5b8ba8b288bea451751401de24c5c8b22",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "fix/release-junction-guards-20261013",
+      "sha": "8940bee19477fe25121003a4f73c49fc31e6cfc2",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Current tip equals explicitly disposed PR #56 head. Its reviewed changes are superseded by merged canonical PR #53 and package-smoke PR #78. The canonical merge commit(s) are proven ancestors of snapshot main. The duplicate PR itself was not merged; this is explicit obsolescence evidence, not byte identity or reachability of its original branch commits.",
+      "candidate_basis": "explicitly_superseded_unmerged_exact_head"
+    },
+    {
+      "name": "fix/release-pair-toctou-20261013",
+      "sha": "2aec61191f2e4e6f2146a84924a83fd25a53c21e",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact current tip equals the reviewed PR head; that PR was merged and its exact merge commit is independently reachable from current main. Covers squash/rebase history and aliases of the same tip.",
+      "candidate_basis": "exact_merged_pr_head_including_squash_or_alias"
+    },
+    {
+      "name": "fix/release-path-guards-20261013",
+      "sha": "2d8f0b561efa67a5c13b6a560d5553716669e8ea",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Current tip equals explicitly disposed PR #54 head. Its reviewed changes are superseded by merged canonical PR #53 and package-smoke PR #78. The canonical merge commit(s) are proven ancestors of snapshot main. The duplicate PR itself was not merged; this is explicit obsolescence evidence, not byte identity or reachability of its original branch commits.",
+      "candidate_basis": "explicitly_superseded_unmerged_exact_head"
+    },
+    {
+      "name": "fix/release-physical-paths-20261013",
+      "sha": "a091a0e78c08d321e723cd95848e16855f73baf6",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact current tip equals the reviewed PR head; that PR was merged and its exact merge commit is independently reachable from current main. Covers squash/rebase history and aliases of the same tip.",
+      "candidate_basis": "exact_merged_pr_head_including_squash_or_alias"
+    },
+    {
+      "name": "fix/release-record-bounded-compare-20261013",
+      "sha": "6415c97964b6a5e718a64112db0fb7d4fc5f590a",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Current tip equals explicitly disposed PR #83 head. Its reviewed changes are superseded by merged canonical PR #53. The canonical merge commit(s) are proven ancestors of snapshot main. The duplicate PR itself was not merged; this is explicit obsolescence evidence, not byte identity or reachability of its original branch commits.",
+      "candidate_basis": "explicitly_superseded_unmerged_exact_head"
+    },
+    {
+      "name": "fix/release-record-parse-race-20261013",
+      "sha": "bee2ab8d7e274e446f0051f17ea6fc2ecb22da58",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Current tip equals explicitly disposed PR #77 head. Its reviewed changes are superseded by merged canonical PR #82. The canonical merge commit(s) are proven ancestors of snapshot main. The duplicate PR itself was not merged; this is explicit obsolescence evidence, not byte identity or reachability of its original branch commits.",
+      "candidate_basis": "explicitly_superseded_unmerged_exact_head"
+    },
+    {
+      "name": "fix/release-record-snapshot-race-20261013",
+      "sha": "a091a0e78c08d321e723cd95848e16855f73baf6",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact current tip equals the reviewed PR head; that PR was merged and its exact merge commit is independently reachable from current main. Covers squash/rebase history and aliases of the same tip.",
+      "candidate_basis": "exact_merged_pr_head_including_squash_or_alias"
+    },
+    {
+      "name": "fix/release-workflow-hardening-integrated-20261013",
+      "sha": "3c92cfa055a1f91f410cff0424b2fed5e409569d",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Current tip equals explicitly disposed PR #69 head. Its reviewed changes are superseded by merged canonical PR #80. The canonical merge commit(s) are proven ancestors of snapshot main. The duplicate PR itself was not merged; this is explicit obsolescence evidence, not byte identity or reachability of its original branch commits.",
+      "candidate_basis": "explicitly_superseded_unmerged_exact_head"
+    },
+    {
+      "name": "fix/require-published-stable-release-20261013",
+      "sha": "a24dc57d4b367ffa0c829095186d72c341143614",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Current tip equals explicitly disposed PR #65 head. Its reviewed changes are superseded by merged canonical PR #80. The canonical merge commit(s) are proven ancestors of snapshot main. The duplicate PR itself was not merged; this is explicit obsolescence evidence, not byte identity or reachability of its original branch commits.",
+      "candidate_basis": "explicitly_superseded_unmerged_exact_head"
+    },
+    {
+      "name": "fix/rsi-clock-fixtures-20261023",
+      "sha": "62267d851ed6245e88e5722e1f7885e4b8e19125",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "fix/rsi-integration-20261022",
+      "sha": "24ea7f662d06713824ca6a1d11af45db160c50c2",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "fix/rsi-portable-release-tags-20261023",
+      "sha": "61902f651b9d4920f5cbf33bb289a65cb0487570",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "fix/rsi-preset-acknowledgement-20261023",
+      "sha": "4268150537ae852c3409c90f7cc94e27e48c498d",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "fix/rsi-windows-tooling-20261023",
+      "sha": "ec08558c1b6ae4c1fd368196968301e72db6d123",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "fix/serialize-release-asset-publication-20261013",
+      "sha": "3b98ef0f26ebcd1e722cbe04e3f897019dc63c10",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Current tip equals explicitly disposed PR #64 head. Its reviewed changes are superseded by merged canonical PR #80. The canonical merge commit(s) are proven ancestors of snapshot main. The duplicate PR itself was not merged; this is explicit obsolescence evidence, not byte identity or reachability of its original branch commits.",
+      "candidate_basis": "explicitly_superseded_unmerged_exact_head"
+    },
+    {
+      "name": "fix/strict-release-manifest-parser-20261013",
+      "sha": "7e578d19771a6afd838bdf9239f3bf15bc1b7901",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Current tip equals explicitly disposed PR #66 head. Its reviewed changes are superseded by merged canonical PR #80. The canonical merge commit(s) are proven ancestors of snapshot main. The duplicate PR itself was not merged; this is explicit obsolescence evidence, not byte identity or reachability of its original branch commits.",
+      "candidate_basis": "explicitly_superseded_unmerged_exact_head"
+    },
+    {
+      "name": "fix/verification-junction-guards-20261013",
+      "sha": "c5a0f4b8e78c912672f60f7e66a2ced4aa01145c",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Current tip equals explicitly disposed PR #58 head. Its reviewed changes are superseded by merged canonical PR #53. The canonical merge commit(s) are proven ancestors of snapshot main. The duplicate PR itself was not merged; this is explicit obsolescence evidence, not byte identity or reachability of its original branch commits.",
+      "candidate_basis": "explicitly_superseded_unmerged_exact_head"
+    },
+    {
+      "name": "fix/verification-path-guards-20261013",
+      "sha": "bd9f7908b719b9faa970554ad2e1932e4df18ed9",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Current tip equals explicitly disposed PR #81 head. Its reviewed changes are superseded by merged canonical PR #53. The canonical merge commit(s) are proven ancestors of snapshot main. The duplicate PR itself was not merged; this is explicit obsolescence evidence, not byte identity or reachability of its original branch commits.",
+      "candidate_basis": "explicitly_superseded_unmerged_exact_head"
+    },
+    {
+      "name": "fix/windows-package-smoke-path-contract-20261013",
+      "sha": "82d13e2bc0f504d2d6a77649d531dac0a28536e5",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Current tip equals explicitly disposed PR #61 head. Its reviewed changes are superseded by merged canonical PR #68. The canonical merge commit(s) are proven ancestors of snapshot main. The duplicate PR itself was not merged; this is explicit obsolescence evidence, not byte identity or reachability of its original branch commits.",
+      "candidate_basis": "explicitly_superseded_unmerged_exact_head"
+    },
+    {
+      "name": "fix/0.2.1-terminal-preset-ci",
+      "sha": "cd006784313ec9a9bf3a451f77607a85cadb2542",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "main",
+      "sha": "841e59e4f70fe99df59d63fca61f8e69c36dc338",
+      "disposition": "retain",
+      "reason": "Default branch",
+      "candidate_basis": "default_branch_always_retained"
+    },
+    {
+      "name": "obs/coreaudio-handoff-telemetry-20261012",
+      "sha": "caa9487178e5acee5e3ab2ba8a17e5e1f9ca5e6f",
+      "disposition": "retain_pending_content_review",
+      "reason": "Current tip caa9487178e5acee5e3ab2ba8a17e5e1f9ca5e6f differs from disposed PR #52 head e591b76366ed51d9f29ff0c9b2cd1bbc807c1653. Prior disposition does not prove the newer content is unused; retain for explicit content review.",
+      "candidate_basis": "retained_unreviewed_current_content"
+    },
+    {
+      "name": "refactor/macos-stable-device-uid",
+      "sha": "a5d2af19142fad11e001fe64ebeed9d0c060d8cf",
+      "disposition": "retain_pending_content_review",
+      "reason": "No associated PR disposition proves this exact current tip is obsolete. Unique branch history remains; retain for content review, without inferring disposal from its name, age or similar work elsewhere.",
+      "candidate_basis": "retained_unreviewed_current_content"
+    },
+    {
+      "name": "release-publish/v0.2.1",
+      "sha": "9f0cf20c909f32e717fe2885a34df0a52e095efc",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "release-validation/rsi-pr87-2a0d5d8a9fb6",
+      "sha": "2a0d5d8a9fb669c82e353005af2cf41a16ded8ff",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "release-validation/rsi-pr88-572e6e848f2b",
+      "sha": "572e6e848f2bf919665da0c50435cb87cde7fde6",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "release-validation/rsi-pr90-841e59e4f70f",
+      "sha": "841e59e4f70fe99df59d63fca61f8e69c36dc338",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "release-validation/v0.2.1-coreaudio-input-scope",
+      "sha": "9f0cf20c909f32e717fe2885a34df0a52e095efc",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "release-validation/v0.2.1-recovery",
+      "sha": "7caafe447f5ad0c11e286e123f23ca292de3e194",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "release-validation/v0.2.1-recovery-push",
+      "sha": "7caafe447f5ad0c11e286e123f23ca292de3e194",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "release-validation/v0.2.1",
+      "sha": "7caafe447f5ad0c11e286e123f23ca292de3e194",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact branch tip is reachable from current main; no unique commits in comparison. Recheck branch tip/main/open PRs/protection/active workflows immediately before deletion.",
+      "candidate_basis": "exact_tip_ancestor_or_identical"
+    },
+    {
+      "name": "test/archive-limit-boundaries-20261013",
+      "sha": "852f1b93d6f45b4e5a925c9ae2deda5f6a092114",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact current tip equals the reviewed PR head; that PR was merged and its exact merge commit is independently reachable from current main. Covers squash/rebase history and aliases of the same tip.",
+      "candidate_basis": "exact_merged_pr_head_including_squash_or_alias"
+    },
+    {
+      "name": "test/bash-workflow-syntax-20261013",
+      "sha": "4f8a39deee2f370a00882c1c558764fb69dd2764",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Current tip equals explicitly disposed PR #67 head. Its reviewed changes are superseded by merged canonical PR #80. The canonical merge commit(s) are proven ancestors of snapshot main. The duplicate PR itself was not merged; this is explicit obsolescence evidence, not byte identity or reachability of its original branch commits.",
+      "candidate_basis": "explicitly_superseded_unmerged_exact_head"
+    },
+    {
+      "name": "test/high-level-loudness-parity-20261011",
+      "sha": "490bc2e9f9a6d0b01f237b71c9af930ba02258a3",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact current tip equals the reviewed PR head; that PR was merged and its exact merge commit is independently reachable from current main. Covers squash/rebase history and aliases of the same tip.",
+      "candidate_basis": "exact_merged_pr_head_including_squash_or_alias"
+    },
+    {
+      "name": "test/pty-draft-render-barrier-20261011",
+      "sha": "3fd48413352e8e1fdd258c62b3d80c8fb70c9992",
+      "disposition": "candidate_after_successful_new_release",
+      "reason": "Exact current tip equals the reviewed PR head; that PR was merged and its exact merge commit is independently reachable from current main. Covers squash/rebase history and aliases of the same tip.",
+      "candidate_basis": "exact_merged_pr_head_including_squash_or_alias"
+    }
+  ],
+  "adoption": "The primary agent reviewed and adopted these 53 exact historical refs under the user instruction to remove unused branches only after successful new-version publication."
+}
