@@ -232,7 +232,7 @@ optional = true
 version = "0.9.0"
 
 [dependencies.rand_distr]
-version = "0.5.1"
+version = "0.6.0"
 
 [dependencies.rayon]
 version = "1.7.0"
