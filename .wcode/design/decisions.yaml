@@ -33,3 +33,10 @@
   decision: Keep the published Candle source provenance and exact oversized-file baselines. Backport small API adaptations with propagated errors and standalone behavioral tests; upgrade coupled random-number dependencies only when their half-precision distribution implementations are compatible.
   rationale: Passing dependency resolution alone does not establish numerical API compatibility or preserve tokenizer behavior.
   affects: [component:models, component:runtime]
+- schema_version: 1
+  id: DECISION-RELEASE-001
+  title: Branch cleanup binds a completed release and exact branch tips
+  status: accepted
+  decision: Require the selected stable release, native public installation evidence, current main, branch rules, and atomic expected-SHA deletion leases. Repository API validation permits exact commit comparison while rejecting traversal, foreign URLs and unbounded query inputs.
+  rationale: Successful publication authorizes only the reviewed unused refs; failed or changed evidence must stop deletion.
+  affects: [component:runtime]

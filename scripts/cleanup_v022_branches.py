@@ -45,12 +45,47 @@ def require(condition, message):
         raise ValueError(message)
 
 
+def validate_api_path(path):
+    """Keep requests repository-relative; a compare delimiter is not traversal."""
+    require(isinstance(path, str) and len(path) <= 1024
+            and all(33 <= ord(char) <= 126 for char in path)
+            and "\\" not in path and "#" not in path, "Invalid API path")
+    parsed = urllib.parse.urlsplit(path)
+    require(not parsed.scheme and not parsed.netloc and not parsed.fragment,
+            "Invalid API path")
+    resource = urllib.parse.unquote(parsed.path, errors="strict")
+    require("%" not in resource and "\\" not in resource
+            and (resource == "" or re.fullmatch(r"/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*",
+                                                resource))
+            and all(part not in (".", "..") for part in resource.split("/")),
+            "Invalid API path")
+    if resource.startswith("/compare/"):
+        require(parsed.path == resource
+                and re.fullmatch(r"/compare/[0-9a-f]{40}\.\.\.[0-9a-f]{40}", resource),
+                "Invalid API compare path")
+    require("?" not in path or bool(parsed.query), "Invalid API query")
+    seen = set()
+    for field in parsed.query.split("&") if parsed.query else ():
+        key, separator, value = field.partition("=")
+        require(separator and key not in seen, "Invalid API query")
+        seen.add(key)
+        if key in ("per_page", "page"):
+            bound = 100 if key == "per_page" else MAX_PAGES
+            require(re.fullmatch(r"[1-9][0-9]*", value) and int(value) <= bound,
+                    "Invalid API pagination")
+        else:
+            allowed = {"filter": {"latest"}, "state": {"open"},
+                       "status": set(ACTIVE_STATES) | {"completed"}}
+            require(key in allowed and value in allowed[key], "Invalid API query")
+    return path
+
+
 class GitHub:
     def __init__(self, token):
         self.token = token
 
     def get(self, path):
-        require((path == "" or path.startswith("/")) and ".." not in path, "Invalid API path")
+        validate_api_path(path)
         request = urllib.request.Request(
             "https://api.github.com/repos/" + REPOSITORY + path,
             headers={
@@ -83,14 +118,15 @@ class GitHub:
         raise ValueError("API collection exceeded the bounded pagination limit")
 
 
-def release_gate(api, source_sha, release_id, publication_run_id):
-    release = api.get("/releases/tags/" + TAG)
-    require(release["id"] == release_id and release["tag_name"] == TAG,
+def release_gate(api, source_sha, release_id, publication_run_id, tag=TAG):
+    require(re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", tag), "Invalid release tag")
+    release = api.get("/releases/tags/" + tag)
+    require(release["id"] == release_id and release["tag_name"] == tag,
             "Release identity differs from the selected new release")
     require(not release["draft"] and not release["prerelease"] and release["published_at"],
             "The new release has not reached published stable state")
     require(api.get("/releases/latest")["id"] == release_id, "The selected release is not latest")
-    require(api.get("/commits/" + TAG)["sha"] == source_sha, "Release tag source changed")
+    require(api.get("/commits/" + tag)["sha"] == source_sha, "Release tag source changed")
     require(api.get("/git/ref/heads/main")["object"]["sha"] == source_sha,
             "Main changed after the selected publication; review before cleanup")
     assets = api.collection(f"/releases/{release_id}/assets")
@@ -98,7 +134,7 @@ def release_gate(api, source_sha, release_id, publication_run_id):
     for system in ("macos", "linux", "windows"):
         for arch in ("x86_64", "arm64"):
             extension = ".zip" if system == "windows" else ".tar.gz"
-            expected_assets.add(f"Maris-0.2.2-{system}-{arch}{extension}")
+            expected_assets.add(f"Maris-{tag[1:]}-{system}-{arch}{extension}")
     require(len(assets) == 8 and {a["name"] for a in assets} == expected_assets,
             "The new release does not contain the eight expected CLI assets")
     require(all(a["state"] == "uploaded" and a["size"] > 0 for a in assets),
@@ -106,7 +142,7 @@ def release_gate(api, source_sha, release_id, publication_run_id):
     run = api.get(f"/actions/runs/{publication_run_id}")
     require(run["repository"]["full_name"] == REPOSITORY
             and run["path"] == PUBLISH_PATH and run["event"] == "push"
-            and run["head_branch"] == "release-publish/" + TAG
+            and run["head_branch"] == "release-publish/" + tag
             and run["head_sha"] == source_sha
             and run["status"] == "completed" and run["conclusion"] == "success",
             "Publication workflow did not succeed for the exact new release source")
@@ -138,7 +174,7 @@ def release_gate(api, source_sha, release_id, publication_run_id):
     require(seen == {(platform, bootstrap) for platform in PLATFORMS
                      for bootstrap in ("release", "public")} and len(promoted) == 1,
             "The publication lacks all twelve native install jobs and one promotion")
-    return {"release_id": release_id, "tag": TAG, "source_sha": source_sha,
+    return {"release_id": release_id, "tag": tag, "source_sha": source_sha,
             "url": release["html_url"], "published_at": release["published_at"],
             "publication_run_id": publication_run_id, "publication_run_attempt": run["run_attempt"],
             "native_install_jobs": native_jobs, "promotion_job": promoted[0],
