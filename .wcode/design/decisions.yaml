@@ -26,3 +26,17 @@
   decision: Production implementation lives under domain directories; src/main.rs and src/lib.rs are the only root source entry files and re-exports do not create duplicate ownership.
   rationale: Explicit ownership keeps the architecture map, implementation paths, and refactors traceable.
   affects: [component:runtime, component:audio, component:dsp, component:analysis, component:devices, component:tuning, component:mixer, component:models, component:presets, component:control, component:i18n, component:ui, component:cli]
+- schema_version: 1
+  id: DECISION-DEPENDENCY-001
+  title: Review vendored compatibility changes as a coherent dependency graph
+  status: accepted
+  decision: Keep the published Candle source provenance and exact oversized-file baselines. Backport small API adaptations with propagated errors and standalone behavioral tests; upgrade coupled random-number dependencies only when their half-precision distribution implementations are compatible.
+  rationale: Passing dependency resolution alone does not establish numerical API compatibility or preserve tokenizer behavior.
+  affects: [component:models, component:runtime]
+- schema_version: 1
+  id: DECISION-RELEASE-001
+  title: Branch cleanup binds a completed release and exact branch tips
+  status: accepted
+  decision: Require the selected stable release, native public installation evidence, current main, branch rules, and atomic expected-SHA deletion leases. Repository API validation permits exact commit comparison while rejecting traversal, foreign URLs and unbounded query inputs.
+  rationale: Successful publication authorizes only the reviewed unused refs; failed or changed evidence must stop deletion.
+  affects: [component:runtime]

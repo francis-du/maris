@@ -154,6 +154,7 @@
   name: Local model runtime
   responsibilities:
   - Own admitted local model assets, preprocessing, and non-real-time inference boundaries.
+  - Maintain the published Candle compatibility layer and standalone GGUF tokenizer regression coverage.
   depends_on:
   - component:analysis
   implementation:
@@ -163,6 +164,10 @@
     path: src/models/musicnn.rs
   - kind: file
     path: src/models/musicnn_preprocess.rs
+  - kind: file
+    path: third_party/candle-core/src/quantized/tokenizer.rs
+  - kind: file
+    path: tests/gguf_tokenizer.rs
 
 - schema_version: 1
   id: component:presets

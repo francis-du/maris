@@ -1,6 +1,6 @@
 # Dependency security
 
-## Current iteration: October 22, 2026
+## Current iteration: October 24, 2026
 
 The complete-lockfile audit initially found nine vulnerability advisories. The security baseline delivered in [PR #84](https://github.com/francis-du/maris/pull/84) updates `rustls` to 0.23.46, `rustls-webpki` to 0.103.16, `webpki-roots` to 1.0.10, and ZIP to 9.0.3. It does not add advisory ignores or weaken `cargo audit --deny unsound`.
 
@@ -12,9 +12,15 @@ The UI parser integration must pass the same complete-lockfile audit and native 
 
 Candle 0.11.0 requires ZIP 8 in its published manifest. The compatibility patch retains the published `candle-core 0.11.0` crate, whose SHA-256 is `5ecb245093b0f791b89d3420c3df9c6d49c60ab63ba54db896bf8a3baf486706`, and backports the ZIP 9 filename API adaptation from [upstream PR #4041](https://github.com/huggingface/candle/pull/4041) at `70f72e9cfdbfc570846ca363ead2135394af3e9a`. The upstream PR was unmerged when inspected; its unrelated unreleased changes were not imported.
 
-Of the 65 production source files in the verified crate, 63 remain byte-for-byte unchanged. Only `npy.rs` and `pickle.rs` adapt ZIP's fallible `Cow<str>` filename API. The normalized manifest pins ZIP `=9.0.3`; the MIT and Apache-2.0 license texts and source provenance are retained in [the patch record](../../third_party/candle-core/MARIS_PATCH.md). Eleven oversized upstream files have exact SHA-256 baselines in the source-layout gate; modifying one, removing one, or introducing another oversized file still fails that gate.
+Of the 65 production source files in the verified crate, 62 remain byte-for-byte unchanged. `npy.rs` and `pickle.rs` adapt ZIP's fallible `Cow<str>` filename API; `quantized/tokenizer.rs` adapts tokenizers 0.23.2 as described below. The normalized manifest now pins ZIP `=9.0.5`; the MIT and Apache-2.0 license texts and source provenance are retained in [the patch record](../../third_party/candle-core/MARIS_PATCH.md). Eleven oversized upstream files have exact SHA-256 baselines in the source-layout gate; modifying one, removing one, or introducing another oversized file still fails that gate.
 
 The native checks execute UTF-8 and CP437 NPZ filename cases, eager/lazy tensor-value comparisons, malformed NPZ/PTH rejection, and the pinned bundled models. They also retain default/minimal regressions and strict Clippy. The initial local probe was rejected before execution and was not counted as test evidence. Physical audio and listening acceptance remain separate from these software and archive-compatibility checks.
+
+### October 24 dependency integration
+
+[PR #92](https://github.com/francis-du/maris/pull/92) updates libc to 0.2.191, zerocopy and zerocopy-derive to 0.8.63, and ZIP to 9.0.5. [PR #93](https://github.com/francis-du/maris/pull/93) selects tokenizers 0.23.2. Its changed owned-iterator API requires both GGUF special-token registration paths to consume their local vectors; registration and normalizer configuration errors are propagated. Standalone GGUF tests cover existing vocabulary IDs, token-type and explicit-ID registration, decode filtering and BOS/EOS insertion. They use the same resolved tokenizers crate through a native-only development dependency. The final integrated source must pass the normal default/minimal tests, strict Clippy, complete-lockfile audit and native release checks.
+
+The independent rand 0.10 and rand_distr 0.6 proposals in [PR #94](https://github.com/francis-du/maris/pull/94) and [PR #95](https://github.com/francis-du/maris/pull/95) failed compilation on all four CI platforms and were closed without merging. The published [half 2.7.1 manifest](https://docs.rs/crate/half/2.7.1/source/Cargo.toml) and [float8 0.7.0 manifest](https://docs.rs/crate/float8/0.7.0/source/Cargo.toml) still select rand 0.9 and rand_distr 0.5. Revisit these upgrades together when compatible half-precision distribution implementations are available; [the upstream migration issue](https://github.com/VoidStarKat/half-rs/issues/144) remains the follow-up reference. This does not alter the vendored CPU numerical kernels or their source baselines.
 
 ### Terminal parser and audio backend review
 
