@@ -61,7 +61,9 @@ fn gguf_token_types_filter_specials_but_keep_normal_and_byte_tokens() {
         "a<unk>b<control>c<user><unused>"
     );
     assert_eq!(
-        tokenizer.decode(&ids, true).expect("decode ordinary tokens"),
+        tokenizer
+            .decode(&ids, true)
+            .expect("decode ordinary tokens"),
         "abc"
     );
     assert_eq!(
@@ -94,7 +96,9 @@ fn gguf_explicit_ids_register_specials_without_token_types() {
         "<bos>a<pad>b<sep><unk><eos>"
     );
     assert_eq!(
-        tokenizer.decode(&ids, true).expect("decode ordinary tokens"),
+        tokenizer
+            .decode(&ids, true)
+            .expect("decode ordinary tokens"),
         "ab"
     );
     let encoded = tokenizer.encode("ab", true).expect("insert BOS and EOS");
