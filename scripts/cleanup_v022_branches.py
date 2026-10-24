@@ -119,7 +119,8 @@ class GitHub:
 
 
 def release_gate(api, source_sha, release_id, publication_run_id, tag=TAG):
-    require(re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", tag), "Invalid release tag")
+    require(isinstance(tag, str) and len(tag) <= 64
+            and re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", tag), "Invalid release tag")
     release = api.get("/releases/tags/" + tag)
     require(release["id"] == release_id and release["tag_name"] == tag,
             "Release identity differs from the selected new release")
