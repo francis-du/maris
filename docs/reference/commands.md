@@ -60,7 +60,7 @@ The CLI is the scriptable interface to the same saved settings and audio engine 
 ~~~sh
 maris update
 maris update --dry-run
-maris update --version 0.2.2
+maris update --version 0.2.3
 ~~~
 
 `update` is available from installed CLI releases that contain the bundled verified updater. It uses the same release manifest, archive checksum, executable checksum, transactional replacement and backup logic as the public installer. A development build does not silently fetch or install anything.
@@ -128,7 +128,7 @@ maris mixer set music --gain -3 --send-a 1
 maris mixer eq music warm
 maris mixer band music 1 -2
 maris mixer compressor music --enabled true --threshold -18 --ratio 2
-maris mixer bus 0 --device "Output" --gain 0
+maris mixer bus 1 --device "Output" --gain 0
 maris mixer duck --enabled true --threshold -24 --attenuation 8
 maris mixer scene-save desk
 maris mixer scene-restore desk

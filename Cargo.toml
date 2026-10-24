@@ -1,6 +1,6 @@
 [package]
 name = "maris"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 rust-version = "1.94"
 description = "Local system audio processing with device correction, mixing, TUI, CLI and MCP controls"
@@ -65,6 +65,9 @@ sha2 = "0.11"
 [dev-dependencies]
 hex = "0.4"
 vt100 = "=0.18.1"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+tokenizers = { version = "=0.23.2", default-features = false, features = ["onig"] }
 
 [[example]]
 name = "ui_probe"

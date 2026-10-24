@@ -48,7 +48,7 @@
 - schema_version: 1
   id: AC-MODEL-001
   title: Model integration preserves runtime boundaries
-  statement: Model and analysis code pass tests and clippy without moving inference into callback execution.
+  statement: Model and analysis code pass tests and clippy without moving inference into callback execution. GGUF tokenizer compatibility tests preserve existing vocabulary IDs, token-type and explicit-ID special registration, decode filtering, and BOS/EOS insertion with the locked tokenizers version.
   verification:
   - kind: check
     id: rust-test
