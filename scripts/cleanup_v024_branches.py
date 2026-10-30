@@ -23,8 +23,8 @@ REVIEWED_MAIN = "67d2ebcfcafdeb5584329525738fdc8e81f4ae7b"
 REQUIRED_PR = 96
 CLEANUP_PATH = ".github/workflows/cleanup-v024-branches.yml"
 FIXED_REFS = {
-    "obs/coreaudio-handoff-telemetry-20261012": "caa9487178e5acee5e3ab2ba8a17e5e1f9ca5e6f",
     "refactor/macos-stable-device-uid": "a5d2af19142fad11e001fe64ebeed9d0c060d8cf",
+    "rsi-preparation/v0.2.4-20261030": "8bce260cdbd9a6d05afae95aecb07406066b9977",
 }
 ANCESTOR_REFS = {
     "fix/coreaudio-startup-20261030",
@@ -93,10 +93,39 @@ def publication_gate(api, source_sha, release_id, publication_run_id):
     # Reuse the actual twelve native-installation and promotion verification;
     # never substitute an automatic asset workflow's six public smoke jobs.
     release = legacy.release_gate(api, source_sha, release_id, publication_run_id, tag=TAG)
+    assets = api.collection(f"/releases/{release_id}/assets")
+    legacy.require(len(assets) == 8 and all(
+        type(asset.get("id")) is int and asset["id"] > 0
+        and isinstance(asset.get("name"), str)
+        and type(asset.get("size")) is int and asset["size"] > 0
+        and isinstance(asset.get("updated_at"), str) and asset["updated_at"]
+        and asset.get("state") == "uploaded"
+        and isinstance(asset.get("digest"), str)
+        and re.fullmatch(r"sha256:[0-9a-f]{64}", asset["digest"])
+        for asset in assets
+    ), "Release attachment identity or SHA-256 digest is missing")
+    assets = sorted(
+        [{key: asset[key] for key in ("id", "name", "size", "updated_at", "state", "digest")}
+         for asset in assets], key=lambda asset: asset["name"])
+    legacy.require(
+        sorted(release["assets"], key=lambda asset: asset["name"])
+        == [{key: asset[key] for key in ("id", "name", "size", "updated_at")} for asset in assets],
+        "Release attachments changed while verifying publication",
+    )
     run = api.get(f"/actions/runs/{publication_run_id}")
-    legacy.require(run.get("name") == "Publish stable release"
+    expected = {"id": publication_run_id, "name": "Publish stable release",
+                "path": legacy.PUBLISH_PATH, "event": "push",
+                "head_branch": "release-publish/" + TAG, "head_sha": source_sha,
+                "status": "completed", "conclusion": "success",
+                "run_attempt": release["publication_run_attempt"]}
+    legacy.require(type(run.get("run_attempt")) is int and run["run_attempt"] > 0
+                   and all(run.get(key) == value for key, value in expected.items())
+                   and run.get("repository", {}).get("full_name") == legacy.REPOSITORY
                    and run.get("head_repository", {}).get("full_name") == legacy.REPOSITORY,
-                   "Publication was not the trusted stable-release caller")
+                   "Publication caller or attempt changed while verifying native jobs")
+    release["assets"] = assets
+    release["native_install_jobs"] = sorted(release["native_install_jobs"],
+                                             key=lambda job: job["name"])
     return release
 
 
@@ -133,6 +162,7 @@ def validate_execution_event(source_sha, publication_run_id):
         event.get("action") == "completed"
         and event.get("repository", {}).get("full_name") == legacy.REPOSITORY
         and run.get("id") == publication_run_id
+        and type(run.get("run_attempt")) is int and run["run_attempt"] > 0
         and run.get("head_sha") == source_sha
         and run.get("path") == legacy.PUBLISH_PATH
         and run.get("name") == "Publish stable release"
@@ -144,6 +174,7 @@ def validate_execution_event(source_sha, publication_run_id):
     )
     actual = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     legacy.require(actual == source_sha, "Cleanup checkout is not the published source")
+    return run["run_attempt"]
 
 
 def wait_publication_idle(api, maximum_seconds, report):
@@ -247,6 +278,7 @@ def selection_view(api, inventory, source_sha, publication_run_id, execute=False
 
 
 def execute_cleanup(api, token, args, frozen_plan, eligible, report):
+    initial_release = report["release"]
     with tempfile.TemporaryDirectory(prefix="maris-v024-cleanup-") as directory:
         subprocess.run(["git", "init", "--bare", "--quiet", directory], check=True, timeout=20)
         subprocess.run(["git", "-C", directory, "remote", "add", "origin",
@@ -258,7 +290,10 @@ def execute_cleanup(api, token, args, frozen_plan, eligible, report):
         report["git_dry_run"] = {"exit_code": probe.returncode,
                                  "stdout": probe.stdout, "stderr": probe.stderr}
         legacy.require(probe.returncode == 0, "Git rejected the atomic leased deletion preview")
-        publication_gate(api, args.source_sha, args.release_id, args.publication_run_id)
+        report["release_before_push"] = publication_gate(
+            api, args.source_sha, args.release_id, args.publication_run_id)
+        legacy.require(report["release_before_push"] == initial_release,
+                       "Release evidence changed after review; no deletion attempted")
         review_gate(api, args.source_sha)
         final = legacy.live_inventory(api)
         final_view, identity = selection_view(
@@ -295,6 +330,8 @@ def execute_cleanup(api, token, args, frozen_plan, eligible, report):
                        "Main changed during cleanup; inspect evidence")
         report["release_after"] = publication_gate(
             api, args.source_sha, args.release_id, args.publication_run_id)
+        legacy.require(report["release_after"] == initial_release,
+                       "Release evidence changed during deletion; inspect the confirmed ref readback")
         report["result"] = "atomic_leased_deletion_confirmed_absent"
 
 
@@ -339,13 +376,18 @@ def main():
         legacy.require(args.release_id > 0 and args.publication_run_id > 0,
                        "Actual release and publication run IDs are required")
         if args.execute:
-            validate_execution_event(args.source_sha, args.publication_run_id)
+            report["trigger_publication_attempt"] = validate_execution_event(
+                args.source_sha, args.publication_run_id)
         token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
         legacy.require(bool(token), "A normal repository token is required; it is never printed")
         api = legacy.GitHub(token)
         report["plan_sha256"] = args.plan_sha256
         report["release"] = publication_gate(
             api, args.source_sha, args.release_id, args.publication_run_id)
+        if args.execute:
+            legacy.require(report["release"]["publication_run_attempt"]
+                           == report["trigger_publication_attempt"],
+                           "Live publication attempt differs from the triggering completed event")
         report["review"] = review_gate(api, args.source_sha)
         wait_publication_idle(api, args.wait_seconds, report)
         inventory = legacy.live_inventory(api)

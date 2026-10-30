@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest import mock
@@ -71,7 +72,9 @@ class FakeAPI:
                 extension = ".zip" if system == "windows" else ".tar.gz"
                 names.append(f"Maris-0.2.4-{system}-{arch}{extension}")
         assets = [{"id": index + 1, "name": name, "state": "uploaded", "size": 100,
-                   "updated_at": "2026-10-30T00:00:00Z"} for index, name in enumerate(names)]
+                   "updated_at": "2026-10-30T00:00:00Z",
+                   "digest": "sha256:" + hashlib.sha256(name.encode()).hexdigest()}
+                  for index, name in enumerate(names)]
         jobs = []
         for platform in sorted(legacy.PLATFORMS):
             for bootstrap in ("release", "public"):
@@ -156,6 +159,102 @@ class CleanupV024Tests(unittest.TestCase):
         api.collections[f"/actions/runs/{PUBLICATION_ID}/jobs?filter=latest"].pop(0)
         with self.assertRaises(ValueError):
             cleanup.publication_gate(api, SOURCE, RELEASE_ID, PUBLICATION_ID)
+
+    def test_telemetry_is_retained_and_completed_preparation_uses_its_reviewed_tip(self):
+        api = FakeAPI()
+        telemetry = "obs/coreaudio-handoff-telemetry-20261012"
+        preparation = "rsi-preparation/v0.2.4-20261030"
+        preparation_sha = "8bce260cdbd9a6d05afae95aecb07406066b9977"
+        current = inventory([branch(telemetry, "caa9487178e5acee5e3ab2ba8a17e5e1f9ca5e6f"),
+                             branch(preparation, preparation_sha)])
+        frozen, _, _ = cleanup.materialize_refs(api, plan(), current, SOURCE)
+        selected = {item["name"]: item["sha"] for item in frozen["branches"]}
+        self.assertNotIn(telemetry, selected)
+        self.assertEqual(selected[preparation], preparation_sha)
+        eligible, _ = legacy.select_refs(api, frozen, current)
+        self.assertEqual([(item["name"], item["expected_sha"]) for item in eligible],
+                         [(preparation, preparation_sha)])
+        current["branches"][1]["commit"]["sha"] = OTHER
+        eligible, held = legacy.select_refs(api, frozen, current)
+        self.assertFalse(eligible)
+        self.assertIn({"name": preparation, "expected_sha": preparation_sha,
+                       "reason": "tip_changed_retain_for_review"}, held)
+
+    def test_publication_receipt_has_stable_order_and_requires_asset_digests(self):
+        api = FakeAPI()
+        before = cleanup.publication_gate(api, SOURCE, RELEASE_ID, PUBLICATION_ID)
+        api.collections[f"/releases/{RELEASE_ID}/assets"].reverse()
+        api.collections[f"/actions/runs/{PUBLICATION_ID}/jobs?filter=latest"].reverse()
+        self.assertEqual(cleanup.publication_gate(api, SOURCE, RELEASE_ID, PUBLICATION_ID),
+                         before)
+        self.assertTrue(all(set(asset) == {"id", "name", "size", "updated_at", "state", "digest"}
+                            for asset in before["assets"]))
+        for digest in (None, "sha256:incomplete", "sha512:" + "a" * 64):
+            api.collections[f"/releases/{RELEASE_ID}/assets"][0]["digest"] = digest
+            with self.subTest(digest=digest), self.assertRaises(ValueError):
+                cleanup.publication_gate(api, SOURCE, RELEASE_ID, PUBLICATION_ID)
+
+    def test_publication_changes_while_native_jobs_are_read_are_rejected(self):
+        for changed in ("asset_id", "run_attempt"):
+            api = FakeAPI()
+            collect = api.collection
+
+            def changed_collection(path, key=None):
+                result = collect(path, key)
+                if path == f"/actions/runs/{PUBLICATION_ID}/jobs?filter=latest":
+                    if changed == "asset_id":
+                        api.collections[f"/releases/{RELEASE_ID}/assets"][0]["id"] += 100
+                    else:
+                        api.rows[f"/actions/runs/{PUBLICATION_ID}"]["run_attempt"] += 1
+                return result
+
+            with self.subTest(changed=changed), \
+                    mock.patch.object(api, "collection", side_effect=changed_collection), \
+                    self.assertRaises(ValueError):
+                cleanup.publication_gate(api, SOURCE, RELEASE_ID, PUBLICATION_ID)
+
+    def test_execution_event_requires_and_returns_a_positive_publication_attempt(self):
+        api = FakeAPI()
+        event = {"action": "completed", "repository": {"full_name": legacy.REPOSITORY},
+                 "workflow_run": api.rows[f"/actions/runs/{PUBLICATION_ID}"]}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "event.json"
+            environment = {"GITHUB_ACTIONS": "true", "GITHUB_REPOSITORY": legacy.REPOSITORY,
+                           "GITHUB_EVENT_NAME": "workflow_run", "GITHUB_EVENT_PATH": str(path)}
+            with mock.patch.dict(os.environ, environment), \
+                    mock.patch.object(subprocess, "check_output", return_value=SOURCE + "\n"):
+                path.write_text(json.dumps(event))
+                self.assertEqual(cleanup.validate_execution_event(SOURCE, PUBLICATION_ID), 1)
+                for attempt in (None, True, 0, "1"):
+                    event["workflow_run"]["run_attempt"] = attempt
+                    path.write_text(json.dumps(event))
+                    with self.subTest(attempt=attempt), self.assertRaises(ValueError):
+                        cleanup.validate_execution_event(SOURCE, PUBLICATION_ID)
+
+    def test_trigger_attempt_mismatch_blocks_cleanup_before_inventory(self):
+        api = FakeAPI()
+        with tempfile.TemporaryDirectory() as directory:
+            options = args()
+            options.plan = ROOT / "scripts/cleanup_v024_branches.json"
+            options.plan_sha256 = hashlib.sha256(options.plan.read_bytes()).hexdigest()
+            options.output = Path(directory) / "receipt.json"
+            options.execute = True
+            options.wait_seconds = 0
+            with mock.patch.object(cleanup.argparse.ArgumentParser, "parse_args", return_value=options), \
+                    mock.patch.object(cleanup, "validate_execution_event", return_value=2), \
+                    mock.patch.object(legacy, "GitHub", return_value=api), \
+                    mock.patch.dict(os.environ, {"GH_TOKEN": "offline-fixture"}), \
+                    mock.patch.object(cleanup, "wait_publication_idle") as wait, \
+                    mock.patch.object(cleanup, "execute_cleanup") as execute, \
+                    mock.patch("builtins.print"):
+                self.assertEqual(cleanup.main(), 1)
+            wait.assert_not_called()
+            execute.assert_not_called()
+            report = json.loads(options.output.read_text())
+            self.assertEqual(report["trigger_publication_attempt"], 2)
+            self.assertEqual(report["release"]["publication_run_attempt"], 1)
+            self.assertFalse(report["deletion_attempted"])
+            self.assertIn("triggering completed event", report["error"])
 
     def test_old_version_stale_main_and_automatic_asset_runs_are_rejected(self):
         cases = [
@@ -244,6 +343,7 @@ class CleanupV024Tests(unittest.TestCase):
         eligible = [{"name": name, "expected_sha": sha}]
         report = {"deletion_attempted": False, "deleted_refs": []}
         api = FakeAPI()
+        report["release"] = cleanup.publication_gate(api, SOURCE, RELEASE_ID, PUBLICATION_ID)
         changed = inventory([branch(name, OTHER)])
         with mock.patch.object(legacy, "live_inventory", return_value=changed), \
                 mock.patch.object(subprocess, "run",
@@ -335,6 +435,7 @@ class CleanupV024Tests(unittest.TestCase):
                                 "disposition": "candidate_after_successful_new_release",
                                 "reason": "fixture published source"}]}
         report = {"deletion_attempted": False, "deleted_refs": []}
+        report["release"] = cleanup.publication_gate(api, SOURCE, RELEASE_ID, PUBLICATION_ID)
 
         def run_command(command, **_kwargs):
             if "--dry-run" in command:
@@ -372,6 +473,7 @@ class CleanupV024Tests(unittest.TestCase):
         eligible = [{"name": name, "expected_sha": sha}]
         report = {"deletion_attempted": False, "deleted_refs": []}
         api = FakeAPI()
+        report["release"] = cleanup.publication_gate(api, SOURCE, RELEASE_ID, PUBLICATION_ID)
         with mock.patch.object(legacy, "live_inventory",
                                return_value=inventory([branch(name, sha)])), \
                 mock.patch.object(subprocess, "run",
@@ -387,6 +489,73 @@ class CleanupV024Tests(unittest.TestCase):
             self.assertEqual(command[-1], ":refs/heads/" + name)
         self.assertEqual(report["result"], "atomic_leased_deletion_confirmed_absent")
         self.assertEqual(report["deleted_refs"], [{"name": name, "previous_sha": sha}])
+
+    def test_release_evidence_drift_after_dry_run_never_attempts_actual_push(self):
+        changes = [("id", 100), ("name", "unreviewed-asset"), ("size", 101),
+                   ("updated_at", "2026-10-30T00:01:00Z"), ("state", "new"),
+                   ("digest", "sha256:" + "f" * 64), ("run_attempt", 2)]
+        for field, value in changes:
+            api = FakeAPI()
+            name, sha = next(iter(cleanup.FIXED_REFS.items()))
+            frozen = {"branches": [{"name": name, "sha": sha,
+                                    "disposition": "candidate_after_successful_new_release",
+                                    "reason": "fixture reviewed exact head"}]}
+            eligible = [{"name": name, "expected_sha": sha}]
+            report = {"deletion_attempted": False, "deleted_refs": [],
+                      "release": cleanup.publication_gate(api, SOURCE, RELEASE_ID, PUBLICATION_ID)}
+
+            def run_command(command, **_kwargs):
+                if "--dry-run" in command:
+                    target = (api.rows[f"/actions/runs/{PUBLICATION_ID}"] if field == "run_attempt"
+                              else api.collections[f"/releases/{RELEASE_ID}/assets"][0])
+                    target[field] = value
+                return subprocess.CompletedProcess(command, 0, "", "")
+
+            with self.subTest(field=field), \
+                    mock.patch.object(legacy, "live_inventory",
+                                      return_value=inventory([branch(name, sha)])), \
+                    mock.patch.object(subprocess, "run", side_effect=run_command) as run:
+                with self.assertRaises(ValueError):
+                    cleanup.execute_cleanup(api, "offline-fixture", args(), frozen, eligible, report)
+            pushes = [call.args[0] for call in run.call_args_list
+                      if call.args[0][:2] == ["git", "push"]]
+            self.assertEqual(len(pushes), 1)
+            self.assertIn("--dry-run", pushes[0])
+            self.assertFalse(report["deletion_attempted"])
+            self.assertFalse(report["deleted_refs"])
+
+    def test_release_drift_after_deletion_keeps_readback_without_claiming_full_success(self):
+        for field, value in (("digest", "sha256:" + "f" * 64), ("run_attempt", 2)):
+            api = FakeAPI()
+            name, sha = next(iter(cleanup.FIXED_REFS.items()))
+            frozen = {"branches": [{"name": name, "sha": sha,
+                                    "disposition": "candidate_after_successful_new_release",
+                                    "reason": "fixture reviewed exact head"}]}
+            eligible = [{"name": name, "expected_sha": sha}]
+            report = {"deletion_attempted": False, "deleted_refs": [],
+                      "release": cleanup.publication_gate(api, SOURCE, RELEASE_ID, PUBLICATION_ID)}
+
+            def run_command(command, **_kwargs):
+                if command[:2] == ["git", "push"] and "--dry-run" not in command:
+                    target = (api.rows[f"/actions/runs/{PUBLICATION_ID}"] if field == "run_attempt"
+                              else api.collections[f"/releases/{RELEASE_ID}/assets"][0])
+                    target[field] = value
+                return subprocess.CompletedProcess(command, 0, "", "")
+
+            with self.subTest(field=field), \
+                    mock.patch.object(legacy, "live_inventory",
+                                      return_value=inventory([branch(name, sha)])), \
+                    mock.patch.object(subprocess, "run", side_effect=run_command) as run:
+                with self.assertRaisesRegex(ValueError, "changed during deletion"):
+                    cleanup.execute_cleanup(api, "offline-fixture", args(), frozen, eligible, report)
+            pushes = [call.args[0] for call in run.call_args_list
+                      if call.args[0][:2] == ["git", "push"]]
+            self.assertEqual(len(pushes), 2)
+            self.assertTrue(report["deletion_attempted"])
+            self.assertEqual(report["deleted_refs"], [{"name": name, "previous_sha": sha}])
+            self.assertEqual(report["release_before_push"], report["release"])
+            self.assertNotEqual(report["release_after"], report["release"])
+            self.assertNotEqual(report.get("result"), "atomic_leased_deletion_confirmed_absent")
 
     def test_workflow_integrity_pins_match_all_imported_cleanup_inputs(self):
         workflow = (ROOT / ".github/workflows/cleanup-v024-branches.yml").read_text()
