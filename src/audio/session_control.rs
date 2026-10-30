@@ -8,6 +8,10 @@ use serde_json::{json, Value};
 pub(super) fn final_runtime_status(mut status: Value) -> Value {
     if status["coreaudio_fail_open_reason"].as_str().is_some() {
         status["active"] = json!(false);
+        if status["coreaudio_handoff"].is_object() {
+            // This is the captured failure state, not proof of native restoration.
+            status["coreaudio_handoff"]["snapshot_phase"] = json!("before_teardown");
+        }
         status
     } else {
         json!({"active":false,"updated_at_ms":status["updated_at_ms"]})

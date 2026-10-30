@@ -43,6 +43,19 @@ pub(super) fn add_runtime_diagnostics(status: &mut serde_json::Value, session: &
     status["output_quarantined"] =
         serde_json::json!(metrics.output_quarantined.load(Ordering::Acquire));
     status["audio_callback_errors"] = serde_json::json!(metrics.errors.load(Ordering::Acquire));
+    status["coreaudio_handoff"] = serde_json::json!({
+        "snapshot_phase": "live",
+        "replacement_armed": session.tap.as_ref().map(TapCapture::replacement_armed),
+        "configuration_pending": session.tap.as_ref().map(TapCapture::configuration_pending),
+        "output_callback_ready": metrics.callback_ready.load(Ordering::Acquire),
+        "watchdog_timeout_ms": session.tap.as_ref().map(|tap| {
+            system_progress_timeout(
+                tap.progress_timeout(None),
+                session.output_buffer_frames,
+                session.sample_rate,
+            ).as_millis()
+        }),
+    });
     status["coreaudio_fail_open_reason"] = serde_json::json!(session
         .last_system_progress
         .and_then(|progress| progress.failure)
@@ -75,7 +88,7 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
     let rate = device.default_output_config()?.sample_rate();
     let initial = devices::config(&device, false, rate)?;
     let state = store.load()?;
-    let queue = Arc::new(ArrayQueue::new(192000 / 4));
+    let queue = super::tap::capture_queue();
     let metrics = Arc::new(Metrics::default());
     let updates = Arc::new(ArrayQueue::<Update>::new(8));
     let initial_buffer_frames = tap_ffi::output_buffer_frames(device_id).ok();
@@ -274,6 +287,14 @@ fn output_progress_timeout(
 
 fn output_stall_timeout(buffer_frames: Option<u32>, sample_rate: u32) -> Duration {
     output_progress_timeout(buffer_frames, sample_rate, Duration::from_millis(750))
+}
+
+fn system_progress_timeout(
+    capture_timeout: Duration,
+    buffer_frames: Option<u32>,
+    sample_rate: u32,
+) -> Duration {
+    capture_timeout.max(output_stall_timeout(buffer_frames, sample_rate))
 }
 
 fn observe_progress(
@@ -526,15 +547,14 @@ impl Session {
             );
             // Honor the slower native callback period. The aggregate budget keeps
             // the two-second startup allowance even on a fast physical output.
-            let timeout = self
-                .tap
-                .as_ref()
-                .expect("native tap checked above")
-                .progress_timeout(None)
-                .max(output_stall_timeout(
-                    self.output_buffer_frames,
-                    self.sample_rate,
-                ));
+            let timeout = system_progress_timeout(
+                self.tap
+                    .as_ref()
+                    .expect("native tap checked above")
+                    .progress_timeout(None),
+                self.output_buffer_frames,
+                self.sample_rate,
+            );
             let (observed, failure) =
                 observe_progress(self.last_system_progress, progress, now, timeout);
             self.last_system_progress = Some(observed);

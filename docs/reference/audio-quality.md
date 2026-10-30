@@ -138,6 +138,12 @@ The shared renderer now separates invalid/missing PCM from digital silence, uses
 
 Tests use generated samples and owned callback buffers: four sample rates, short/long gaps, polarity changes, digital silence, malformed source data, callback-size-aware interruption, overflow, timestamp reset, and notification/acknowledgement races. The original routing, DSP, resampling, settings and undo tests remain required. `continuity` status counters are scoped to the current pipeline and explicitly do not claim to measure power state. Hardware power transitions, charger/dock/USB/Bluetooth behavior and actual listening acceptance remain open; these protections must not be presented as proof that the reported physical noise is cured.
 
+## Large CoreAudio blocks and configuration publication
+
+The native capture regression delivers complete 65,536-frame blocks before allowing the real playback source to consume them, at 44.1, 48, 96 and 192 kHz. It checks startup readiness, finite nonzero PCM, retained playback reserve and absence of overflow-triggered resets. An ablation uses the former 48,000-frame queue with the same schedule: each block loses 17,536 frames, then the clock bridge observes the overflow and drains the remaining PCM without becoming ready. The production queue is preallocated for two maximum blocks; the playback target reserve is unchanged.
+
+A separate test invokes the real property listener concurrently with a control-thread observer. An observed configuration generation must include its device-list cause; unrelated properties, empty address lists and null contexts are also covered. The effective watchdog budget and the retained handoff snapshot have dedicated regressions. These tests use owned buffers and synthetic notifications without opening audio devices. They establish software contracts, not the root cause or resolution of the reported Mac Pro silence; physical playback, GUI and signing acceptance remain separate.
+
 ## Verification
 
 The regression suite covers DSP safety, shared headroom, bypass/A-B behavior, windowed-sinc quality, dynamic EQ, Bass Assist, correction-preserving output-switch transitions, bundled AutoEq matching/provenance, stable-device identity, listening undo, Music Context fallback/rate limiting and real MusicNN inference, output/application-scope controls, native routing state, multi-input/two-output mixing, bus alignment delay, explicit speech denoise, the Studio/pickers/settings input paths, menu dispatch, analysis freshness, MCP permissions and model-registry truthfulness.

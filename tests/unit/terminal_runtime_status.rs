@@ -86,3 +86,26 @@ fn normal_stop_keeps_the_existing_compact_inactive_contract() {
         );
     }
 }
+
+#[test]
+fn retained_handoff_is_labeled_as_a_snapshot_without_inventing_restoration() {
+    for armed in [json!(true), json!(false), serde_json::Value::Null] {
+        let final_status = final_runtime_status(json!({
+            "active": true,
+            "updated_at_ms": 500,
+            "coreaudio_fail_open_reason": "capture_stalled",
+            "coreaudio_handoff": {
+                "snapshot_phase": "live",
+                "replacement_armed": armed,
+                "configuration_pending": false,
+                "output_callback_ready": true,
+                "watchdog_timeout_ms": 2_000
+            }
+        }));
+        assert_eq!(final_status["active"], false);
+        let handoff = &final_status["coreaudio_handoff"];
+        assert_eq!(handoff["snapshot_phase"], "before_teardown");
+        assert_eq!(handoff["replacement_armed"], armed);
+        assert_eq!(handoff["watchdog_timeout_ms"], 2_000);
+    }
+}

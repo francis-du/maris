@@ -26,6 +26,13 @@ struct Capture {
     gate: AtomicU64,
 }
 
+const MAX_CAPTURE_FRAMES: usize = 65_536;
+
+// Hold a complete supported callback plus the previous block's playback reserve.
+pub(super) fn capture_queue() -> Arc<ArrayQueue<[f32; 2]>> {
+    Arc::new(ArrayQueue::new(MAX_CAPTURE_FRAMES * 2))
+}
+
 const CAPTURE_GATE_BLOCKED: u64 = 1;
 const CAPTURE_GATE_READER: u64 = 2;
 
@@ -95,10 +102,6 @@ unsafe extern "C" fn configuration_event(
         // Listener state shares the capture's owned lifetime; no native queries,
         // locks, allocations or profile writes occur on this callback.
         let capture = unsafe { &*context.cast::<Capture>() };
-        capture
-            .metrics
-            .configuration_events
-            .fetch_add(1, Ordering::Release);
         if object == ca::SYSTEM_OBJECT && !addresses.is_null() {
             let addresses = unsafe { std::slice::from_raw_parts(addresses, count as usize) };
             if device_list_changed(object, addresses) {
@@ -108,6 +111,12 @@ unsafe extern "C" fn configuration_event(
                     .fetch_add(1, Ordering::Release);
             }
         }
+        // Publish the cause before its generation so an acquiring observer cannot
+        // acknowledge the event without checking the changed device topology.
+        capture
+            .metrics
+            .configuration_events
+            .fetch_add(1, Ordering::Release);
     }
     0
 }
@@ -307,6 +316,10 @@ impl TapCapture {
 
     pub fn capture_mode(&self) -> &'static str {
         tap_mode(self.scoped_output)
+    }
+
+    pub(super) fn replacement_armed(&self) -> bool {
+        self.muted
     }
 
     fn prepare_scope(
@@ -892,7 +905,7 @@ unsafe extern "C" fn capture(
     }
     let channels = first.channels as usize;
     let count = first.bytes as usize / 4 / channels;
-    if count > 65536 {
+    if count > MAX_CAPTURE_FRAMES {
         capture.metrics.errors.fetch_add(1, Ordering::Relaxed);
         return 0;
     }
@@ -950,6 +963,10 @@ unsafe extern "C" fn capture(
 #[cfg(test)]
 #[path = "../../tests/unit/native_tap.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "../../tests/unit/native_configuration_publication.rs"]
+mod configuration_publication_tests;
 
 #[cfg(test)]
 mod topology_tests {

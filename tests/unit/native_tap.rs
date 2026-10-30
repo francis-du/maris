@@ -137,8 +137,11 @@ fn capture_gate_blocks_new_callbacks_and_waits_for_existing_readers() {
 }
 
 fn context(capacity: usize) -> Capture {
+    context_with_queue(Arc::new(ArrayQueue::new(capacity)))
+}
+fn context_with_queue(queue: Arc<ArrayQueue<[f32; 2]>>) -> Capture {
     Capture {
-        queue: Arc::new(ArrayQueue::new(capacity)),
+        queue,
         metrics: Arc::new(Metrics::default()),
         next_sample: AtomicU64::new(f64::NAN.to_bits()),
         gate: AtomicU64::new(0),
@@ -498,6 +501,91 @@ fn native_queue_pressure_is_counted_without_growing() {
     assert_eq!(context.metrics.overruns.load(Ordering::Relaxed), 2);
     assert_eq!(context.metrics.captured_frames.load(Ordering::Relaxed), 3);
 }
+
+#[test]
+fn maximum_native_blocks_start_live_source_and_preserve_pending_audio() {
+    use crate::audio::bridge::LiveSource;
+
+    const FRAMES: usize = 65_536;
+    const PENDING_FRAMES: usize = 16_384;
+    let mut samples = vec![0.25_f32; FRAMES * 2];
+    for rate in [44_100, 48_000, 96_000, 192_000] {
+        let mut context = context_with_queue(super::capture_queue());
+        let mut source = LiveSource::system(context.queue.clone(), rate);
+        for block in 1..=2 {
+            // A legal schedule delivers an entire native block before the output
+            // callback runs. The second block must also fit beside pending PCM.
+            process(&interleaved(&mut samples, 2), &mut context);
+            assert_eq!(context.metrics.errors.load(Ordering::Acquire), 0);
+            assert_eq!(
+                context.metrics.overruns.load(Ordering::Acquire),
+                0,
+                "rate={rate}, block={block}: a legal native block lost PCM"
+            );
+            assert_eq!(
+                context.metrics.captured_frames.load(Ordering::Acquire),
+                (FRAMES * block) as u64
+            );
+            let mut nonzero_pcm = false;
+            for _ in 0..256 {
+                let (frame, ready) = source.frame(&context.metrics);
+                assert!(ready, "rate={rate}, block={block}: source never became ready");
+                assert!(frame.iter().all(|sample| sample.is_finite()));
+                nonzero_pcm |= frame.iter().any(|sample| sample.abs() > 0.001);
+            }
+            assert!(
+                nonzero_pcm,
+                "rate={rate}, block={block}: valid PCM was discarded"
+            );
+            assert_eq!(context.metrics.stream_resets.load(Ordering::Acquire), 0);
+
+            // Simulate the rest of a consumer period without filtering 64k more
+            // samples. Retain more than the largest 50 ms system-source reserve
+            // at 192 kHz so the following capture is not tested on an empty queue.
+            while context.queue.len() > PENDING_FRAMES {
+                context.queue.pop().unwrap();
+            }
+            assert_eq!(context.queue.len(), PENDING_FRAMES);
+        }
+    }
+}
+
+#[test]
+fn undersized_native_queue_repeatedly_loses_startup_pcm_after_overrun_reset() {
+    use crate::audio::bridge::LiveSource;
+
+    const FRAMES: usize = 65_536;
+    const OLD_CAPACITY: usize = 48_000;
+    let mut context = context(OLD_CAPACITY);
+    let mut source = LiveSource::system(context.queue.clone(), 48_000);
+    let mut samples = vec![0.25_f32; FRAMES * 2];
+    for block in 1..=2 {
+        // Ablation: use the former production capacity with the same whole-block
+        // schedule. Capture advances, but every output attempt flushes its PCM.
+        process(&interleaved(&mut samples, 2), &mut context);
+        assert_eq!(context.metrics.errors.load(Ordering::Acquire), 0);
+        assert_eq!(context.queue.len(), OLD_CAPACITY);
+        assert_eq!(
+            context.metrics.captured_frames.load(Ordering::Acquire),
+            (FRAMES * block) as u64
+        );
+        assert_eq!(
+            context.metrics.overruns.load(Ordering::Acquire),
+            ((FRAMES - OLD_CAPACITY) * block) as u64
+        );
+        assert_eq!(source.frame(&context.metrics), ([0.0; 2], false));
+        assert!(
+            context.queue.is_empty(),
+            "overrun recovery did not drain stale PCM"
+        );
+        assert_eq!(
+            context.metrics.stream_resets.load(Ordering::Acquire),
+            block as u64
+        );
+        assert_eq!(source.frame(&context.metrics), ([0.0; 2], false));
+    }
+}
+
 #[test]
 fn native_empty_callback_does_not_invent_audio() {
     let mut context = context(8);
