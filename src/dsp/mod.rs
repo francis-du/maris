@@ -42,7 +42,7 @@ impl Coefficients {
     }
 }
 
-pub const DSP_REVISION: &str = "music-fidelity-14";
+pub const DSP_REVISION: &str = "music-fidelity-15";
 
 #[derive(Clone, Copy, PartialEq)]
 pub struct Settings {
@@ -230,7 +230,20 @@ impl Chain {
     }
     fn retune(&self, settings: Settings) -> Self {
         let mut next = Self::new(settings);
-        next.music = self.music.retune(settings.music);
+        // The music processor cannot see changes in its outer EQ/stereo feed.
+        // Reuse its state only while that entire upstream path stays unchanged;
+        // otherwise the incoming chain would inherit stale filters and dynamics.
+        // A reference-only change still retains the valid wet-path history.
+        let music_feed_unchanged = self.settings.gain == settings.gain
+            && self.settings.bypass == settings.bypass
+            && (settings.bypass
+                || (self.settings.coefficients == settings.coefficients
+                    && self.settings.width == settings.width
+                    && self.settings.crossfeed == settings.crossfeed
+                    && self.settings.lowpass == settings.lowpass));
+        if music_feed_unchanged {
+            next.music = self.music.retune(settings.music);
+        }
         // Global bypass skips the outer EQ and crossfeed-lowpass path entirely.
         // Do not carry state across a bypass boundary or that frozen history can
         // reappear when processing is re-enabled after an arbitrary dry interval.

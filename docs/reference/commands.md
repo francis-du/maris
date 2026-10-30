@@ -60,7 +60,7 @@ The CLI is the scriptable interface to the same saved settings and audio engine 
 ~~~sh
 maris update
 maris update --dry-run
-maris update --version 0.2.3
+maris update --version 0.2.4
 ~~~
 
 `update` is available from installed CLI releases that contain the bundled verified updater. It uses the same release manifest, archive checksum, executable checksum, transactional replacement and backup logic as the public installer. A development build does not silently fetch or install anything.
@@ -169,4 +169,4 @@ Mutating commands validate ranges and revisions before saving. Routing commands 
 
 ## Development contract
 
-Source builds require Rust 1.94. The current DSP behavior revision is `music-fidelity-14`; changing audible processing requires updating that revision and its regression evidence.
+Source builds require Rust 1.94. The current DSP behavior revision is `music-fidelity-15`; changing audible processing requires updating that revision and its regression evidence.

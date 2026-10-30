@@ -1,4 +1,7 @@
-use super::{observe_progress, output_progress_timeout, output_stall_timeout, ProgressStall};
+use super::{
+    observe_progress, output_progress_timeout, output_stall_timeout, system_progress_timeout,
+    ProgressStall,
+};
 use std::time::{Duration, Instant};
 
 #[test]
@@ -85,4 +88,21 @@ fn progress_windows_scale_with_the_real_output_buffer_period() {
     assert!(large > Duration::from_secs(4));
     assert!(large <= Duration::from_secs(5));
     assert_eq!(startup, large);
+}
+
+#[test]
+fn system_watchdog_honors_the_slower_capture_or_output_budget() {
+    assert_eq!(
+        system_progress_timeout(Duration::from_secs(2), Some(512), 48_000),
+        Duration::from_secs(2)
+    );
+    let slow_output = output_stall_timeout(Some(65_536), 44_100);
+    assert_eq!(
+        system_progress_timeout(Duration::from_secs(2), Some(65_536), 44_100),
+        slow_output
+    );
+    assert_eq!(
+        system_progress_timeout(Duration::from_secs(5), Some(65_536), 44_100),
+        Duration::from_secs(5)
+    );
 }

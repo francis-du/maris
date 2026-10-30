@@ -302,6 +302,9 @@ impl Session {
         for strip in &state.config.strips {
             let metrics = Arc::new(Metrics::default());
             if let Some(selector) = strip.source_device.as_deref() {
+                #[cfg(target_os = "macos")]
+                let queue = super::tap::capture_queue();
+                #[cfg(not(target_os = "macos"))]
                 let queue = Arc::new(ArrayQueue::new(48_000));
                 let input_rate;
                 if let Some(pid) = selector.strip_prefix("pid:") {
