@@ -300,14 +300,33 @@ def execute_cleanup(api, token, args, frozen_plan, eligible, report):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--plan", type=Path, required=True)
-    parser.add_argument("--plan-sha256", required=True)
-    parser.add_argument("--source-sha", required=True)
-    parser.add_argument("--release-id", type=int, required=True)
-    parser.add_argument("--publication-run-id", type=int, required=True)
-    parser.add_argument("--wait-seconds", type=int, default=240)
-    parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--plan", type=Path, required=True,
+                        help="Path to the reviewed v0.2.4 JSON plan; only its six exact "
+                             "branch names are in scope.")
+    parser.add_argument("--plan-sha256", required=True,
+                        help="Expected SHA-256 of the reviewed plan bytes "
+                             "(64 lowercase hexadecimal characters).")
+    parser.add_argument("--source-sha", required=True,
+                        help="Published v0.2.4 source commit (40 lowercase hexadecimal "
+                             "characters); must match the tag, main and publication run.")
+    parser.add_argument("--release-id", type=int, required=True,
+                        help="Positive GitHub ID of the published stable v0.2.4 release; "
+                             "it must also be the latest release.")
+    parser.add_argument("--publication-run-id", type=int, required=True,
+                        help="Positive GitHub run ID of the successful v0.2.4 Publish "
+                             "stable release caller; all 12 native installation jobs "
+                             "and stable promotion must have succeeded.")
+    parser.add_argument("--wait-seconds", type=int, default=240,
+                        help="Publication-idle polling budget in seconds, from 0 through "
+                             "240 (default: 240); active publication workflows block deletion.")
+    parser.add_argument("--output", type=Path, required=True,
+                        help="Path for a new JSON evidence receipt; an existing destination "
+                             "is never overwritten.")
+    parser.add_argument("--execute", action="store_true",
+                        help="Perform actual atomic SHA-leased branch deletions only in "
+                             "the authenticated successful v0.2.4 workflow event after all "
+                             "publication, review and live-ref gates pass. Omit for "
+                             "read-only review.")
     args = parser.parse_args()
     report = {"schema_version": 1, "repository": legacy.REPOSITORY, "tag": TAG,
               "started_at": legacy.now(), "execute_requested": args.execute,
