@@ -5,7 +5,7 @@
   "main_sha": "67d2ebcfcafdeb5584329525738fdc8e81f4ae7b",
   "tag_precondition": "v0.2.4",
   "required_merged_pr": 96,
-  "scope": "Only the reviewed unchanged UID ref, the completed exact-tip preparation ref and the four explicitly named ancestor refs after actual successful v0.2.4 stable publication. Retain obs/coreaudio-handoff-telemetry-20261012 because its last_progress watchdog callback-count snapshot has not been integrated. The existing request to clean unused branches after publication is the authorization; no additional human approval is asserted.",
+  "scope": "Only the reviewed unchanged UID ref, the completed exact-tip preparation ref and the five explicitly named ancestor refs after actual successful v0.2.4 stable publication. Retain obs/coreaudio-handoff-telemetry-20261012 because its last_progress watchdog callback-count snapshot has not been integrated. The existing request to clean unused branches after publication is the authorization; no additional human approval is asserted.",
   "fixed_refs": [
     {
       "name": "refactor/macos-stable-device-uid",
@@ -20,6 +20,7 @@
   ],
   "ancestor_refs": [
     "fix/coreaudio-startup-20261030",
+    "fix/runtime-observation-clock-v024",
     "docs-refresh/v0.2.4",
     "release-validation/v0.2.4",
     "release-publish/v0.2.4"

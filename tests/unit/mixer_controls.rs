@@ -444,6 +444,165 @@ fn a_real_expired_heartbeat_rejects_a_channel_until_the_same_target_is_live_agai
     assert!(!store.directory.join("listening.json").exists());
 }
 
+#[test]
+fn mixer_actions_read_before_each_clock_and_resample_inside_the_transaction() {
+    use fs2::FileExt;
+    use std::fs::OpenOptions;
+
+    for row in [0, 3] {
+        for input in [KeyCode::Right, KeyCode::Char(' '), KeyCode::Char('u')] {
+            let (_directory, store, mut displayed) = fixture();
+            displayed["updated_at_ms"] = json!(10_000);
+            store.write_json("runtime.json", &displayed).unwrap();
+            let pinned = displayed.clone();
+            let before = mixer::load(&store).unwrap();
+            let probe = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(store.directory.join("mixer.lock"))
+                .unwrap();
+            let mut samples = 0;
+            let mut selected = row;
+            let notice = application_key_with_clock(
+                &store,
+                &displayed,
+                &json!({}),
+                &mut selected,
+                &mut vec![],
+                None,
+                (input, || {
+                    samples += 1;
+                    if samples == 1 {
+                        FileExt::try_lock_exclusive(&probe).unwrap();
+                        FileExt::unlock(&probe).unwrap();
+                    } else {
+                        assert_eq!(samples, 2, "each guard must sample exactly once");
+                        let error = FileExt::try_lock_exclusive(&probe)
+                            .expect_err("the second observation must hold mixer.lock");
+                        assert_eq!(
+                            error.raw_os_error(),
+                            fs2::lock_contended_error().raw_os_error()
+                        );
+                    }
+                    let now = 10_000 + samples - 1;
+                    let mut next = displayed.clone();
+                    next["updated_at_ms"] = json!(now + 1);
+                    store.write_json("runtime.json", &next).unwrap();
+                    now
+                }),
+            )
+            .unwrap();
+            assert!(notice.is_some());
+            assert_eq!(samples, 2);
+            assert_eq!(displayed, pinned, "the displayed target must stay pinned");
+            let after = mixer::load(&store).unwrap();
+            let mut expected = before.config.clone();
+            if input == KeyCode::Char('u') {
+                expected = before.previous.clone().unwrap();
+            } else if row == 0 {
+                if input == KeyCode::Right {
+                    expected.strips[0].gain_db += 0.5;
+                } else {
+                    expected.strips[0].mute = true;
+                }
+            } else if input == KeyCode::Right {
+                expected.buses[1].gain_db += 0.5;
+            } else {
+                expected.buses[1].mute = true;
+            }
+            assert_eq!(after.config, expected);
+            assert_eq!(after.revision, before.revision + 1);
+            assert_eq!(after.previous, Some(before.config));
+            assert_eq!(after.scenes, before.scenes);
+            for name in ["control.json", "profile.json", "listening.json"] {
+                assert!(!store.directory.join(name).exists());
+            }
+        }
+    }
+}
+
+#[test]
+fn mixer_actions_reject_heartbeats_that_expire_or_move_into_the_future_before_lock_admission() {
+    use fs2::FileExt;
+    use std::fs::{self, OpenOptions};
+
+    for future in [false, true] {
+        for row in [0, 3] {
+            for input in [KeyCode::Right, KeyCode::Char(' '), KeyCode::Char('u')] {
+                let (_directory, store, mut displayed) = fixture();
+                displayed["updated_at_ms"] = json!(10_000);
+                store.write_json("runtime.json", &displayed).unwrap();
+                let saved = fs::read(store.directory.join("mixer.json")).unwrap();
+                let probe = OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .open(store.directory.join("mixer.lock"))
+                    .unwrap();
+                let mut samples = 0;
+                let mut selected = row;
+                let result = application_key_with_clock(
+                    &store,
+                    &displayed,
+                    &json!({}),
+                    &mut selected,
+                    &mut vec![],
+                    None,
+                    (input, || {
+                        samples += 1;
+                        if samples == 1 {
+                            if future {
+                                let mut next = displayed.clone();
+                                next["updated_at_ms"] = json!(10_001);
+                                store.write_json("runtime.json", &next).unwrap();
+                            }
+                            10_000
+                        } else {
+                            assert_eq!(samples, 2);
+                            let error = FileExt::try_lock_exclusive(&probe)
+                                .expect_err("freshness must be checked under mixer.lock");
+                            assert_eq!(
+                                error.raw_os_error(),
+                                fs2::lock_contended_error().raw_os_error()
+                            );
+                            if future { 10_000 } else { 11_000 }
+                        }
+                    }),
+                );
+                assert!(result.is_err(), "future={future}, row={row}, key={input:?}");
+                assert_eq!(samples, 2);
+                assert_eq!(fs::read(store.directory.join("mixer.json")).unwrap(), saved);
+                assert_eq!(displayed["updated_at_ms"], 10_000);
+            }
+        }
+    }
+}
+
+#[test]
+fn mixer_guard_uses_one_snapshot_for_identity_mode_and_restart() {
+    for field in ["session_id", "system_backend", "restart_required"] {
+        let (_directory, store, mut displayed) = fixture();
+        displayed["updated_at_ms"] = json!(10_000);
+        store.write_json("runtime.json", &displayed).unwrap();
+        let saved = std::fs::read(store.directory.join("mixer.json")).unwrap();
+        ensure_mixer_current(&store, &displayed, || {
+            let mut next = displayed.clone();
+            if field == "restart_required" {
+                next["mixer"][field] = json!(true);
+            } else {
+                next[field] = json!("replacement");
+            }
+            store.write_json("runtime.json", &next).unwrap();
+            10_000
+        })
+        .unwrap();
+        assert!(ensure_mixer_current(&store, &displayed, || 10_000).is_err());
+        assert_eq!(
+            std::fs::read(store.directory.join("mixer.json")).unwrap(),
+            saved
+        );
+    }
+}
+
 #[cfg(unix)]
 fn run_runtime_lock_child(change: &str) {
     use std::{
@@ -454,7 +613,7 @@ fn run_runtime_lock_child(change: &str) {
     };
     const FLAG: &str = "MARIS_MIXER_LOCK_CHILD";
     assert!(std::env::var_os(FLAG).is_none(), "child must not recurse");
-    // Parent ownership also removes FIFO fixtures when a stalled child is killed.
+    // Parent ownership also removes runtime fixtures when a stalled child is killed.
     let cleanup = tempfile::tempdir().unwrap();
     let mut child = Command::new(std::env::current_exe().unwrap())
         .args([
@@ -482,8 +641,8 @@ fn run_runtime_lock_child(change: &str) {
         let mut text = String::new();
         stderr.read_to_string(&mut text).map(|_| text)
     });
-    // This is only a failure deadline. FIFO open/EOF, never elapsed time,
-    // orders the real runtime reads and lock admission inside the owned child.
+    // This is only a failure deadline. Channel handshakes, never elapsed time,
+    // order the real runtime reads and lock admission inside the owned child.
     let received = completed.recv_timeout(Duration::from_secs(30));
     if received.is_err() && child.try_wait().unwrap().is_none() {
         child.kill().unwrap();
@@ -491,9 +650,9 @@ fn run_runtime_lock_child(change: &str) {
     let status = child.wait().unwrap();
     output.join().unwrap();
     let stderr = errors.join().unwrap().unwrap();
-    cleanup.close().expect("remove the owned FIFO fixture root");
+    cleanup.close().expect("remove the owned runtime fixture root");
     let stdout = received
-        .expect("owned FIFO test child exceeded its cleanup deadline")
+        .expect("owned runtime test child exceeded its cleanup deadline")
         .unwrap();
     assert!(status.success(), "{change}: {status}\n{stdout}\n{stderr}");
     assert!(
@@ -532,10 +691,8 @@ fn unchanged_runtime_allows_both_actions_after_mixer_lock_admission() {
 fn runtime_lock_handshake_child() {
     use fs2::FileExt;
     use std::{
-        ffi::CString,
         fs::{self, OpenOptions},
-        io::Write,
-        os::unix::ffi::OsStrExt,
+        sync::mpsc,
     };
     let change = std::env::var("MARIS_MIXER_LOCK_CHILD")
         .expect("only the owned parent test may launch this child");
@@ -544,7 +701,8 @@ fn runtime_lock_handshake_child() {
         "session_id" | "rebind_count" | "restart_required" | "unchanged"
     ));
     let cleanup_root = std::path::PathBuf::from(
-        std::env::var_os("MARIS_MIXER_LOCK_ROOT").expect("parent must own the FIFO fixture root"),
+        std::env::var_os("MARIS_MIXER_LOCK_ROOT")
+            .expect("parent must own the runtime fixture root"),
     );
     for input in [KeyCode::Right, KeyCode::Char('u')] {
         let directory = tempfile::tempdir_in(&cleanup_root).unwrap();
@@ -552,7 +710,6 @@ fn runtime_lock_handshake_child() {
         let before = mixer::load(&store).unwrap();
         let saved = fs::read(store.directory.join("mixer.json")).unwrap();
         let now = displayed["updated_at_ms"].as_u64().unwrap();
-        let old_runtime = serde_json::to_vec(&displayed).unwrap();
         let mut current = displayed.clone();
         match change.as_str() {
             "session_id" => current["session_id"] = json!("replacement-session"),
@@ -568,43 +725,57 @@ fn runtime_lock_handshake_child() {
             .open(store.directory.join("mixer.lock"))
             .unwrap();
         lock.lock_exclusive().unwrap();
-        let runtime = store.directory.join("runtime.json");
-        let next = store.directory.join("runtime-next.fifo");
-        fs::remove_file(&runtime).unwrap();
-        for path in [&runtime, &next] {
-            let name = CString::new(path.as_os_str().as_bytes()).unwrap();
-            // SAFETY: the terminated path lives across this call; each FIFO
-            // belongs to this test's private TempDir and has no audio endpoint.
-            assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
-        }
+        let (read_ready, first_read) = mpsc::channel();
+        let (resume, published) = mpsc::channel();
         let worker_store = store.clone();
         let worker = std::thread::spawn(move || {
-            application_key_at(
+            let probe = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(worker_store.directory.join("mixer.lock"))
+                .unwrap();
+            let mut samples = 0;
+            let result = application_key_with_clock(
                 &worker_store,
                 &displayed,
                 &json!({}),
                 &mut 0,
                 &mut vec![],
                 None,
-                ApplicationInput { key: input, now },
+                (input, || {
+                    samples += 1;
+                    match samples {
+                        1 => {
+                            // The initial runtime read is complete. The parent
+                            // changes the file before permitting lock admission.
+                            read_ready.send(()).unwrap();
+                            published.recv().unwrap();
+                        }
+                        2 => {
+                            let contention = FileExt::try_lock_exclusive(&probe)
+                                .expect_err("runtime recheck must hold mixer.lock");
+                            assert_eq!(
+                                contention.raw_os_error(),
+                                fs2::lock_contended_error().raw_os_error()
+                            );
+                        }
+                        _ => panic!("unexpected runtime clock sample"),
+                    }
+                    now
+                }),
             )
             .map(|notice| notice.is_some())
-            .map_err(|error| format!("{error:#}"))
+            .map_err(|error| format!("{error:#}"));
+            assert_eq!(samples, 2, "both admission checks must observe runtime");
+            result
         });
-        // The first writer opens only once ensure_displayed_output_at has
-        // opened generation A. Install B before EOF lets that read complete.
-        let mut first = OpenOptions::new().write(true).open(&runtime).unwrap();
-        fs::rename(&next, &runtime).unwrap();
-        first.write_all(&old_runtime).unwrap();
-        drop(first);
-        // The second rendezvous proves the identity guard has finished and
-        // ensure_mixer_current holds B's old read descriptor. Publish the new
-        // ordinary runtime file before EOF and before releasing mixer.lock.
-        let mut second = OpenOptions::new().write(true).open(&runtime).unwrap();
+        // The channel proves the first snapshot has been read. Publishing and
+        // releasing the lock before resuming cannot change that snapshot, but
+        // the transaction must reject a changed session or route on its reread.
+        first_read.recv().unwrap();
         store.write_json("runtime.json", &current).unwrap();
-        second.write_all(&old_runtime).unwrap();
-        drop(second);
         drop(lock);
+        resume.send(()).unwrap();
         let result = worker.join().unwrap();
         if change == "unchanged" {
             assert_eq!(result, Ok(true), "{input:?}");

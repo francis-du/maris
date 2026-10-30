@@ -109,3 +109,54 @@ fn retained_handoff_is_labeled_as_a_snapshot_without_inventing_restoration() {
         assert_eq!(handoff["watchdog_timeout_ms"], 2_000);
     }
 }
+
+#[test]
+fn runtime_observation_reads_once_before_sampling_its_clock() {
+    let temporary = tempfile::tempdir().unwrap();
+    let store = Store::at(temporary.path());
+    store
+        .write_json(
+            "runtime.json",
+            &json!({"active":true,"updated_at_ms":5000,"session_id":"observed"}),
+        )
+        .unwrap();
+    let mut samples = 0;
+    let (observed, now) = crate::audio::runtime_status_with_clock(&store, || {
+        samples += 1;
+        // Publishing at the clock boundary must not replace the snapshot that
+        // was already read, or make its valid heartbeat look like the future.
+        store
+            .write_json(
+                "runtime.json",
+                &json!({"active":true,"updated_at_ms":5002,"session_id":"next"}),
+            )
+            .unwrap();
+        5001
+    });
+    assert_eq!(samples, 1);
+    assert_eq!(now, 5001);
+    assert_eq!(observed["active"], true);
+    assert_eq!(observed["updated_at_ms"], 5000);
+    assert_eq!(observed["session_id"], "observed");
+    assert_eq!(
+        crate::audio::runtime_status_at(&store, 5002)["session_id"],
+        "next"
+    );
+}
+
+#[test]
+fn fixed_runtime_clock_still_rejects_future_and_expired_heartbeats() {
+    let temporary = tempfile::tempdir().unwrap();
+    let store = Store::at(temporary.path());
+    for (heartbeat, active) in [(4000, true), (1000, true), (999, false), (4001, false)] {
+        store
+            .write_json(
+                "runtime.json",
+                &json!({"active":true,"updated_at_ms":heartbeat}),
+            )
+            .unwrap();
+        let observed = crate::audio::runtime_status_at(&store, 4000);
+        assert_eq!(observed["active"], active, "heartbeat {heartbeat}");
+        assert_eq!(observed["stale"] == true, !active, "heartbeat {heartbeat}");
+    }
+}

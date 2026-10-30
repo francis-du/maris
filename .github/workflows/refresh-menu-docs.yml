@@ -1,4 +1,4 @@
-name: Refresh native menu documentation
+name: Refresh native documentation
 
 on:
   push:
@@ -21,7 +21,7 @@ env:
 jobs:
   capture:
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -32,15 +32,102 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.13'
-      - name: Install declared Rust toolchain
-        run: rustup toolchain install 1.94.0 --profile minimal
+      - name: Install declared Rust toolchain and formatter
+        run: rustup toolchain install 1.94.0 --profile minimal --component rustfmt
+      - name: Format Rust sources and record exact preparation bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .maris-review/runtime-clock
+          cargo fmt --all
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+
+          paths = (
+              'src/audio/mod.rs', 'src/ui/tui/input.rs', 'src/ui/tui/actions.rs',
+              'src/tuning/planner.rs', 'tests/unit/terminal_runtime_status.rs',
+              'tests/unit/mixer_controls.rs',
+          )
+          changed = subprocess.check_output(
+              ['git', 'diff', '--name-only', '--', '*.rs'], text=True).splitlines()
+          if not set(changed).issubset(paths):
+              raise SystemExit('Formatter changed a source outside the reviewed preparation scope')
+          bindings = {}
+          formatted = {}
+          for name in paths:
+              before = subprocess.check_output(['git', 'show', 'HEAD:' + name])
+              after = Path(name).read_bytes()
+              bindings[name] = {
+                  'input_sha256': hashlib.sha256(before).hexdigest(),
+                  'prepared_sha256': hashlib.sha256(after).hexdigest(),
+              }
+              if before != after:
+                  formatted[name] = after.decode('utf-8')
+          report = {
+              'source_commit': os.environ['GITHUB_SHA'],
+              'run_id': int(os.environ['GITHUB_RUN_ID']),
+              'run_attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
+              'source_bindings': bindings,
+              'formatted_files': formatted,
+          }
+          Path('.maris-review/runtime-clock/preparation.json').write_text(
+              json.dumps(report, indent=2) + '\n', encoding='utf-8')
+          PY
+      - name: Check runtime observations and mixer lock admission
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked --no-default-features --lib terminal_runtime_status_tests 2>&1 | tee .maris-review/runtime-clock/runtime-status.log
+          cargo test --locked --no-default-features --lib mixer_tests 2>&1 | tee .maris-review/runtime-clock/mixer-controls.log
+      - name: Exercise real terminal input and fixed-clock tuning previews
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked --no-default-features --test terminal_input 2>&1 | tee .maris-review/runtime-clock/terminal-input.log
+          cargo test --locked --no-default-features --test music_tuning 2>&1 | tee .maris-review/runtime-clock/music-tuning.log
+      - name: Build the actual offline terminal probe
+        run: cargo build --locked --example ui_probe
+      - name: Refresh actual offline Ratatui illustrations
+        run: python scripts/docs_assets.py --refresh
       - name: Capture isolated production AppKit menu views
         run: python scripts/capture_menu_docs.py --refresh --output-dir .maris-review/refreshed-menu-docs
-      - name: Preserve generated illustrations and their native capture evidence
+      - name: Recheck prepared source bindings and documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path('.maris-review/runtime-clock/preparation.json').read_text())
+          for name, binding in report['source_bindings'].items():
+              if hashlib.sha256(Path(name).read_bytes()).hexdigest() != binding['prepared_sha256']:
+                  raise SystemExit('Prepared source changed during native validation: ' + name)
+          report['source_unchanged_during_checks'] = True
+          Path('.maris-review/runtime-clock/preparation.json').write_text(
+              json.dumps(report, indent=2) + '\n', encoding='utf-8')
+          PY
+          python scripts/docs_assets.py
+      - name: Preserve generated illustrations and their native evidence
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: native-menu-docs-${{ github.sha }}
           path: |
+            docs/assets/illustrations.json
+            docs/assets/studio-*.svg
+            docs/assets/settings-*.svg
+            docs/assets/presets-*.svg
+            .maris-review/studio-*.json
+            .maris-review/inspector-*.json
+            .maris-review/docs-capture.log
+            .maris-review/runtime-clock/
             .maris-review/refreshed-menu-docs/
             .maris-review/menu-review.json
             .maris-review/native-menu/
@@ -48,5 +135,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-# Generated assets require review and a normal source commit. This workflow
-# never updates Git refs, publishes a release or changes the site validation gates.
+# Generated assets and formatting changes require review and a normal source commit.
+# This read-only workflow never updates Git refs, publishes a release, or changes
+# the main CI, release validation, or physical-device acceptance gates.
