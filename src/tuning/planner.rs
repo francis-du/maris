@@ -490,11 +490,7 @@ pub fn from_live_at(store: &Store, goal: &str, now: u64) -> Result<Proposal> {
     from_live_snapshot(store, goal, || now)
 }
 
-fn from_live_snapshot(
-    store: &Store,
-    goal: &str,
-    clock: impl FnOnce() -> u64,
-) -> Result<Proposal> {
+fn from_live_snapshot(store: &Store, goal: &str, clock: impl FnOnce() -> u64) -> Result<Proposal> {
     let (runtime, now) = crate::audio::runtime_status_with_clock(store, clock);
     ensure!(runtime["active"] == true, "No active audio session");
     let device = runtime["output"]

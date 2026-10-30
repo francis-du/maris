@@ -564,7 +564,11 @@ fn mixer_actions_reject_heartbeats_that_expire_or_move_into_the_future_before_lo
                                 error.raw_os_error(),
                                 fs2::lock_contended_error().raw_os_error()
                             );
-                            if future { 10_000 } else { 11_000 }
+                            if future {
+                                10_000
+                            } else {
+                                11_000
+                            }
                         }
                     }),
                 );
@@ -650,7 +654,9 @@ fn run_runtime_lock_child(change: &str) {
     let status = child.wait().unwrap();
     output.join().unwrap();
     let stderr = errors.join().unwrap().unwrap();
-    cleanup.close().expect("remove the owned runtime fixture root");
+    cleanup
+        .close()
+        .expect("remove the owned runtime fixture root");
     let stdout = received
         .expect("owned runtime test child exceeded its cleanup deadline")
         .unwrap();

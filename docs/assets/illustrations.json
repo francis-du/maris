@@ -4,7 +4,7 @@
   "source_sha256": {
     "src/ui/tui/view.rs": "915d76512a1be7eef724a3b287e2de89fbd954f14c4585e98a956311a885d886",
     "src/ui/tui/dashboard.rs": "5235f57cb26fda77a4d1744565fc072b2a052b6abb72e49588a018a3d3ed96ac",
-    "src/ui/tui/input.rs": "c57b28b48b9a34d0d38d9b9a381c9403fc50c801817de28f670ce29af6ab111f",
+    "src/ui/tui/input.rs": "7786402015a68ecb719a236d74d9df49485d8efe52654ed24d992bda3d79092c",
     "src/ui/tui/music.rs": "adccbd40aad88a5e4b60b7a8e7a6f71e2a8b2172cf9a0a6218bb4af5ed96533f",
     "src/ui/tui/studio/mod.rs": "cc40b6ad477c5e958262ce3d06f2ebd67544673a6996bb9ba83a56d5c6bab8c8",
     "src/ui/tui/studio/analyzer.rs": "a7147fc511ec2af7245c16d6cf58e740b94c6d84602c67c45b62a448c94fe089",
