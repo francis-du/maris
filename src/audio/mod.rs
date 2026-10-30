@@ -916,12 +916,21 @@ fn now_ms() -> u64 {
     crate::analysis::now_ms()
 }
 pub fn runtime_status(store: &Store) -> Value {
-    runtime_status_at(store, now_ms())
+    runtime_status_with_clock(store, now_ms).0
 }
 
+#[cfg(test)]
 pub(crate) fn runtime_status_at(store: &Store, now: u64) -> Value {
+    runtime_status_with_clock(store, || now).0
+}
+
+pub(crate) fn runtime_status_with_clock(
+    store: &Store,
+    clock: impl FnOnce() -> u64,
+) -> (Value, u64) {
     let mut status = read_json::<Value>(&store.directory.join("runtime.json"))
         .unwrap_or_else(|_| json!({"active":false}));
+    let now = clock();
     if !status.is_object() {
         status = json!({"active":false});
     }
@@ -934,7 +943,7 @@ pub(crate) fn runtime_status_at(store: &Store, now: u64) -> Value {
         status["active"] = json!(false);
         status["stale"] = json!(true);
     }
-    status
+    (status, now)
 }
 pub fn restore(store: &Store) -> Result<()> {
     let _lease = store.session_lock()?;

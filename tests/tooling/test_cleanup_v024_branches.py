@@ -292,6 +292,7 @@ class CleanupV024Tests(unittest.TestCase):
         current = inventory([
             branch("main", SOURCE),
             branch("fix/coreaudio-startup-20261030", MERGE),
+            branch("fix/runtime-observation-clock-v024", MERGE),
             branch("docs-refresh/v0.2.4", OTHER),
             branch("release-publish/v0.2.4", SOURCE),
             branch("feature/unreviewed", MERGE),
@@ -299,12 +300,13 @@ class CleanupV024Tests(unittest.TestCase):
         frozen, held, proofs = cleanup.materialize_refs(api, plan(), current, SOURCE)
         selected = {item["name"]: item["sha"] for item in frozen["branches"]}
         self.assertEqual(selected["fix/coreaudio-startup-20261030"], MERGE)
+        self.assertEqual(selected["fix/runtime-observation-clock-v024"], MERGE)
         self.assertEqual(selected["release-publish/v0.2.4"], SOURCE)
         self.assertNotIn("feature/unreviewed", selected)
         self.assertNotIn("docs-refresh/v0.2.4", selected)
         self.assertEqual({item["name"] for item in held},
                          {"docs-refresh/v0.2.4", "release-validation/v0.2.4"})
-        self.assertEqual(len(proofs), 3)
+        self.assertEqual(len(proofs), 4)
         current["branches"][1]["commit"]["sha"] = OTHER
         self.assertEqual(selected["fix/coreaudio-startup-20261030"], MERGE)
 

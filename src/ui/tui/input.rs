@@ -504,17 +504,17 @@ pub fn ensure_displayed_output(
     store: &crate::control::store::Store,
     displayed: &Value,
 ) -> Result<()> {
-    ensure_displayed_output_at(store, displayed, crate::analysis::now_ms())
+    let (current, now) = crate::audio::runtime_status_with_clock(store, crate::analysis::now_ms);
+    ensure_displayed_output_snapshot(displayed, &current, now)
 }
 
-pub(crate) fn ensure_displayed_output_at(
-    store: &crate::control::store::Store,
+pub(crate) fn ensure_displayed_output_snapshot(
     displayed: &Value,
+    current: &Value,
     now: u64,
 ) -> Result<()> {
-    let current = crate::audio::runtime_status_at(store, now);
     ensure!(
-        crate::ui::tui::studio::live(displayed, now) && crate::ui::tui::studio::live(&current, now),
+        crate::ui::tui::studio::live(displayed, now) && crate::ui::tui::studio::live(current, now),
         "No current audio telemetry"
     );
     for field in [

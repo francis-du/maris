@@ -100,6 +100,7 @@ pub(super) fn preserve_mixer_row(
     .unwrap_or(usize::MAX)
 }
 
+#[cfg(test)]
 #[derive(Clone, Copy)]
 pub(super) struct ApplicationInput {
     pub key: crossterm::event::KeyCode,
@@ -117,21 +118,18 @@ pub(super) fn application_key(
     output: Option<&crate::audio::DeviceInfo>,
     key: crossterm::event::KeyCode,
 ) -> Result<Option<crate::i18n::Notice>> {
-    application_key_at(
+    application_key_with_clock(
         store,
         runtime,
         applications,
         row,
         pending,
         output,
-        ApplicationInput {
-            key,
-            now: crate::analysis::now_ms(),
-        },
+        (key, crate::analysis::now_ms),
     )
 }
 
-#[doc(hidden)]
+#[cfg(test)]
 pub(super) fn application_key_at(
     store: &Store,
     runtime: &serde_json::Value,
@@ -141,9 +139,29 @@ pub(super) fn application_key_at(
     output: Option<&crate::audio::DeviceInfo>,
     input: ApplicationInput,
 ) -> Result<Option<crate::i18n::Notice>> {
+    application_key_with_clock(
+        store,
+        runtime,
+        applications,
+        row,
+        pending,
+        output,
+        (input.key, || input.now),
+    )
+}
+
+fn application_key_with_clock(
+    store: &Store,
+    runtime: &serde_json::Value,
+    applications: &serde_json::Value,
+    row: &mut usize,
+    pending: &mut Vec<i32>,
+    output: Option<&crate::audio::DeviceInfo>,
+    input: (crossterm::event::KeyCode, impl FnMut() -> u64),
+) -> Result<Option<crate::i18n::Notice>> {
     use crate::i18n::Notice;
     use crossterm::event::KeyCode;
-    let ApplicationInput { key, now } = input;
+    let (key, mut clock) = input;
     let mixing = mixer_mode(runtime);
     let count = if mixing {
         mixer_row_count(runtime)
@@ -180,13 +198,13 @@ pub(super) fn application_key_at(
                 "Mixer controls apply immediately; assignments need a restart",
             )));
         }
-        ensure_mixer_current(store, runtime, now)?;
+        ensure_mixer_current(store, runtime, &mut clock)?;
         let displayed: crate::mixer::MixerState =
             serde_json::from_value(runtime["mixer_control"].clone())?;
         displayed.config.validate()?;
         if key == KeyCode::Char('u') {
             crate::mixer::undo_checked(store, Some(displayed.revision), || {
-                ensure_mixer_current(store, runtime, now)
+                ensure_mixer_current(store, runtime, &mut clock)
             })?;
             return Ok(Some(Notice::new("Previous mixer change undone")));
         }
@@ -204,7 +222,7 @@ pub(super) fn application_key_at(
                     .find(|bus| bus.id == selected.id)
                     .ok_or_else(|| anyhow::anyhow!("Mixer channel changed; select again"))?;
                 ensure!(*bus == *selected, "Mixer channel changed; select again");
-                ensure_mixer_current(store, runtime, now)?;
+                ensure_mixer_current(store, runtime, &mut clock)?;
                 match key {
                     KeyCode::Left | KeyCode::Char('-') => {
                         bus.gain_db = (bus.gain_db - 0.5).max(-60.0)
@@ -233,7 +251,7 @@ pub(super) fn application_key_at(
                 .find(|strip| strip.id == selected.id)
                 .ok_or_else(|| anyhow::anyhow!("Selected mixer channel is no longer available"))?;
             ensure!(*strip == *selected, "Mixer channel changed; select again");
-            ensure_mixer_current(store, runtime, now)?;
+            ensure_mixer_current(store, runtime, &mut clock)?;
             match key {
                 KeyCode::Left | KeyCode::Char('-') => {
                     strip.gain_db = (strip.gain_db - 0.5).max(-60.0)
@@ -295,9 +313,13 @@ pub(super) fn application_key_at(
     }
 }
 
-fn ensure_mixer_current(store: &Store, displayed: &serde_json::Value, now: u64) -> Result<()> {
-    crate::ui::tui::input::ensure_displayed_output_at(store, displayed, now)?;
-    let current = crate::audio::runtime_status_at(store, now);
+fn ensure_mixer_current(
+    store: &Store,
+    displayed: &serde_json::Value,
+    clock: impl FnOnce() -> u64,
+) -> Result<()> {
+    let (current, now) = crate::audio::runtime_status_with_clock(store, clock);
+    crate::ui::tui::input::ensure_displayed_output_snapshot(displayed, &current, now)?;
     ensure!(mixer_mode(&current), "Audio session changed; select again");
     ensure!(
         current["mixer"]["restart_required"] == false,

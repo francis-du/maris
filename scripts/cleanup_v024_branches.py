@@ -28,6 +28,7 @@ FIXED_REFS = {
 }
 ANCESTOR_REFS = {
     "fix/coreaudio-startup-20261030",
+    "fix/runtime-observation-clock-v024",
     "docs-refresh/v0.2.4",
     "release-validation/v0.2.4",
     "release-publish/v0.2.4",
@@ -338,7 +339,7 @@ def execute_cleanup(api, token, args, frozen_plan, eligible, report):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plan", type=Path, required=True,
-                        help="Path to the reviewed v0.2.4 JSON plan; only its six exact "
+                        help="Path to the reviewed v0.2.4 JSON plan; only its reviewed exact "
                              "branch names are in scope.")
     parser.add_argument("--plan-sha256", required=True,
                         help="Expected SHA-256 of the reviewed plan bytes "
