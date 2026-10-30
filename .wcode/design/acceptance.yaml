@@ -10,7 +10,7 @@
 - schema_version: 1
   id: AC-AUDIO-001
   title: Audio core passes deterministic quality gates
-  statement: The Rust workspace type-checks, tests pass, and clippy reports no warnings for the audio and DSP implementation.
+  statement: The Rust workspace type-checks, tests pass, and clippy reports no warnings for the audio and DSP implementation. Outer signal-path changes reset incoming music-stage history, while comparison-only changes and inactive bypass controls preserve valid history. Whole-chain transitions retain independent limiter attenuation.
   verification:
   - kind: check
     id: rust-check
@@ -21,7 +21,7 @@
 - schema_version: 1
   id: AC-DEVICE-001
   title: Device behavior remains covered
-  statement: Device identity, routing, and tuning integration pass the repository test suite and static checks.
+  statement: Device identity, routing, and tuning integration pass the repository test suite and static checks. Each published CoreAudio configuration generation includes its device-list metadata, and capture remains quarantined until the exact current generation is validated.
   verification:
   - kind: check
     id: rust-test

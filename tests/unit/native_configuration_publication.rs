@@ -85,8 +85,14 @@ fn only_system_device_list_notifications_publish_topology_causes() {
         notify(&capture, ca::SYSTEM_OBJECT + 1, &[ca::address(b"dev#")]),
         0
     );
-    assert_eq!(capture.metrics.device_list_events.load(Ordering::Acquire), 0);
-    assert_eq!(capture.metrics.configuration_events.load(Ordering::Acquire), 2);
+    assert_eq!(
+        capture.metrics.device_list_events.load(Ordering::Acquire),
+        0
+    );
+    assert_eq!(
+        capture.metrics.configuration_events.load(Ordering::Acquire),
+        2
+    );
 
     // Several matching addresses still describe one listener notification.
     assert_eq!(
@@ -101,8 +107,14 @@ fn only_system_device_list_notifications_publish_topology_causes() {
         ),
         0
     );
-    assert_eq!(capture.metrics.device_list_events.load(Ordering::Acquire), 1);
-    assert_eq!(capture.metrics.configuration_events.load(Ordering::Acquire), 3);
+    assert_eq!(
+        capture.metrics.device_list_events.load(Ordering::Acquire),
+        1
+    );
+    assert_eq!(
+        capture.metrics.configuration_events.load(Ordering::Acquire),
+        3
+    );
 }
 
 #[test]
@@ -122,8 +134,14 @@ fn empty_property_lists_do_not_invent_topology_changes() {
         },
         0
     );
-    assert_eq!(capture.metrics.device_list_events.load(Ordering::Acquire), 0);
-    assert_eq!(capture.metrics.configuration_events.load(Ordering::Acquire), 2);
+    assert_eq!(
+        capture.metrics.device_list_events.load(Ordering::Acquire),
+        0
+    );
+    assert_eq!(
+        capture.metrics.configuration_events.load(Ordering::Acquire),
+        2
+    );
 }
 
 #[test]

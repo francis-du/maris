@@ -529,7 +529,10 @@ fn maximum_native_blocks_start_live_source_and_preserve_pending_audio() {
             let mut nonzero_pcm = false;
             for _ in 0..256 {
                 let (frame, ready) = source.frame(&context.metrics);
-                assert!(ready, "rate={rate}, block={block}: source never became ready");
+                assert!(
+                    ready,
+                    "rate={rate}, block={block}: source never became ready"
+                );
                 assert!(frame.iter().all(|sample| sample.is_finite()));
                 nonzero_pcm |= frame.iter().any(|sample| sample.abs() > 0.001);
             }

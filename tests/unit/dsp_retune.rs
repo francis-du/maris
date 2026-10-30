@@ -512,3 +512,316 @@ fn retunes_never_release_existing_limiter_attenuation() {
         "queueing a retune released limiter attenuation"
     );
 }
+
+#[test]
+fn outer_preamp_retune_does_not_keep_the_old_music_compressor_envelope() {
+    use crate::dsp::music::{AdaptiveEq, Compressor, MusicProfile};
+
+    let music = MusicProfile {
+        adaptive: AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        compressor: Compressor {
+            enabled: true,
+            threshold_db: -18.0,
+            ratio: 4.0,
+            attack_ms: 1.0,
+            release_ms: 500.0,
+            ..Compressor::default()
+        },
+        level_match: false,
+        ..MusicProfile::default()
+    };
+    for rate in [44_100, 48_000, 96_000, 192_000] {
+        let old_profile = Profile::default();
+        let new_profile = Profile {
+            preamp_db: -20.0,
+            ..old_profile.clone()
+        };
+        let old = Settings::compile(&old_profile, rate)
+            .unwrap()
+            .with_music(&music, rate)
+            .unwrap();
+        let new = Settings::compile(&new_profile, rate)
+            .unwrap()
+            .with_music(&music, rate)
+            .unwrap();
+        assert!(old.music == new.music, "fixture changed the inner settings");
+        assert_ne!(old.gain, new.gain);
+
+        let mut trained = Chain::new(old);
+        for _ in 0..rate / 4 {
+            let _ = trained.frame([0.5, 0.5]);
+        }
+        let mut retuned = trained.retune(new);
+        let mut fresh = Chain::new(new);
+        let actual = retuned.frame([0.5, 0.5]);
+        let expected = fresh.frame([0.5, 0.5]);
+        for channel in 0..2 {
+            assert!(
+                (actual[channel] - expected[channel]).abs() < 1e-12,
+                "outer preamp retune kept a stale compressor envelope at {rate} Hz: actual={actual:?} fresh={expected:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn completed_outer_mono_retune_cannot_replay_old_stereo_correction_history() {
+    use crate::dsp::music::{AdaptiveEq, MusicProfile};
+    use crate::dsp::tone::{Filter, Kind};
+
+    let music = MusicProfile {
+        correction: vec![Filter {
+            kind: Kind::Peak,
+            frequency_hz: 30.0,
+            gain_db: 12.0,
+            q: 10.0,
+        }],
+        adaptive: AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        level_match: false,
+        ..MusicProfile::default()
+    };
+    for rate in [44_100, 48_000, 96_000, 192_000] {
+        let old_profile = Profile::default();
+        let new_profile = Profile {
+            stereo_width: 0.0,
+            ..old_profile.clone()
+        };
+        let old = Settings::compile(&old_profile, rate)
+            .unwrap()
+            .with_music(&music, rate)
+            .unwrap();
+        let new = Settings::compile(&new_profile, rate)
+            .unwrap()
+            .with_music(&music, rate)
+            .unwrap();
+        assert!(old.music == new.music, "fixture changed the inner settings");
+        let sample = |index: u32| {
+            (0.05 * (std::f64::consts::TAU * 30.0 * f64::from(index) / f64::from(rate)).cos())
+                as f32
+        };
+        let mut processor = Processor::new(old);
+        let mut output = [0.0; 2];
+        for index in 0..rate {
+            output = processor.process([sample(index), 0.0]);
+        }
+        assert!(
+            (output[0] - output[1]).abs() > 1e-4,
+            "fixture did not establish stereo correction history"
+        );
+
+        processor.update(new);
+        for offset in 0..new.transition_frames {
+            output = processor.process([sample(rate + offset), 0.0]);
+        }
+        assert!(!processor.settings_pending());
+        let mut maximum_side = (output[0] - output[1]).abs();
+        for offset in 0..rate / 100 {
+            output = processor.process([sample(rate + new.transition_frames + offset), 0.0]);
+            maximum_side = maximum_side.max((output[0] - output[1]).abs());
+        }
+        assert!(
+            maximum_side < 1e-7,
+            "completed mono retune replayed old stereo correction history at {rate} Hz: max L/R difference {maximum_side:e}"
+        );
+    }
+}
+
+#[test]
+fn outer_chain_comparison_switches_keep_unchanged_music_state() {
+    use crate::dsp::music::{AdaptiveEq, MusicProfile};
+
+    let rate = 48_000;
+    let mut music = MusicProfile {
+        bass_db: 3.0,
+        presence_db: -1.0,
+        virtual_surround: 0.7,
+        width: 1.3,
+        adaptive: AdaptiveEq {
+            enabled: true,
+            strength: 0.8,
+        },
+        level_match: true,
+        ..MusicProfile::default()
+    };
+    music.compressor.enabled = true;
+    music.compressor.threshold_db = -24.0;
+    music.bass_assist.enabled = true;
+    let outer = Profile::default();
+    let wet = Settings::compile(&outer, rate)
+        .unwrap()
+        .with_music(&music, rate)
+        .unwrap();
+    music.reference = true;
+    let reference = Settings::compile(&outer, rate)
+        .unwrap()
+        .with_music(&music, rate)
+        .unwrap();
+    music.reference = false;
+    music.level_match = false;
+    let unmatched = Settings::compile(&outer, rate)
+        .unwrap()
+        .with_music(&music, rate)
+        .unwrap();
+    let frame = |index: u32| {
+        let t = f64::from(index) / f64::from(rate);
+        [
+            (0.1 * (std::f64::consts::TAU * 67.0 * t).sin()) as f32,
+            (0.1 * (std::f64::consts::TAU * 997.0 * t + 0.3).sin()) as f32,
+        ]
+    };
+    for comparison in [reference, unmatched] {
+        let mut toggled = Chain::new(wet);
+        let mut control = Chain::new(wet);
+        for index in 0..rate * 2 {
+            let input = frame(index);
+            let _ = toggled.frame(input);
+            let _ = control.frame(input);
+        }
+        toggled = toggled.retune(comparison);
+        for index in rate * 2..rate * 3 {
+            let input = frame(index);
+            let _ = toggled.frame(input);
+            let _ = control.frame(input);
+        }
+        toggled = toggled.retune(wet);
+        for index in rate * 3..rate * 3 + 512 {
+            let input = frame(index);
+            let actual = toggled.frame(input);
+            let expected = control.frame(input);
+            for channel in 0..2 {
+                assert!(
+                    (actual[channel] - expected[channel]).abs() < 1e-12,
+                    "comparison-only outer retune discarded valid inner history: actual={actual:?} expected={expected:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn changed_outer_signal_feed_resets_the_incoming_music_filter_history() {
+    use crate::dsp::music::{AdaptiveEq, MusicProfile};
+
+    let music = MusicProfile {
+        bass_db: 6.0,
+        adaptive: AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        level_match: false,
+        ..MusicProfile::default()
+    };
+    let base = Profile {
+        crossfeed: 0.2,
+        ..Profile::default()
+    };
+    let mut changed_eq = base.clone();
+    changed_eq.bands[0].gain_db = -6.0;
+    let changed_width = Profile {
+        stereo_width: 0.0,
+        ..base.clone()
+    };
+    let changed_crossfeed = Profile {
+        crossfeed: 0.3,
+        ..base.clone()
+    };
+    let bypassed = Profile {
+        bypass: true,
+        ..base.clone()
+    };
+    let cases = [
+        ("outer EQ", base.clone(), changed_eq),
+        ("outer width", base.clone(), changed_width),
+        ("crossfeed", base.clone(), changed_crossfeed),
+        ("bypass exit", bypassed, base),
+    ];
+    for rate in [44_100, 48_000, 96_000, 192_000] {
+        for (name, old_profile, new_profile) in &cases {
+            let old = Settings::compile(old_profile, rate)
+                .unwrap()
+                .with_music(&music, rate)
+                .unwrap();
+            let new = Settings::compile(new_profile, rate)
+                .unwrap()
+                .with_music(&music, rate)
+                .unwrap();
+            let mut trained = Chain::new(old);
+            let _ = trained.frame([0.5, -0.25]);
+            let mut retuned = trained.retune(new);
+            let mut fresh_music = crate::dsp::music::Processor::new(new.music);
+            // Isolate the downstream stage: outer filters may legitimately retain
+            // an unchanged prefix, so fresh-Chain equality is not the contract here.
+            let actual = retuned.music.process([0.0, 0.0]);
+            let expected = fresh_music.process([0.0, 0.0]);
+            for channel in 0..2 {
+                assert!(
+                    (actual[channel] - expected[channel]).abs() < 1e-12,
+                    "{name} retained stale incoming music history at {rate} Hz: actual={actual:?} fresh={expected:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn bypassed_outer_controls_preserve_the_unchanged_music_feed() {
+    use crate::dsp::music::{AdaptiveEq, MusicProfile};
+
+    let music = MusicProfile {
+        bass_db: -6.0,
+        adaptive: AdaptiveEq {
+            enabled: false,
+            strength: 0.0,
+        },
+        level_match: true,
+        ..MusicProfile::default()
+    };
+    let old_profile = Profile {
+        bypass: true,
+        ..Profile::default()
+    };
+    let new_profile = Profile {
+        stereo_width: 0.0,
+        crossfeed: 0.3,
+        ..old_profile.clone()
+    };
+    let rate = 48_000;
+    let old = Settings::compile(&old_profile, rate)
+        .unwrap()
+        .with_music(&music, rate)
+        .unwrap();
+    let new = Settings::compile(&new_profile, rate)
+        .unwrap()
+        .with_music(&music, rate)
+        .unwrap();
+    assert_eq!(old.gain, new.gain);
+    assert!(old.music == new.music);
+    let frame = |index: u32| {
+        let sample = (0.1
+            * (std::f64::consts::TAU * 67.0 * f64::from(index) / f64::from(rate)).cos())
+            as f32;
+        [sample, -0.5 * sample]
+    };
+    let mut control = Chain::new(old);
+    for index in 0..rate * 2 {
+        let _ = control.frame(frame(index));
+    }
+    let mut retuned = control.retune(new);
+    for index in rate * 2..rate * 2 + 512 {
+        let input = frame(index);
+        let actual = retuned.frame(input);
+        let expected = control.frame(input);
+        for channel in 0..2 {
+            assert!(
+                (actual[channel] - expected[channel]).abs() < 1e-12,
+                "inactive outer controls reset an unchanged bypass feed: actual={actual:?} expected={expected:?}"
+            );
+        }
+    }
+}
