@@ -1,0 +1,240 @@
+name: Clean reviewed branches after v0.2.4
+
+on:
+  workflow_run:
+    workflows: ['Publish stable release']
+    types: [completed]
+    branches: ['release-publish/v0.2.4']
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: maris-reviewed-branch-cleanup-v0.2.4
+  cancel-in-progress: false
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  CLEANUP_SCRIPT_SHA256: '62732d75205691dc4bde38cb34d6abf2ec22f2c0aab65fcc3b2532c23c38f506'
+  CLEANUP_PLAN_SHA256: 'b35696a83d7fab9fd5332bb9c21797992c0004fc9b771581fa2ac6ceec76cb0d'
+  CLEANUP_LIBRARY_SHA256: '8a34467f10aa218bd192a057af4d4707e5c315e283cf03d7dd53552a4aea4284'
+
+jobs:
+  resolve:
+    if: >-
+      github.repository == 'francis-du/maris' &&
+      github.event.repository.full_name == 'francis-du/maris' &&
+      github.event.workflow_run.head_repository.full_name == 'francis-du/maris' &&
+      github.event.workflow_run.status == 'completed' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.path == '.github/workflows/publish-release.yml' &&
+      github.event.workflow_run.head_branch == 'release-publish/v0.2.4'
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      source_sha: ${{ steps.release.outputs.source_sha }}
+      release_id: ${{ steps.release.outputs.release_id }}
+      publication_run_id: ${{ steps.release.outputs.publication_run_id }}
+    steps:
+      - name: Resolve the successful stable release without checking out code
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import urllib.request
+
+          repository = 'francis-du/maris'
+          destination = Path(os.environ['RUNNER_TEMP']) / 'maris-v024-release-resolution'
+          destination.mkdir(exist_ok=True)
+          report = {'schema_version': 1, 'resolved': False, 'error': None}
+
+          def require(condition, message):
+              if not condition:
+                  raise ValueError(message)
+
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, request, fp, code, message, headers, target):
+                  raise ValueError('Unexpected API redirect')
+
+          def get(path):
+              request = urllib.request.Request(
+                  'https://api.github.com/repos/' + repository + path,
+                  headers={'Accept': 'application/vnd.github+json',
+                           'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                           'X-GitHub-Api-Version': '2022-11-28'})
+              with urllib.request.build_opener(NoRedirect).open(request, timeout=20) as response:
+                  data = response.read(16 * 1024 * 1024 + 1)
+              require(len(data) <= 16 * 1024 * 1024, 'Oversized API response')
+              return json.loads(data)
+
+          try:
+              event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_bytes())
+              trigger = event.get('workflow_run', {})
+              run_id = trigger.get('id')
+              require(type(run_id) is int and run_id > 0, 'Invalid publication run ID')
+              require(event.get('action') == 'completed'
+                      and event.get('repository', {}).get('full_name') == repository,
+                      'Invalid completed workflow event')
+              run = get('/actions/runs/' + str(run_id))
+              for candidate in (trigger, run):
+                  require(candidate.get('id') == run_id
+                          and candidate.get('name') == 'Publish stable release'
+                          and candidate.get('path') == '.github/workflows/publish-release.yml'
+                          and candidate.get('event') == 'push'
+                          and candidate.get('head_branch') == 'release-publish/v0.2.4'
+                          and candidate.get('status') == 'completed'
+                          and candidate.get('conclusion') == 'success'
+                          and candidate.get('head_repository', {}).get('full_name') == repository,
+                          'Not the exact successful stable v0.2.4 publication')
+              require(run.get('repository', {}).get('full_name') == repository,
+                      'Publication repository changed')
+              release = get('/releases/tags/v0.2.4')
+              release_id = release.get('id')
+              require(type(release_id) is int and release_id > 0
+                      and release.get('tag_name') == 'v0.2.4'
+                      and release.get('draft') is False and release.get('prerelease') is False
+                      and release.get('published_at'), 'v0.2.4 is not a published stable release')
+              require(get('/releases/latest').get('id') == release_id,
+                      'The current stable release is not v0.2.4')
+              source = get('/commits/v0.2.4').get('sha')
+              require(isinstance(source, str) and re.fullmatch(r'[0-9a-f]{40}', source),
+                      'Invalid release source SHA')
+              require(source == run.get('head_sha') == trigger.get('head_sha')
+                      == get('/git/ref/heads/main').get('object', {}).get('sha'),
+                      'Release, publication and main must refer to the same source')
+              report.update({'resolved': True, 'source_sha': source, 'release_id': release_id,
+                             'publication_run_id': run_id})
+              with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+                  output.write(f'source_sha={source}\nrelease_id={release_id}\n')
+                  output.write(f'publication_run_id={run_id}\n')
+          except Exception as error:
+              report['error'] = type(error).__name__ + ': ' + str(error)
+              raise
+          finally:
+              with (destination / 'release-resolution.json').open('x', encoding='utf-8') as output:
+                  json.dump(report, output, indent=2)
+                  output.write('\n')
+          PY
+
+      - name: Retain the read-only release resolution
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: maris-v024-cleanup-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/maris-v024-release-resolution/
+          if-no-files-found: error
+          retention-days: 14
+
+  cleanup:
+    needs: resolve
+    permissions:
+      contents: write
+      actions: read
+      pull-requests: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      RELEASE_SOURCE_SHA: ${{ needs.resolve.outputs.source_sha }}
+      RELEASE_ID: ${{ needs.resolve.outputs.release_id }}
+      PUBLICATION_RUN_ID: ${{ needs.resolve.outputs.publication_run_id }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out the verified immutable release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.source_sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Bind the checkout, plan and both cleanup modules
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+
+          destination = Path(os.environ['RUNNER_TEMP']) / 'maris-v024-cleanup'
+          destination.mkdir(exist_ok=True)
+          report = {'schema_version': 1, 'inputs_bound': False, 'inputs': [], 'error': None}
+          try:
+              expected = os.environ['RELEASE_SOURCE_SHA']
+              report['expected_source_sha'] = expected
+              if not re.fullmatch(r'[0-9a-f]{40}', expected):
+                  raise ValueError('Invalid published source SHA')
+              actual = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+              report['checkout_source_sha'] = actual
+              if actual != expected:
+                  raise ValueError('Cleanup checkout differs from the published source')
+              for name, key in (
+                  ('scripts/cleanup_v024_branches.py', 'CLEANUP_SCRIPT_SHA256'),
+                  ('scripts/cleanup_v024_branches.json', 'CLEANUP_PLAN_SHA256'),
+                  ('scripts/cleanup_v022_branches.py', 'CLEANUP_LIBRARY_SHA256'),
+              ):
+                  path = Path(name)
+                  if path.is_symlink() or not path.is_file():
+                      raise ValueError('Cleanup input is missing or linked: ' + name)
+                  digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                  report['inputs'].append({'path': name, 'sha256': digest})
+                  if digest != os.environ[key]:
+                      raise ValueError('Reviewed cleanup input changed: ' + name)
+              report['inputs_bound'] = True
+          except Exception as error:
+              report['error'] = type(error).__name__ + ': ' + str(error)
+              raise
+          finally:
+              with (destination / 'input-binding.json').open('x', encoding='utf-8') as output:
+                  json.dump(report, output, indent=2)
+                  output.write('\n')
+          PY
+
+      - name: Revalidate and atomically delete only unchanged eligible refs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python scripts/cleanup_v024_branches.py \
+            --plan scripts/cleanup_v024_branches.json \
+            --plan-sha256 "$CLEANUP_PLAN_SHA256" \
+            --source-sha "$RELEASE_SOURCE_SHA" \
+            --release-id "$RELEASE_ID" \
+            --publication-run-id "$PUBLICATION_RUN_ID" \
+            --wait-seconds 240 \
+            --output "$RUNNER_TEMP/maris-v024-cleanup/cleanup-result.json" \
+            --execute
+
+      - name: Retain input binding, inventory, held reasons and cleanup receipts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: maris-v024-branch-cleanup-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/maris-v024-cleanup/
+          if-no-files-found: error
+          retention-days: 14
+
+# The stable caller includes all twelve native installation jobs and promotion.
+# Standalone asset workflow_run events can have main as their head branch and
+# do not establish this release's completed stable-publication evidence.
+# The script revalidates that evidence and exact SHA leases immediately before
+# deletion. Only this authenticated cleanup run may be excluded from its own
+# activity check; all other active runs and every open PR remain blockers.

@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "repository": "francis-du/maris",
+  "default_branch": "main",
+  "main_sha": "67d2ebcfcafdeb5584329525738fdc8e81f4ae7b",
+  "tag_precondition": "v0.2.4",
+  "required_merged_pr": 96,
+  "scope": "Only the two reviewed unchanged historical refs and the four explicitly named ancestor refs after actual successful v0.2.4 stable publication. The existing request to clean unused branches after publication is the authorization; no additional human approval is asserted.",
+  "fixed_refs": [
+    {
+      "name": "obs/coreaudio-handoff-telemetry-20261012",
+      "sha": "caa9487178e5acee5e3ab2ba8a17e5e1f9ca5e6f",
+      "reason": "The exact historical telemetry tip was reviewed against the integrated CoreAudio progress and fail-open recovery on main. Its intent is superseded by the retained implementation; this is content review, not an ancestry claim for the historical tip."
+    },
+    {
+      "name": "refactor/macos-stable-device-uid",
+      "sha": "a5d2af19142fad11e001fe64ebeed9d0c060d8cf",
+      "reason": "The exact historical UID tip was reviewed against stable_output_uid, unique_uid_index, output_binding and their regression tests on main. The later 0f172bcb3b3e4a7c89c62077a9524d16a9925897 integration covers its intent; this is content review, not an ancestry claim for the historical tip."
+    }
+  ],
+  "ancestor_refs": [
+    "fix/coreaudio-startup-20261030",
+    "docs-refresh/v0.2.4",
+    "release-validation/v0.2.4",
+    "release-publish/v0.2.4"
+  ]
+}
