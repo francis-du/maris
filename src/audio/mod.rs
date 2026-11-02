@@ -133,6 +133,8 @@ pub(super) struct Metrics {
     peak_right: AtomicU32,
     frames: AtomicU64,
     captured_frames: AtomicU64,
+    #[cfg(target_os = "macos")]
+    capture_callback_calls: AtomicU64,
     callback_processing_nanos: AtomicU64,
     callback_max_nanos: AtomicU64,
     callback_frames: AtomicU64,
@@ -209,29 +211,28 @@ pub(super) fn output_binding(
     name: &str,
     device: &cpal::Device,
 ) -> Result<OutputBinding> {
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     let _ = device;
     #[cfg(target_os = "macos")]
     {
-        // CPAL and CoreAudio enumerate the same device list and CPAL preserves order while
-        // filtering output-capable devices. Resolve the selected endpoint back to CoreAudio
-        // exactly; never silently downgrade an explicit stable selector to display-name identity.
-        let device_id = tap_ffi::output_device_id_for_selector(selector, name)?;
-        let stable_id = tap_ffi::device_uid(device_id).ok();
+        let stable_id = devices::stable_output_uid(device)?;
+        if let Some(requested) = selector.and_then(|value| value.strip_prefix("uid:")) {
+            ensure!(requested == stable_id, "Selected output UID changed");
+        }
+        let device_id = tap_ffi::output_device_id_for_uid(&stable_id)?;
+        ensure!(
+            tap_ffi::device_name(device_id).is_ok_and(|value| value == name),
+            "CoreAudio output identity no longer matches the selected CPAL endpoint"
+        );
         let model_id = tap_ffi::device_model_uid(device_id).ok();
-        let source = if stable_id.is_some() {
-            "coreaudio_device_uid"
-        } else {
-            "display_name"
-        };
         let resolution = device_identity::resolve_or_remember(
             store,
             device_identity::Identity {
                 platform: "macos".into(),
-                stable_id,
+                stable_id: Some(stable_id),
                 model_id,
                 display_name: name.to_owned(),
-                source: source.into(),
+                source: "coreaudio_device_uid".into(),
             },
         )?;
         Ok(OutputBinding {
@@ -311,6 +312,8 @@ pub struct Session {
     system_device_id: u32,
     #[cfg(target_os = "macos")]
     last_device_check: Instant,
+    #[cfg(target_os = "macos")]
+    last_system_progress: Option<system::CallbackProgress>,
 }
 impl Session {
     pub fn live(store: Store, input: &str, output: Option<&str>) -> Result<Self> {
@@ -372,18 +375,11 @@ impl Session {
             queue.clone(),
             metrics.clone(),
         )?;
-        let voice = if neural {
-            Some(voice::VoiceWorker::start(queue.clone(), rate)?)
-        } else {
-            None
-        };
-        let playback_queue = voice
-            .as_ref()
-            .map_or_else(|| queue.clone(), |worker| worker.output.clone());
+        let (voice, playback_source) = voice::prepare(queue, rate, rate, neural, metrics.clone())?;
         let playback = bridge::output(
             &output_device,
             &configurations.1,
-            bridge::Source::Live(bridge::LiveSource::new(playback_queue, rate)),
+            bridge::Source::Live(playback_source),
             settings,
             updates.clone(),
             metrics.clone(),
@@ -437,6 +433,8 @@ impl Session {
             system_device_id: 0,
             #[cfg(target_os = "macos")]
             last_device_check: Instant::now(),
+            #[cfg(target_os = "macos")]
+            last_system_progress: None,
         })
     }
     pub fn play(store: Store, path: &Path, output: Option<&str>, repeat: bool) -> Result<Self> {
@@ -534,6 +532,8 @@ impl Session {
             system_device_id: 0,
             #[cfg(target_os = "macos")]
             last_device_check: Instant::now(),
+            #[cfg(target_os = "macos")]
+            last_system_progress: None,
         })
     }
     pub fn system(store: Store, output: Option<&str>) -> Result<Self> {
@@ -881,15 +881,22 @@ impl Session {
 }
 impl Drop for Session {
     fn drop(&mut self) {
-        self.metrics.stopping.store(true, Ordering::Relaxed);
+        self.metrics.stopping.store(true, Ordering::Release);
+        #[cfg(target_os = "macos")]
+        {
+            let deadline = Instant::now() + Duration::from_millis(75);
+            while !self.metrics.faded_out.load(Ordering::Acquire) && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            self.tap.take();
+        }
+        #[cfg(not(target_os = "macos"))]
         std::thread::sleep(Duration::from_millis(40));
         self.streams.clear();
         #[cfg(unix)]
         self.pulse.take();
         #[cfg(target_os = "windows")]
         self.windows.take();
-        #[cfg(target_os = "macos")]
-        self.tap.take();
         self.voice.take();
         self.route.take();
         let _ = self.store.write_json(

@@ -16,8 +16,10 @@ use std::{
 };
 
 struct Pipeline {
-    stream: Stream,
+    // Struct fields drop in declaration order: restore original playback while
+    // the replacement output is still owned, including assembly-error paths.
     tap: TapCapture,
+    stream: Stream,
     metrics: Arc<Metrics>,
     updates: Arc<ArrayQueue<Update>>,
     analysis: AnalysisWorker,
@@ -137,12 +139,39 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
         binding.latency_frames = tap_ffi::output_latency_frames(device_id).ok();
         binding.safety_offset_frames = tap_ffi::output_safety_offset_frames(device_id).ok();
     }
+    // Prove the replacement callback while forcing it to silence. The original
+    // application path stays audible during this entire preflight.
+    metrics.output_quarantined.store(true, Ordering::Release);
     stream.play()?;
     bridge::wait_output_ready(&metrics, Duration::from_secs(1))?;
     drop(prime);
-    // Original applications are muted only after an actual output callback,
-    // not merely a successful asynchronous play request.
+
+    // Start the tap unmuted and require real PCM before changing original playback.
     tap.start()?;
+    tap.arm_replacement()?;
+    metrics.output_quarantined.store(false, Ordering::Release);
+    // A live tap plus a live output callback still is not enough: require the clock
+    // bridge and startup envelope to observe post-handoff source frames.
+    let handoff_timeout = tap.progress_timeout(binding.buffer_frames);
+    if let Err(start_error) =
+        bridge::wait_source_started(&metrics, handoff_timeout, || tap.needs_rebuild())
+    {
+        // Fail open in a deterministic order. tap was constructed before stream, so
+        // ordinary stack unwinding would drop the replacement output first and only then
+        // restore the original application path from TapCapture::drop. Re-quarantine the
+        // replacement and explicitly restore original playback while that stream is still
+        // alive. If the live property update itself fails, destroy the tap now (also while
+        // the replacement stream is alive) so CoreAudio gets a second restoration path
+        // before the output disappears.
+        metrics.output_quarantined.store(true, Ordering::Release);
+        if let Err(restore_error) = tap.disarm_replacement() {
+            drop(tap);
+            return Err(start_error.context(format!(
+                "Replacement output never received post-handoff audio; restoring the original CoreAudio tap also failed: {restore_error:#}"
+            )));
+        }
+        return Err(start_error);
+    }
     Ok(Pipeline {
         stream,
         tap,
@@ -156,6 +185,32 @@ fn pipeline(store: &Store, output: Option<&str>, processes: &[u32]) -> Result<Pi
         capability,
     })
 }
+pub(super) struct CallbackProgress {
+    output: (u64, Instant),
+    capture: (u64, Instant),
+}
+impl CallbackProgress {
+    fn new(now: Instant, current: (u64, u64)) -> Self {
+        Self {
+            output: (current.0, now),
+            capture: (current.1, now),
+        }
+    }
+
+    fn stalled(&mut self, now: Instant, current: (u64, u64), timeout: Duration) -> bool {
+        for (last, count) in [
+            (&mut self.output, current.0),
+            (&mut self.capture, current.1),
+        ] {
+            if last.0 != count {
+                *last = (count, now);
+            }
+        }
+        now.saturating_duration_since(self.output.1) >= timeout
+            || now.saturating_duration_since(self.capture.1) >= timeout
+    }
+}
+
 impl Session {
     pub(super) fn native_system(store: Store, output: Option<&str>) -> Result<Self> {
         Self::native_tap(
@@ -210,9 +265,16 @@ impl Session {
         input_name: String,
     ) -> Result<Self> {
         let lease = store.session_lock()?;
+        // Finish fallible auxiliary setup before any original playback is muted.
+        let context = crate::analysis::context::Worker::start()?;
         let p = pipeline(&store, output, &system_processes)?;
         let sample_rate = p.tap.rate;
-        let system_device_id = p.binding.coreaudio_id.unwrap_or(tap_ffi::default_output()?);
+        // output_binding already resolved this exact physical device. Querying
+        // the default eagerly would make a valid pinned route fail during hotplug.
+        let system_device_id = p
+            .binding
+            .coreaudio_id
+            .context("Missing physical output binding")?;
         Ok(Self {
             streams: vec![p.stream],
             route: None,
@@ -239,7 +301,7 @@ impl Session {
             last_status: Instant::now() - Duration::from_secs(1),
             completion: None,
             analysis: p.analysis,
-            context: crate::analysis::context::Worker::start()?,
+            context,
             voice: None,
             pulse: None,
             session_id: super::new_session_id(),
@@ -251,6 +313,7 @@ impl Session {
             system_process_pids,
             system_device_id,
             last_device_check: Instant::now(),
+            last_system_progress: None,
         })
     }
     fn install_system_pipeline(&mut self, p: Pipeline) {
@@ -273,6 +336,7 @@ impl Session {
         self.sent_music_revision = Some(p.music_revision);
         self.sent_capability = p.capability;
         self.device_match_started = false;
+        self.last_system_progress = None;
         self.rebind_count = self.rebind_count.saturating_add(1);
         self.last_rebind_ms = Some(crate::analysis::now_ms());
         self.context.reset();
@@ -339,15 +403,16 @@ impl Session {
             "Choose a physical output device, not a loopback device"
         );
         // Wait only on the control thread. A vanished device may never acknowledge,
-        // so teardown remains bounded. Retire the renderer before releasing the tap
-        // mute to avoid overlapping buffered processed audio with restored playback.
+        // so teardown remains bounded. Fade the replacement first, then restore the
+        // original application path while the replacement stream still exists, and
+        // only then release that stream. This avoids both overlap and a silent gap.
         self.metrics.stopping.store(true, Ordering::Release);
         let deadline = Instant::now() + Duration::from_millis(75);
         while !self.metrics.faded_out.load(Ordering::Acquire) && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(2));
         }
-        self.streams.clear();
         self.tap.take();
+        self.streams.clear();
         let processes = self.system_processes.clone();
         match pipeline(&self.store, output, &processes) {
             Ok(p) => {
@@ -374,13 +439,34 @@ impl Session {
             .tap
             .as_ref()
             .is_some_and(TapCapture::configuration_pending);
-        if self.tap.is_none()
-            || (!pending_configuration
-                && self.last_device_check.elapsed() < Duration::from_millis(300))
-        {
+        let periodic_check = self.last_device_check.elapsed() >= Duration::from_millis(300);
+        if self.tap.is_none() || (!pending_configuration && !periodic_check) {
             return Ok(());
         }
-        self.last_device_check = Instant::now();
+        if periodic_check {
+            let now = Instant::now();
+            self.last_device_check = now;
+            let progress = (
+                self.metrics.callback_calls.load(Ordering::Acquire),
+                self.metrics.capture_callback_calls.load(Ordering::Acquire),
+            );
+            let timeout = self
+                .tap
+                .as_ref()
+                .expect("native tap checked above")
+                .progress_timeout(self.output_buffer_frames);
+            let last = self
+                .last_system_progress
+                .get_or_insert_with(|| CallbackProgress::new(now, progress));
+            if last.stalled(now, progress, timeout) {
+                // Observe both native callbacks, not PCM amplitude/frame production:
+                // paused applications can yield empty callbacks. A single 300 ms poll
+                // gap is not a stall on a slow endpoint. Sustained loss of either
+                // callback (including both stopping) must restore original playback.
+                self.stop_requested = true;
+                return Ok(());
+            }
+        }
         if self
             .tap
             .as_ref()
@@ -472,3 +558,7 @@ impl Session {
         self.rebind_system_output(None)
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/system_progress.rs"]
+mod progress_tests;

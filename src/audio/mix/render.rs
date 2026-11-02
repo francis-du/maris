@@ -59,23 +59,31 @@ impl Input {
     pub fn new(queue: Arc<ArrayQueue<[f32; 2]>>, rate: u32, metrics: Arc<Metrics>) -> Self {
         Self::with_rates(queue, rate, rate, metrics).expect("valid test input rates")
     }
+    #[cfg(test)]
     pub fn with_rates(
         queue: Arc<ArrayQueue<[f32; 2]>>,
         input_rate: u32,
         mix_rate: u32,
         metrics: Arc<Metrics>,
     ) -> Result<Self> {
-        Ok(Self {
-            source: LiveSource::with_rates(queue, input_rate, mix_rate)?,
+        Ok(Self::from_source(
+            LiveSource::with_rates(queue, input_rate, mix_rate)?,
+            metrics,
+        ))
+    }
+    pub(super) fn from_source(source: LiveSource, metrics: Arc<Metrics>) -> Self {
+        Self {
+            source,
             metrics,
             peak: Arc::new(AtomicU64::new(0)),
-        })
+        }
     }
 }
 struct BusDelay {
     buffer: Box<[[f64; 2]]>,
     cursor: usize,
     delay: usize,
+    pending: usize,
 }
 impl BusDelay {
     fn new(rate: u32, delay_ms: f64) -> Result<Self> {
@@ -86,21 +94,33 @@ impl BusDelay {
         let max_frames = (usize::try_from(rate)? / 2).saturating_add(2);
         let delay = ((f64::from(rate) * delay_ms / 1000.0).round() as usize).min(max_frames - 1);
         Ok(Self {
-            buffer: vec![[0.0; 2]; max_frames].into_boxed_slice(),
+            // Allocate only the requested delay before playback; zero delay
+            // needs no sample storage. The callback never resizes this buffer.
+            buffer: vec![[0.0; 2]; delay].into_boxed_slice(),
             cursor: 0,
             delay,
+            pending: 0,
         })
     }
-    fn process(&mut self, input: [f64; 2]) -> [f64; 2] {
+    fn process(&mut self, input: [f64; 2], source_ready: bool) -> ([f64; 2], bool) {
         if self.delay == 0 {
-            return input;
+            return (input, source_ready);
         }
+        // Loss of new capture does not invalidate PCM already queued for this
+        // bus. Drain exactly its delay, including digital silence, before the
+        // output renderer takes over the existing bounded dropout envelope.
+        let ready = source_ready || self.pending != 0;
+        self.pending = if source_ready {
+            self.delay
+        } else {
+            self.pending.saturating_sub(1)
+        };
         let len = self.buffer.len();
         let read = (self.cursor + len - self.delay) % len;
         let output = self.buffer[read];
         self.buffer[self.cursor] = input;
         self.cursor = (self.cursor + 1) % len;
-        output
+        (output, ready)
     }
 }
 
@@ -129,6 +149,7 @@ pub(super) struct Graph {
     revision: Arc<AtomicU64>,
     pending_revision: Option<u64>,
     pending_input_peaks: [f64; MAX_STRIPS],
+    pending_input_ready: [bool; MAX_STRIPS],
     pending_send_overruns: [u64; BUS_COUNT],
     observed_callback_epoch: u64,
 }
@@ -165,6 +186,7 @@ impl Graph {
             revision,
             pending_revision: None,
             pending_input_peaks: [0.0; MAX_STRIPS],
+            pending_input_ready: [false; MAX_STRIPS],
             pending_send_overruns: [0; BUS_COUNT],
             observed_callback_epoch: 0,
         })
@@ -207,10 +229,28 @@ impl Graph {
         }
     }
     pub fn end_block(&mut self) {
+        let primary = &self.send_metrics[self.primary];
+        // Renderer can discard the entire block after an input notification,
+        // including one already acknowledged by the control thread. Its reset
+        // epoch changes only after rendering, so no input in that block is ready.
+        let quarantined = primary.output_quarantined.load(Ordering::Acquire)
+            || primary.callback_discontinuities.load(Ordering::Acquire)
+                != self.observed_callback_epoch;
         for index in 0..self.inputs.len() {
+            // Publish once per block, not per sample. A ready peer cannot stand
+            // in for this input, and quarantined/preflight blocks prove nothing.
+            let ready = std::mem::take(&mut self.pending_input_ready[index]);
+            if let Some(input) = &self.inputs[index] {
+                input
+                    .metrics
+                    .source_started
+                    .store(ready && !quarantined, Ordering::Release);
+            }
             let peak = std::mem::take(&mut self.pending_input_peaks[index]);
-            if peak != 0.0 {
-                if let Some(input) = &self.inputs[index] {
+            if let Some(input) = &self.inputs[index] {
+                if quarantined {
+                    input.peak.store(0, Ordering::Relaxed);
+                } else if peak != 0.0 {
                     input.peak.fetch_max(peak.to_bits(), Ordering::Relaxed);
                 }
             }
@@ -232,12 +272,29 @@ impl Graph {
             for delay in &mut self.delays {
                 delay.buffer.fill([0.0; 2]);
                 delay.cursor = 0;
+                delay.pending = 0;
             }
+            // The hardware gap has already inserted silence. Do not conceal it
+            // with pre-gap strip tails when fresh input becomes ready again.
+            for processor in &mut self.processors {
+                processor.resume_from_silence();
+            }
+            self.pending_input_peaks.fill(0.0);
+            self.pending_input_ready.fill(false);
             for input in self.inputs.iter().flatten() {
                 input
                     .metrics
                     .callback_discontinuities
                     .fetch_add(1, Ordering::Release);
+            }
+            // Each secondary owns its queue/clock history. Notify its consumer
+            // instead of draining a live queue here; do not echo into the master.
+            for (bus, send) in self.sends.iter().enumerate() {
+                if bus != self.primary && send.is_some() {
+                    self.send_metrics[bus]
+                        .callback_discontinuities
+                        .fetch_add(1, Ordering::Release);
+                }
             }
             self.observed_callback_epoch = callback_epoch;
         }
@@ -247,17 +304,19 @@ impl Graph {
             if let Some(input) = input {
                 let (frame, source_ready) = input.source.frame(&input.metrics);
                 ready |= source_ready;
+                self.pending_input_ready[index] |= source_ready;
                 frames[index] = self.processors[index].frame(frame, source_ready, false);
                 let peak = frames[index][0].abs().max(frames[index][1].abs()) as f64;
                 self.pending_input_peaks[index] = self.pending_input_peaks[index].max(peak);
             }
         }
         let mut mixed = self.matrix.process_unlimited(&frames[..self.inputs.len()]);
+        let mut bus_ready = [false; BUS_COUNT];
         for (bus, frame) in mixed.iter_mut().enumerate() {
-            *frame = self.delays[bus].process(*frame);
+            (*frame, bus_ready[bus]) = self.delays[bus].process(*frame, ready);
         }
         for (bus, frame) in mixed.iter().enumerate() {
-            if ready {
+            if bus_ready[bus] {
                 if let Some(queue) = &self.sends[bus] {
                     if queue.push(frame.map(|v| v as f32)).is_err() {
                         self.pending_send_overruns[bus] += 1;
@@ -266,6 +325,13 @@ impl Graph {
             }
         }
         self.commit_revision_if_settled();
-        (mixed[self.primary].map(|v| v as f32), ready)
+        (
+            mixed[self.primary].map(|v| v as f32),
+            bus_ready[self.primary],
+        )
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/mixing/delay_line.rs"]
+mod delay_line_tests;
