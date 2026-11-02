@@ -75,7 +75,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.13'
           architecture: ${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }}
@@ -152,7 +152,7 @@ jobs:
       - name: Verify the native CLI contract and prepare its release kit (no publication)
         run: python scripts/release_bundle.py --cli
       - name: Upload CLI/TUI archive and checksum
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: maris-cli-${{ matrix.os }}-${{ github.sha }}
           path: |
@@ -166,7 +166,7 @@ jobs:
           retention-days: 14
       - name: Preserve verification evidence, including failures
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: verification-${{ matrix.os }}-${{ github.sha }}
           path: .maris-review/verification/
@@ -184,7 +184,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.13'
       - name: Retrieve only this successful run's six native CLI outputs
@@ -194,7 +194,7 @@ jobs:
         run: gh run download "$GITHUB_RUN_ID" --pattern 'maris-cli-*' --dir .maris-review/ci-kits
       - name: Validate all native CLI kits and assemble the install manifest
         run: python scripts/release_bundle.py --collect .maris-review/ci-kits --output dist/cli-manifest/maris-release.tsv
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: maris-cli-manifest-${{ github.sha }}
           path: dist/cli-manifest/maris-release.tsv
