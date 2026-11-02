@@ -1,6 +1,261 @@
 //! End-to-end preset regressions: real PTY bytes and persisted state, not synthetic key reducers.
 use super::*;
 
+fn wait_screen(process: &mut ConsoleProcess, label: &str, done: impl Fn(&str) -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut output = String::new();
+    loop {
+        process.drain(&mut output);
+        let screen = process.terminal.screen().contents();
+        if done(&screen) {
+            return;
+        }
+        assert!(
+            process.child.try_wait().unwrap().is_none(),
+            "console exited: {label}"
+        );
+        assert!(Instant::now() < deadline, "{label}: {screen}");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn real_terminal_search_keeps_repeated_letters_read_only_then_confirms_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path());
+    let _lease = store.session_lock().unwrap();
+    let _heartbeat = Heartbeat::start(store.clone());
+    let mut process = spawn_console(dir.path());
+    process.send("p/Bass");
+    wait_screen(&mut process, "repeated search letters", |text| {
+        text.contains("Search: Bass")
+    });
+    assert_eq!(store.load().unwrap().revision, 0);
+    assert_eq!(listening::load(&store).unwrap().revision, 0);
+    assert!(
+        !dir.path().join("control.json").exists(),
+        "search letter s requested audio stop"
+    );
+    process.send("\x15scene:dialogue");
+    wait_screen(&mut process, "filtered dialogue", |text| {
+        text.contains("Search: scene:dialogue")
+    });
+    wait_for_preset(
+        &mut process,
+        Some("Dialogue"),
+        Instant::now() + Duration::from_secs(5),
+    );
+    process.send("\r");
+    wait_until(&mut process, "filtered scene applied", || {
+        listening::load(&store).unwrap().revision == 1
+    });
+    process.send("\r\r");
+    idle(&mut process, Duration::from_millis(150));
+    assert_eq!(listening::load(&store).unwrap().revision, 1);
+    assert!(!dir.path().join("control.json").exists());
+}
+
+#[test]
+fn real_terminal_empty_search_cannot_apply_and_escape_clears_before_closing() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path());
+    let _lease = store.session_lock().unwrap();
+    let _heartbeat = Heartbeat::start(store.clone());
+    let mut process = spawn_console(dir.path());
+    process.send("p/zzzz-no-match");
+    wait_screen(&mut process, "empty search", |text| {
+        text.contains("No matches")
+    });
+    process.send("\r");
+    idle(&mut process, Duration::from_millis(100));
+    assert_eq!(store.load().unwrap().revision, 0);
+    assert_eq!(listening::load(&store).unwrap().revision, 0);
+    process.send("\x1b");
+    wait_screen(&mut process, "search cleared", |text| {
+        text.contains("PRESETS") && !text.contains("Search:")
+    });
+    process.send("\x1b");
+    wait_screen(&mut process, "picker closed", |text| {
+        !text.contains("PRESETS")
+    });
+    assert!(!dir.path().join("control.json").exists());
+}
+
+#[test]
+fn real_terminal_search_does_not_bypass_changed_configuration_guard() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path());
+    let _lease = store.session_lock().unwrap();
+    let _heartbeat = Heartbeat::start(store.clone());
+    let mut process = spawn_console(dir.path());
+    process.send("p/bass");
+    wait_screen(&mut process, "search opened", |text| {
+        text.contains("Search: bass")
+    });
+    store
+        .edit(Some(0), |profile| {
+            profile.bypass = true;
+            Ok(())
+        })
+        .unwrap();
+    wait_screen(&mut process, "picker invalidated", |text| {
+        text.contains(maris::i18n::for_language(
+            "en",
+            "Configuration changed; reopen the picker",
+        ))
+    });
+    process.send("\x1b[200~scene:dialogue\rqs\x1b[201~\r");
+    idle(&mut process, Duration::from_millis(100));
+    assert_eq!(store.load().unwrap().revision, 1);
+    assert!(store.load().unwrap().profile.bypass);
+    assert_eq!(listening::load(&store).unwrap().revision, 0);
+    assert!(!dir.path().join("control.json").exists());
+}
+
+#[test]
+fn real_terminal_bracketed_paste_search_waits_for_explicit_confirmation() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path());
+    let _lease = store.session_lock().unwrap();
+    let _heartbeat = Heartbeat::start(store.clone());
+    let mut process = spawn_console(dir.path());
+    process.send("p/");
+    wait_screen(&mut process, "search ready for paste", |text| {
+        text.contains("Search:")
+    });
+    process.send("\x1b[200~scene:dialogue\r\n\x1b[201~");
+    wait_screen(&mut process, "pasted search text", |text| {
+        text.contains("Search: scene:dialogue")
+    });
+    wait_for_preset(
+        &mut process,
+        Some("Dialogue"),
+        Instant::now() + Duration::from_secs(5),
+    );
+    assert_eq!(store.load().unwrap().revision, 0);
+    assert_eq!(
+        listening::load(&store).unwrap().revision,
+        0,
+        "pasted newline confirmed a scene"
+    );
+    assert!(!dir.path().join("control.json").exists());
+    process.send("\r");
+    wait_until(&mut process, "explicit confirmation after paste", || {
+        listening::load(&store).unwrap().revision == 1
+    });
+    assert_eq!(
+        listening::load(&store)
+            .unwrap()
+            .effective("OFFLINE PTY fixture")
+            .presence_db,
+        1.0
+    );
+}
+
+#[test]
+fn real_terminal_bracketed_paste_mode_is_enabled_and_restored_on_exit() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path());
+    let _lease = store.session_lock().unwrap();
+    let _heartbeat = Heartbeat::start(store.clone());
+    let mut process = spawn_console(dir.path());
+    assert!(
+        process.first_output.contains("\x1b[?2004h"),
+        "terminal never enabled bracketed paste"
+    );
+    process.send("\x1b[200~p\rqs\x03\x1b[201~");
+    idle(&mut process, Duration::from_millis(100));
+    assert!(!dir.path().join("control.json").exists());
+    assert_eq!(store.load().unwrap().revision, 0);
+    process.send("q");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut output = String::new();
+    loop {
+        process.drain(&mut output);
+        if let Some(status) = process.child.try_wait().unwrap() {
+            assert!(status.success());
+            break;
+        }
+        assert!(Instant::now() < deadline, "console failed to exit");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    process.drain(&mut output);
+    assert!(
+        output.contains("\x1b[?2004l"),
+        "terminal left bracketed paste enabled"
+    );
+}
+
+#[test]
+fn real_terminal_oversized_paste_blocks_old_selection_until_search_is_edited() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path());
+    let _lease = store.session_lock().unwrap();
+    let _heartbeat = Heartbeat::start(store.clone());
+    let mut process = spawn_console(dir.path());
+    process.send("p/scene:dialogue");
+    wait_for_preset(
+        &mut process,
+        Some("Dialogue"),
+        Instant::now() + Duration::from_secs(5),
+    );
+    process.send(&format!("\x1b[200~{}\x1b[201~", "x".repeat(257)));
+    wait_screen(&mut process, "oversized paste warning", |text| {
+        text.contains("Search text is too long")
+    });
+    process.send("\r");
+    idle(&mut process, Duration::from_millis(100));
+    assert_eq!(listening::load(&store).unwrap().revision, 0);
+    assert_eq!(store.load().unwrap().revision, 0);
+    assert!(!dir.path().join("control.json").exists());
+    assert!(!dir.path().join("listening-previous.json").exists());
+    process.send("\x15\x1b[200~scene:focus\x1b[201~");
+    wait_for_preset(
+        &mut process,
+        Some("Focus"),
+        Instant::now() + Duration::from_secs(5),
+    );
+    process.send("\r");
+    wait_until(&mut process, "edited search after rejected paste", || {
+        listening::load(&store).unwrap().revision == 1
+    });
+    assert_eq!(
+        listening::load(&store)
+            .unwrap()
+            .effective("OFFLINE PTY fixture")
+            .presence_db,
+        -0.25
+    );
+}
+
+#[test]
+fn real_terminal_paste_payload_can_arrive_in_separate_reads_without_shortcuts() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path());
+    let _lease = store.session_lock().unwrap();
+    let _heartbeat = Heartbeat::start(store.clone());
+    let mut process = spawn_console(dir.path());
+    process.send("p/");
+    wait_screen(&mut process, "search before split paste", |text| {
+        text.contains("Search:")
+    });
+    process.send("\x1b[200~scene:");
+    idle(&mut process, Duration::from_millis(60));
+    process.send("dialogue\r\n");
+    idle(&mut process, Duration::from_millis(60));
+    process.send("\x1b[201~");
+    wait_screen(&mut process, "split paste completes", |text| {
+        text.contains("Search: scene:dialogue")
+    });
+    assert_eq!(listening::load(&store).unwrap().revision, 0);
+    assert!(!dir.path().join("control.json").exists());
+    process.send("\x1b");
+    wait_screen(&mut process, "split paste cancellation", |text| {
+        !text.contains("Search:")
+    });
+    assert_eq!(listening::load(&store).unwrap().revision, 0);
+}
+
 fn wait_until(process: &mut ConsoleProcess, label: &str, mut done: impl FnMut() -> bool) {
     let deadline = Instant::now() + Duration::from_secs(5);
     let mut output = String::new();

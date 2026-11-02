@@ -92,13 +92,14 @@ pub fn fit(value: &str, width: u16) -> String {
     }
     let mut used = 0;
     let mut result = String::new();
-    for ch in value.chars() {
-        let cell_width = Span::raw(ch.to_string()).width();
+    let span = Span::raw(value.as_str());
+    for grapheme in span.styled_graphemes(Style::default()) {
+        let cell_width = Span::raw(grapheme.symbol).width();
         if used + cell_width >= usize::from(width) {
             break;
         }
         used += cell_width;
-        result.push(ch);
+        result.push_str(grapheme.symbol);
     }
     result.push('…');
     result

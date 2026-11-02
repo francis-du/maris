@@ -16,6 +16,7 @@ use ratatui::{
     Frame,
 };
 use serde_json::Value;
+mod mixer;
 
 #[derive(Clone, Copy, Debug)]
 pub struct LayoutAreas {
@@ -296,134 +297,7 @@ fn draw_apps(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
 }
 
 fn draw_mixer(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
-    let p = view.palette;
-    let r = view.runtime;
-    let live = studio::live(r, crate::analysis::now_ms());
-    let editable = live && r["mixer"]["restart_required"] == false;
-    let strips = super::actions::mixer_rows(r);
-    heading(frame, row(area, 0), "Mixer controls", p);
-    let status = if !live {
-        "Awaiting telemetry"
-    } else if !editable {
-        "Mixer assignments changed; stop and restart before adjusting channels"
-    } else if r["mixer_control"]["revision"].as_u64().is_some()
-        && r["mixer_control"]["revision"] == r["mixer"]["processing_revision"]
-    {
-        "Applied"
-    } else {
-        "Pending audio update"
-    };
-    write(frame, row(area, 1), t(status), Style::default().fg(p.muted));
-    write(
-        frame,
-        row(area, 3),
-        t("Channel · volume · balance · solo · measured peak"),
-        Style::default().fg(p.muted),
-    );
-    let list = app_rows(area);
-    let start = app_offset(view.app_row, strips.len(), list.height);
-    if strips.is_empty() {
-        write(
-            frame,
-            list,
-            t("No mixer channels"),
-            Style::default().fg(p.muted),
-        );
-    }
-    for (index, strip) in strips
-        .iter()
-        .enumerate()
-        .skip(start)
-        .take(usize::from(list.height))
-    {
-        let rect = row(list, (index - start) as u16);
-        let selected = index == view.app_row;
-        if selected {
-            frame.render_widget(
-                Block::default().style(Style::default().bg(p.selected)),
-                rect,
-            );
-        }
-        let parts = Layout::horizontal([
-            Constraint::Length(5),
-            Constraint::Min(1),
-            Constraint::Length(9),
-            Constraint::Length(6),
-            Constraint::Length(5),
-            Constraint::Length(9),
-        ])
-        .spacing(1)
-        .split(rect);
-        write(
-            frame,
-            parts[0],
-            if strip["mute"] == true { "[x]" } else { "[ ]" },
-            Style::default().fg(p.accent),
-        );
-        write(
-            frame,
-            parts[1],
-            &text(&strip["name"]),
-            Style::default().fg(p.text),
-        );
-        write(
-            frame,
-            parts[2],
-            &number(&strip["gain_db"], " dB", true),
-            Style::default().fg(p.text),
-        );
-        write(
-            frame,
-            parts[3],
-            &number(&strip["pan"], "", true),
-            Style::default().fg(p.muted),
-        );
-        write(
-            frame,
-            parts[4],
-            if strip["solo"] == true {
-                t("ON")
-            } else {
-                t("OFF")
-            },
-            Style::default().fg(p.secondary),
-        );
-        let id = strip["id"].as_str();
-        let measured = r["mixer"]["strips"].as_array().and_then(|values| {
-            let mut matching = values
-                .iter()
-                .filter(|item| id.is_some() && item["id"].as_str() == id);
-            let first = matching.next()?;
-            matching.next().is_none().then_some(first)
-        });
-        let peak = measured.map_or(&Value::Null, |item| &item["peak_dbfs"]);
-        write(
-            frame,
-            parts[5],
-            &number(peak, " dB", live && measured.is_some()),
-            Style::default().fg(p.meter),
-        );
-    }
-    if let Some(selected) = strips.get(view.app_row) {
-        write(
-            frame,
-            row(area, area.height.saturating_sub(4)),
-            &format!("{}: {}", t("Source"), text(&selected["source_device"])),
-            Style::default().fg(p.muted),
-        );
-    }
-    write(
-        frame,
-        row(area, area.height.saturating_sub(3)),
-        t("←/→ volume · Space mute · X solo · [/] balance · U undo"),
-        Style::default().fg(p.text),
-    );
-    for (rect, label) in command_rects(area)
-        .into_iter()
-        .zip(["− Volume", "Space Mute", "X Solo"])
-    {
-        button(frame, rect, label, p, editable);
-    }
+    mixer::draw(frame, area, view);
 }
 
 fn draw_device(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
@@ -808,7 +682,7 @@ pub fn pointer_action(area: Rect, view: &Console<'_>, event: MouseEvent) -> Opti
         Workspace::Apps => {
             let list = app_rows(work);
             let count = if super::actions::mixer_mode(view.runtime) {
-                super::actions::mixer_rows(view.runtime).len()
+                super::actions::mixer_row_count(view.runtime)
             } else {
                 control_panel::visible_applications(view.applications).len()
             };
@@ -841,11 +715,7 @@ pub fn pointer_action(area: Rect, view: &Console<'_>, event: MouseEvent) -> Opti
                 {
                     return None;
                 }
-                [
-                    Some(KeyCode::Left),
-                    Some(KeyCode::Char(' ')),
-                    Some(KeyCode::Char('x')),
-                ]
+                mixer::commands(view).map(|(_, key)| key)
             }
             Workspace::Apps => [
                 Some(KeyCode::Char('a')),

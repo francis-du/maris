@@ -6,13 +6,15 @@ use ratatui::layout::{Margin, Rect};
 #[derive(Clone, Copy, Debug)]
 pub struct Areas {
     pub modal: Rect,
+    pub search: Rect,
+    pub table: Rect,
     pub rows: Rect,
     pub offset: usize,
 }
 
 pub fn layout(area: Rect, count: usize, selected: usize) -> Areas {
     let width = 70.min(area.width.saturating_sub(2));
-    let desired = (count.saturating_add(4)).min(u16::MAX as usize) as u16;
+    let desired = (count.max(1).saturating_add(5)).min(u16::MAX as usize) as u16;
     let height = desired.min(area.height.saturating_sub(2));
     let modal = Rect::new(
         area.x + area.width.saturating_sub(width) / 2,
@@ -21,21 +23,46 @@ pub fn layout(area: Rect, count: usize, selected: usize) -> Areas {
         height,
     );
     let inner = modal.inner(Margin::new(1, 1));
-    let visible = usize::from(inner.height.saturating_sub(1)).min(count);
+    let table = Rect::new(
+        inner.x,
+        inner.y.saturating_add(1),
+        inner.width,
+        inner.height.saturating_sub(1),
+    );
+    let visible = usize::from(table.height.saturating_sub(1)).min(count);
     let offset = selected
         .min(count.saturating_sub(1))
         .saturating_add(1)
         .saturating_sub(visible);
     Areas {
         modal,
+        search: Rect::new(inner.x, inner.y, inner.width, inner.height.min(1)),
+        table,
         rows: Rect::new(
-            inner.x,
-            inner.y.saturating_add(1),
-            inner.width,
+            table.x,
+            table.y.saturating_add(1),
+            table.width,
             visible as u16,
         ),
         offset,
     }
+}
+
+pub fn pointer_choice_filtered(
+    area: Rect,
+    devices: &[crate::audio::DeviceInfo],
+    selected: usize,
+    invalidated: bool,
+    search: &super::picker_search::Search,
+    event: MouseEvent,
+) -> Option<usize> {
+    let choices = search.outputs(devices);
+    let position = choices
+        .iter()
+        .position(|index| *index == selected)
+        .unwrap_or(0);
+    pointer_choice(area, choices.len(), position, invalidated, event)
+        .and_then(|row| choices.get(row).copied())
 }
 
 pub fn pointer_choice(

@@ -157,10 +157,209 @@ fn active_mixer_uses_its_own_channels_meters_and_pointer_actions() {
     });
 }
 
+fn bus_runtime() -> serde_json::Value {
+    json!({"active":true,"system_backend":"multi_device_mixer",
+        "updated_at_ms":maris::analysis::now_ms(),
+        "mixer_control":{"revision":1,"config":{
+            "strips":[{"id":"a","name":"Input music","mute":false,"gain_db":0.0,"pan":0.0}],
+            "buses":[
+                {"id":"a","name":"Main speakers","gain_db":-2.0,"mute":false,"delay_ms":0,"output_device":"uid:main"},
+                {"id":"b","name":"Monitor phones","gain_db":-4.0,"mute":true,"delay_ms":25,"output_device":"uid:monitor"}]}},
+        "mixer":{"revision":1,"processing_revision":1,"restart_required":false,
+            "strips":[{"id":"a","peak_dbfs":-9.25}],
+            "buses":[{"id":"b","peak_left_dbfs":-32.5,"peak_right_dbfs":-35.0},
+                     {"id":"a","peak_left_dbfs":-25.0,"peak_right_dbfs":-21.25}]}})
+}
+
+#[test]
+fn output_bus_rows_show_id_matched_peaks_and_dedicated_commands() {
+    with_view(|view| {
+        let runtime = bus_runtime();
+        let view = Console {
+            runtime: &runtime,
+            workspace: Workspace::Apps,
+            app_row: 2,
+            ..view
+        };
+        let area = Rect::new(0, 0, 140, 40);
+        let work = inspector::inset(inspector::layout(controls::shell(area).content).work);
+        let list = inspector::app_rows(work);
+        let mut terminal = Terminal::new(TestBackend::new(140, 40)).unwrap();
+        terminal.draw(|frame| tui_view::draw(frame, &view)).unwrap();
+        let buffer = terminal.backend().buffer();
+        for (offset, expected_name, expected_peak) in [
+            (0, "Input music", "-9.25"),
+            (1, "Main speakers", "-21.25"),
+            (2, "Monitor phones", "-32.50"),
+        ] {
+            let text: String = (list.x..list.right())
+                .map(|x| buffer[(x, list.y + offset)].symbol())
+                .collect();
+            assert!(text.contains(expected_name), "{text}");
+            assert!(text.contains(expected_peak), "{text}");
+        }
+        assert_eq!(
+            inspector::pointer_action(area, &view, click(inspector::command_rects(work)[2])),
+            Some(PointerAction::Key(KeyCode::Right))
+        );
+        assert_eq!(
+            inspector::pointer_action(area, &view, click(Rect::new(list.x + 6, list.y + 1, 1, 1))),
+            Some(PointerAction::SelectApp(1))
+        );
+        assert_eq!(
+            inspector::pointer_action(area, &view, click(Rect::new(list.x, list.y + 2, 1, 1))),
+            Some(PointerAction::ToggleApp(2))
+        );
+    });
+}
+
+#[test]
+fn output_bus_meters_reject_stale_duplicate_and_partial_measurements() {
+    with_view(|view| {
+        for variant in 0..4 {
+            let mut runtime = bus_runtime();
+            match variant {
+                0 => runtime["updated_at_ms"] = json!(0),
+                1 => {
+                    let duplicate = runtime["mixer"]["buses"][0].clone();
+                    runtime["mixer"]["buses"]
+                        .as_array_mut()
+                        .unwrap()
+                        .push(duplicate);
+                }
+                2 => runtime["mixer"]["buses"][0]["peak_right_dbfs"] = serde_json::Value::Null,
+                _ => runtime["mixer"]["buses"] = json!([]),
+            }
+            let view = Console {
+                runtime: &runtime,
+                workspace: Workspace::Apps,
+                app_row: 2,
+                ..view
+            };
+            let mut terminal = Terminal::new(TestBackend::new(140, 40)).unwrap();
+            terminal.draw(|frame| tui_view::draw(frame, &view)).unwrap();
+            let text: String = terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect();
+            assert!(!text.contains("-32.50"), "variant={variant}");
+        }
+    });
+}
+
+#[test]
+fn output_bus_controls_are_inert_behind_dialogs_and_in_compact_layouts() {
+    with_view(|view| {
+        let runtime = bus_runtime();
+        let view = Console {
+            runtime: &runtime,
+            workspace: Workspace::Apps,
+            app_row: 2,
+            ..view
+        };
+        for (width, height) in [(30, 8), (80, 24), (90, 26), (100, 32), (140, 40)] {
+            let area = Rect::new(0, 0, width, height);
+            let work = inspector::inset(inspector::layout(controls::shell(area).content).work);
+            let event = click(inspector::command_rects(work)[2]);
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            terminal.draw(|frame| tui_view::draw(frame, &view)).unwrap();
+            if width < 90 || height < 26 {
+                assert_eq!(inspector::pointer_action(area, &view, event), None);
+            }
+            for overlay in [
+                Overlay::Help,
+                Overlay::Output,
+                Overlay::Preset,
+                Overlay::StartSystem,
+            ] {
+                assert_eq!(
+                    inspector::pointer_action(area, &Console { overlay, ..view }, event),
+                    None
+                );
+            }
+            assert_eq!(
+                inspector::pointer_action(
+                    area,
+                    &Console {
+                        app_row: usize::MAX,
+                        ..view
+                    },
+                    event
+                ),
+                None
+            );
+        }
+    });
+}
+
+#[test]
+fn mixer_selection_has_a_text_marker_without_relying_on_color() {
+    with_view(|view| {
+        let runtime = bus_runtime();
+        for selected in 0..3 {
+            let view = Console {
+                runtime: &runtime,
+                workspace: Workspace::Apps,
+                app_row: selected,
+                ..view
+            };
+            let mut terminal = Terminal::new(TestBackend::new(140, 40)).unwrap();
+            terminal.draw(|frame| tui_view::draw(frame, &view)).unwrap();
+            let buffer = terminal.backend().buffer();
+            let list = inspector::app_rows(inspector::inset(
+                inspector::layout(controls::shell(buffer.area).content).work,
+            ));
+            for index in 0..3 {
+                let marker: String = (list.x..list.x + 5)
+                    .map(|x| buffer[(x, list.y + index as u16)].symbol())
+                    .collect();
+                assert_eq!(
+                    marker.contains('▶'),
+                    index == selected,
+                    "selected={selected} row={index}: {marker}"
+                );
+            }
+        }
+    });
+}
+
+#[test]
+fn mixer_bus_footer_does_not_advertise_strip_only_operations() {
+    with_view(|view| {
+        let runtime = bus_runtime();
+        for selected in 0..3 {
+            let view = Console {
+                runtime: &runtime,
+                workspace: Workspace::Apps,
+                app_row: selected,
+                ..view
+            };
+            let mut terminal = Terminal::new(TestBackend::new(140, 40)).unwrap();
+            terminal.draw(|frame| tui_view::draw(frame, &view)).unwrap();
+            let text: String = terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect();
+            assert_eq!(text.contains("X solo"), selected == 0);
+            assert_eq!(text.contains("[/] balance"), selected == 0);
+            assert_eq!(text.contains("Home/End select"), selected != 0);
+        }
+    });
+}
+
 #[test]
 fn mixer_control_labels_are_present_in_all_six_languages() {
     for key in [
         "Mixer controls",
+        "Inputs and output buses",
+        "+ Volume",
+        "←/→ volume · Space mute · Home/End select · U undo",
         "No mixer channels",
         "Space Mute",
         "X Solo",

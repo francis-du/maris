@@ -1,6 +1,61 @@
 //! Localized labels for the rewritten console. English identifiers stay unchanged.
 pub const TRANSLATIONS: &[(&str, [&str; 5])] = &[
     (
+        "Search text is too long (256 bytes max)",
+        [
+            "搜索文本过长（最多 256 字节）",
+            "搜尋文字過長（最多 256 位元組）",
+            "検索文字列が長すぎます（最大256バイト）",
+            "Suchtext zu lang (max. 256 Bytes)",
+            "Búsqueda demasiado larga (máx. 256 bytes)",
+        ],
+    ),
+    (
+        "Enlarge terminal to choose",
+        [
+            "放大终端后选择",
+            "放大終端後選擇",
+            "端末を広げて選択",
+            "Terminal zum Wählen vergrößern",
+            "Amplía el terminal para elegir",
+        ],
+    ),
+    (
+        "Enter confirms · Esc clears search",
+        [
+            "Enter 确认 · Esc 清空搜索",
+            "Enter 確認 · Esc 清空搜尋",
+            "Enter で確定 · Esc で検索を解除",
+            "Enter bestätigt · Esc löscht Suche",
+            "Enter confirma · Esc borra búsqueda",
+        ],
+    ),
+    ("Search", ["搜索", "搜尋", "検索", "Suchen", "Buscar"]),
+    (
+        "/ Search",
+        ["/ 搜索", "/ 搜尋", "/ 検索", "/ Suchen", "/ Buscar"],
+    ),
+    (
+        "No matches",
+        [
+            "没有匹配项",
+            "沒有符合項目",
+            "一致する項目なし",
+            "Keine Treffer",
+            "Sin coincidencias",
+        ],
+    ),
+    (
+        "Esc clears search",
+        [
+            "Esc 清空搜索",
+            "Esc 清空搜尋",
+            "Esc で検索を解除",
+            "Esc löscht Suche",
+            "Esc borra búsqueda",
+        ],
+    ),
+    (
         "Reduced motion",
         [
             "减少动态效果",

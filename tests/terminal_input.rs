@@ -1,6 +1,8 @@
 //! Exercise the actual TUI process using an owned pseudo-terminal and isolated offline state.
 //! A parent-held session lease prevents the console from starting an audio engine.
 #![cfg(unix)]
+#[path = "unit/terminal_mixer.rs"]
+mod terminal_mixer;
 use maris::{configuration, control_panel, listening, store::Store, studio_controls};
 use ratatui::layout::Rect;
 use serde_json::json;
@@ -30,14 +32,17 @@ struct Heartbeat {
 }
 impl Heartbeat {
     fn start(store: Store) -> Self {
-        heartbeat(&store);
+        Self::start_with(store, heartbeat)
+    }
+    fn start_with(store: Store, publish: fn(&Store)) -> Self {
+        publish(&store);
         let (stop, receiver) = std::sync::mpsc::channel();
         let thread = std::thread::spawn(move || {
             while matches!(
                 receiver.recv_timeout(Duration::from_millis(100)),
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout)
             ) {
-                heartbeat(&store);
+                publish(&store);
             }
         });
         Self {
@@ -211,7 +216,11 @@ fn spawn_console(dir: &std::path::Path) -> ConsoleProcess {
         child,
         master,
         first_output: String::new(),
-        terminal: vt100::Parser::new(size.ws_row, size.ws_col, 0),
+        terminal: vt100::Parser::new(
+            std::num::NonZeroU16::new(size.ws_row).expect("nonempty fixture rows"),
+            std::num::NonZeroU16::new(size.ws_col).expect("nonempty fixture columns"),
+            0,
+        ),
     };
     let start = Instant::now();
     let mut output = String::new();
@@ -338,8 +347,15 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
     // alive while the user reads the draft; Enter must still commit that same draft.
     process.send("+");
     let editing = Instant::now();
-    while editing.elapsed() < Duration::from_millis(1400) {
+    let draft_deadline = editing + Duration::from_secs(5);
+    let mut draft_visible = false;
+    while editing.elapsed() < Duration::from_millis(1400) || !draft_visible {
         process.drain(&mut output);
+        draft_visible = process.terminal.screen().contents().contains("+4.5 dB");
+        assert!(
+            Instant::now() < draft_deadline,
+            "draft adjustment was not rendered before delayed Enter"
+        );
         std::thread::sleep(Duration::from_millis(20));
     }
     assert_eq!(

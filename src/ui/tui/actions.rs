@@ -59,24 +59,45 @@ pub(super) fn mixer_rows(runtime: &serde_json::Value) -> &[serde_json::Value] {
         .map_or(&[], Vec::as_slice)
 }
 
+pub(super) fn mixer_bus_rows(runtime: &serde_json::Value) -> &[serde_json::Value] {
+    runtime["mixer_control"]["config"]["buses"]
+        .as_array()
+        .map_or(&[], Vec::as_slice)
+}
+
+pub(super) fn mixer_row_count(runtime: &serde_json::Value) -> usize {
+    mixer_rows(runtime).len() + mixer_bus_rows(runtime).len()
+}
+
 pub(super) fn preserve_mixer_row(
     before: Option<&crate::mixer::MixerState>,
     after: Option<&crate::mixer::MixerState>,
     row: usize,
 ) -> usize {
-    let Some(after) = after else {
+    let Some((before, after)) = before.zip(after) else {
         return usize::MAX;
     };
-    before
-        .and_then(|state| state.config.strips.get(row))
-        .and_then(|selected| {
-            after
-                .config
-                .strips
-                .iter()
-                .position(|strip| strip.id == selected.id)
-        })
-        .unwrap_or(after.config.strips.len())
+    // Input and output IDs have distinct namespaces. A removed input must not
+    // become bus A merely because bus rows now follow the shorter input list.
+    if let Some(selected) = before.config.strips.get(row) {
+        after
+            .config
+            .strips
+            .iter()
+            .position(|strip| strip.id == selected.id)
+    } else {
+        row.checked_sub(before.config.strips.len())
+            .and_then(|index| before.config.buses.get(index))
+            .and_then(|selected| {
+                after
+                    .config
+                    .buses
+                    .iter()
+                    .position(|bus| bus.id == selected.id)
+            })
+            .map(|index| after.config.strips.len() + index)
+    }
+    .unwrap_or(usize::MAX)
 }
 
 #[derive(Clone, Copy)]
@@ -125,15 +146,18 @@ pub(super) fn application_key_at(
     let ApplicationInput { key, now } = input;
     let mixing = mixer_mode(runtime);
     let count = if mixing {
-        mixer_rows(runtime).len()
+        mixer_row_count(runtime)
     } else {
         application_pids(applications).len()
     };
-    if matches!(key, KeyCode::Up | KeyCode::Down) {
-        *row = if key == KeyCode::Up {
-            (*row).min(count).saturating_sub(1)
-        } else {
-            row.saturating_add(1).min(count.saturating_sub(1))
+    if matches!(key, KeyCode::Up | KeyCode::Down)
+        || (mixing && matches!(key, KeyCode::Home | KeyCode::End))
+    {
+        *row = match key {
+            KeyCode::Up => (*row).min(count).saturating_sub(1),
+            KeyCode::Home => 0,
+            KeyCode::End => count.saturating_sub(1),
+            _ => row.saturating_add(1).min(count.saturating_sub(1)),
         };
         return Ok(Some(Notice::new(if mixing {
             "Mixer controls"
@@ -156,25 +180,52 @@ pub(super) fn application_key_at(
                 "Mixer controls apply immediately; assignments need a restart",
             )));
         }
-        crate::ui::tui::input::ensure_displayed_output_at(store, runtime, now)?;
-        let current = crate::audio::runtime_status_at(store, now);
-        ensure!(mixer_mode(&current), "Audio session changed; select again");
-        ensure!(
-            current["mixer"]["restart_required"] == false,
-            "Mixer assignments changed; stop and restart before adjusting channels"
-        );
+        ensure_mixer_current(store, runtime, now)?;
         let displayed: crate::mixer::MixerState =
             serde_json::from_value(runtime["mixer_control"].clone())?;
         displayed.config.validate()?;
         if key == KeyCode::Char('u') {
-            crate::mixer::undo(store, Some(displayed.revision))?;
+            crate::mixer::undo_checked(store, Some(displayed.revision), || {
+                ensure_mixer_current(store, runtime, now)
+            })?;
             return Ok(Some(Notice::new("Previous mixer change undone")));
         }
-        let selected = displayed
-            .config
-            .strips
-            .get(*row)
-            .ok_or_else(|| anyhow::anyhow!("Choose a mixer channel first"))?;
+        if *row >= displayed.config.strips.len() {
+            let selected = row
+                .checked_sub(displayed.config.strips.len())
+                .and_then(|index| displayed.config.buses.get(index))
+                .ok_or_else(|| anyhow::anyhow!("Choose a mixer channel first"))?;
+            // Delay and device assignments require a restart; this live panel
+            // changes only saved bus gain/mute through the normal transaction.
+            let updated = crate::mixer::edit(store, Some(displayed.revision), |config| {
+                let bus = config
+                    .buses
+                    .iter_mut()
+                    .find(|bus| bus.id == selected.id)
+                    .ok_or_else(|| anyhow::anyhow!("Mixer channel changed; select again"))?;
+                ensure!(*bus == *selected, "Mixer channel changed; select again");
+                ensure_mixer_current(store, runtime, now)?;
+                match key {
+                    KeyCode::Left | KeyCode::Char('-') => {
+                        bus.gain_db = (bus.gain_db - 0.5).max(-60.0)
+                    }
+                    KeyCode::Right | KeyCode::Char('+') => {
+                        bus.gain_db = (bus.gain_db + 0.5).min(6.0)
+                    }
+                    KeyCode::Char(' ') => bus.mute = !bus.mute,
+                    _ => {}
+                }
+                Ok(())
+            })?;
+            return Ok(Some(Notice::new(
+                if updated.revision == displayed.revision {
+                    "No changes"
+                } else {
+                    "Saved; waiting for audio application"
+                },
+            )));
+        }
+        let selected = &displayed.config.strips[*row];
         let updated = crate::mixer::edit(store, Some(displayed.revision), |config| {
             let strip = config
                 .strips
@@ -182,7 +233,7 @@ pub(super) fn application_key_at(
                 .find(|strip| strip.id == selected.id)
                 .ok_or_else(|| anyhow::anyhow!("Selected mixer channel is no longer available"))?;
             ensure!(*strip == *selected, "Mixer channel changed; select again");
-            crate::ui::tui::input::ensure_displayed_output_at(store, runtime, now)?;
+            ensure_mixer_current(store, runtime, now)?;
             match key {
                 KeyCode::Left | KeyCode::Char('-') => {
                     strip.gain_db = (strip.gain_db - 0.5).max(-60.0)
@@ -242,6 +293,17 @@ pub(super) fn application_key_at(
         }
         _ => Ok(None),
     }
+}
+
+fn ensure_mixer_current(store: &Store, displayed: &serde_json::Value, now: u64) -> Result<()> {
+    crate::ui::tui::input::ensure_displayed_output_at(store, displayed, now)?;
+    let current = crate::audio::runtime_status_at(store, now);
+    ensure!(mixer_mode(&current), "Audio session changed; select again");
+    ensure!(
+        current["mixer"]["restart_required"] == false,
+        "Mixer assignments changed; stop and restart before adjusting channels"
+    );
+    Ok(())
 }
 
 #[cfg(test)]

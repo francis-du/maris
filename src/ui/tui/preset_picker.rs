@@ -8,6 +8,7 @@ use serde_json::Value;
 
 pub struct Areas {
     pub modal: Rect,
+    pub search: Rect,
     pub table: Rect,
     pub preview: Rect,
     pub rows: Rect,
@@ -82,9 +83,19 @@ pub fn layout(area: Rect, count: usize, selected: usize) -> Areas {
         height,
     );
     let inner = modal.inner(ratatui::layout::Margin::new(1, 1));
-    let preview_height = if inner.height >= 18 { 9 } else { 4 };
+    let search = Rect::new(inner.x, inner.y, inner.width, inner.height.min(1));
+    let inner = Rect::new(
+        inner.x,
+        inner.y.saturating_add(1),
+        inner.width,
+        inner.height.saturating_sub(1),
+    );
+    // Keep the header and at least one candidate ahead of optional preview
+    // space; a one-line remainder is reserved for an explicit resize warning.
+    let preview_height =
+        (if inner.height >= 18 { 9 } else { 4 }).min(inner.height.saturating_sub(3));
     let zones = Layout::vertical([Constraint::Min(2), Constraint::Length(preview_height)])
-        .spacing(1)
+        .spacing(u16::from(preview_height > 0))
         .split(inner);
     let visible = usize::from(zones[0].height.saturating_sub(1)).min(count);
     let offset = selected
@@ -93,6 +104,7 @@ pub fn layout(area: Rect, count: usize, selected: usize) -> Areas {
         .saturating_sub(visible);
     Areas {
         modal,
+        search,
         table: zones[0],
         preview: zones[1],
         rows: Rect::new(
@@ -106,26 +118,41 @@ pub fn layout(area: Rect, count: usize, selected: usize) -> Areas {
 }
 
 pub fn pointer_choice(area: Rect, view: &Console<'_>, event: MouseEvent) -> Option<usize> {
+    pointer_choice_filtered(area, view, &super::picker_search::Search::default(), event)
+}
+
+pub fn pointer_choice_filtered(
+    area: Rect,
+    view: &Console<'_>,
+    search: &super::picker_search::Search,
+    event: MouseEvent,
+) -> Option<usize> {
+    let choices = search.presets(view.presets);
+    let position = choices
+        .iter()
+        .position(|index| *index == view.preset_choice)
+        .unwrap_or(0);
     if view.overlay != Overlay::Preset
         || view.runtime["selection_invalidated"] == true
-        || view.presets.is_empty()
+        || choices.is_empty()
         || area.width < 30
         || area.height < 8
         || !event.modifiers.is_empty()
     {
         return None;
     }
-    let areas = layout(area, view.presets.len(), view.preset_choice);
+    let areas = layout(area, choices.len(), position);
     if !areas.rows.contains((event.column, event.row).into()) {
         return None;
     }
-    let last = view.presets.len() - 1;
-    match event.kind {
+    let last = choices.len() - 1;
+    let row = match event.kind {
         MouseEventKind::Down(MouseButton::Left) => {
             Some((areas.offset + usize::from(event.row - areas.rows.y)).min(last))
         }
-        MouseEventKind::ScrollUp => Some(view.preset_choice.min(last).saturating_sub(1)),
-        MouseEventKind::ScrollDown => Some(view.preset_choice.saturating_add(1).min(last)),
+        MouseEventKind::ScrollUp => Some(position.min(last).saturating_sub(1)),
+        MouseEventKind::ScrollDown => Some(position.saturating_add(1).min(last)),
         _ => None,
-    }
+    }?;
+    choices.get(row).copied()
 }

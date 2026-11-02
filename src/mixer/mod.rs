@@ -279,6 +279,15 @@ pub fn edit(
 }
 
 pub fn undo(store: &Store, expected: Option<u64>) -> Result<MixerState> {
+    undo_checked(store, expected, || Ok(()))
+}
+
+/// Revalidate caller state while holding the mixer write lock.
+pub(crate) fn undo_checked(
+    store: &Store,
+    expected: Option<u64>,
+    check: impl FnOnce() -> Result<()>,
+) -> Result<MixerState> {
     std::fs::create_dir_all(&store.directory)?;
     let lock = OpenOptions::new()
         .create(true)
@@ -291,6 +300,7 @@ pub fn undo(store: &Store, expected: Option<u64>) -> Result<MixerState> {
     if let Some(expected) = expected {
         ensure!(state.revision == expected, "Mixer revision conflict");
     }
+    check()?;
     let previous = state
         .previous
         .take()
