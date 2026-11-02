@@ -3,10 +3,12 @@ from pathlib import Path
 import hashlib
 import importlib.util
 import json
+import os
 import re
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -20,6 +22,17 @@ SPEC.loader.exec_module(site)
 
 
 class ReleaseTools(unittest.TestCase):
+    def test_release_gate_reparse_guard_detects_windows_junction_fallback(self):
+        class FakePath:
+            def __init__(self, attributes):
+                self.attributes = attributes
+            def is_symlink(self):
+                return False
+            def lstat(self):
+                return type('Stat', (), {'st_file_attributes': self.attributes})()
+        self.assertTrue(release_gate.linked_directory(FakePath(0x400)))
+        self.assertFalse(release_gate.linked_directory(FakePath(0)))
+
     def test_real_documentation_links_and_accessible_structure(self):
         files = site.check(ROOT / "docs")
         self.assertEqual(len(files), 109)
@@ -78,10 +91,21 @@ class ReleaseTools(unittest.TestCase):
                     steps.append({"suite": suite, "log": name, "exit_code": 0,
                                   "passed": True, "log_sha256": hashlib.sha256(data).hexdigest()})
                 records.append({"round": i, "seed": i, "passed": True, "steps": steps})
-            report = {"source_sha256": "fixture", "source_unchanged": True, "passed": True,
+            report = {"source_sha256": "fixture", "source_unchanged": True, "binaries_unchanged": True, "passed": True,
                       "completed_rounds": 200, "requested_rounds": 200, "passed_rounds": 200,
                       "records": records}
             release_gate.check_report(report, "fixture", root)
+            with mock.patch.object(Path, 'read_bytes', side_effect=AssertionError('unbounded log read')):
+                release_gate.check_report(report, "fixture", root)
+            for value in [None, False, 1, 'true']:
+                bad = dict(report, binaries_unchanged=value)
+                with self.subTest(binary_state=value), self.assertRaises(ValueError):
+                    release_gate.check_report(bad, "fixture", root)
+            invalidated = root / 'invalidated.json'
+            invalidated.write_text('{"reason":"binary drift"}', encoding='utf-8')
+            with self.assertRaises(ValueError):
+                release_gate.check_report(report, "fixture", root)
+            invalidated.unlink()
             bad = dict(report, completed_rounds=199)
             with self.assertRaises(ValueError):
                 release_gate.check_report(bad, "fixture", root)
@@ -90,6 +114,18 @@ class ReleaseTools(unittest.TestCase):
             (root / "round-001-release_matrix.log").write_text("modified")
             with self.assertRaises(ValueError):
                 release_gate.check_report(report, "fixture", root)
+
+    @unittest.skipIf(os.name == 'nt', 'POSIX symlink fixture is covered by the Windows reparse fallback test')
+    def test_final_bundle_digest_rejects_linked_entries(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = root / 'Maris.app'
+            bundle.mkdir()
+            target = root / 'outside.txt'
+            target.write_text('outside', encoding='utf-8')
+            (bundle / 'linked.txt').symlink_to(target)
+            with self.assertRaisesRegex(ValueError, 'linked or junction'):
+                release_gate.bundle_digest(bundle)
 
     def test_final_bundle_digest_changes_with_payload_or_permission_changes(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -8,7 +8,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from verify_rounds import SUITES, checkpoint_binaries, resume_records
+from verify_rounds import SUITES, checkpoint_binaries, resume_directory, resume_records, verification_root
 
 
 def fixture(root: Path):
@@ -31,6 +31,34 @@ def fixture(root: Path):
 
 
 class ResumeIntegrity(unittest.TestCase):
+    @unittest.skipIf(sys.platform == 'win32', 'POSIX symlink fixtures complement cross-platform reparse tests')
+    def test_verification_root_and_resume_reject_linked_directories(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            real_review = root / 'real-review'
+            (real_review / 'verification').mkdir(parents=True)
+            (root / '.maris-review').symlink_to(real_review, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, 'Linked verification directory'):
+                verification_root(root)
+            (root / '.maris-review').unlink()
+            verification = verification_root(root)
+            real_run = verification / 'real-run'
+            real_run.mkdir()
+            linked_run = verification / 'linked-run'
+            linked_run.symlink_to(real_run, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, 'Resume must name'):
+                resume_directory(linked_run, verification)
+
+    @unittest.skipIf(sys.platform == 'win32', 'POSIX symlink fixture complements cross-platform reparse tests')
+    def test_checkpoint_rejects_linked_target_and_binary_parent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            real_target = root / 'real-target'
+            real_target.mkdir()
+            (root / 'target').symlink_to(real_target, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, 'compiled target directory'):
+                checkpoint_binaries({}, root)
+
     def test_only_retained_complete_passing_rounds_can_be_reused(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve(); output, checkpoint, record = fixture(root)

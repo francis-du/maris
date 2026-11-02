@@ -137,6 +137,30 @@ class LinuxInstall(unittest.TestCase):
         self.assertTrue((self.prefix / '.maris-install.lock').is_dir())
         self.assertFalse((self.prefix / 'lib/maris').exists())
 
+    def test_cleanup_does_not_delete_a_replaced_install_lock(self):
+        tools = self.root / 'fault-tools'; tools.mkdir()
+        copy = tools / 'cp'
+        copy.write_text(
+            '#!/bin/bash\n'
+            'rm -rf -- "$MARIS_REPLACEMENT_LOCK"\n'
+            'mkdir -p -- "$MARIS_REPLACEMENT_LOCK"\n'
+            'exit 23\n'
+        )
+        copy.chmod(0o755)
+        lock = self.prefix / '.maris-install.lock'
+        result = self.call(
+            '--allow-unsigned',
+            '--yes',
+            env={
+                'PATH': str(tools) + ':/usr/bin:/bin:/usr/sbin:/sbin',
+                'MARIS_REPLACEMENT_LOCK': str(lock),
+            },
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(lock.is_dir(), 'cleanup deleted a replacement lock it did not create')
+        self.assertFalse((lock / '.owner').exists())
+        self.assertFalse((self.prefix / 'lib/maris').exists())
+
     def test_failed_promotion_restores_previous_installation(self):
         self.install()
         (self.prefix / 'lib/maris/old.txt').write_text('previous')
