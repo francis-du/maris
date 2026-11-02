@@ -43,6 +43,10 @@
   - kind: file
     path: src/audio/mix/render.rs
   - kind: file
+    path: src/audio/mix/startup.rs
+  - kind: file
+    path: src/audio/mix/health.rs
+  - kind: file
     path: src/audio/offline.rs
   - kind: file
     path: src/audio/platform.rs
@@ -210,7 +214,8 @@
   name: TUI and desktop experience
   responsibilities:
   - Own visible audio state, safe interaction geometry, inspectors, settings drafts, and desktop controls.
-  - In active mixer sessions, expose strip volume, mute, solo, balance and undo through the shared mixer transactions; reject stale targets.
+  - Keep picker search read-only and bounded, retain frozen selection identities, and require guarded explicit confirmation.
+  - In active mixer sessions, expose strip volume, mute, solo, balance and output-bus gain/mute through shared mixer transactions and undo; reject stale targets and keep strip/bus identities separate.
   depends_on:
   - component:control
   - component:i18n
@@ -252,7 +257,17 @@
   - kind: file
     path: src/ui/tui/input.rs
   - kind: file
+    path: src/ui/tui/modal.rs
+  - kind: file
+    path: src/ui/tui/picker_search.rs
+  - kind: file
+    path: src/ui/tui/output_picker.rs
+  - kind: file
+    path: src/ui/tui/preset_picker.rs
+  - kind: file
     path: src/ui/tui/inspector.rs
+  - kind: file
+    path: src/ui/tui/inspector/mixer.rs
   - kind: file
     path: src/ui/tui/monitor.rs
   - kind: file

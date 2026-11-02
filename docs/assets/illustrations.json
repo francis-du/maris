@@ -2,11 +2,11 @@
   "scope": "actual_offline_ratatui",
   "hardware_validation": false,
   "source_sha256": {
-    "src/ui/tui/view.rs": "a8d5217dc87e26b7427b9d75a6d2c12f54896169b8fdf145c347553bab09e9d9",
+    "src/ui/tui/view.rs": "915d76512a1be7eef724a3b287e2de89fbd954f14c4585e98a956311a885d886",
     "src/ui/tui/dashboard.rs": "5235f57cb26fda77a4d1744565fc072b2a052b6abb72e49588a018a3d3ed96ac",
     "src/ui/tui/input.rs": "c57b28b48b9a34d0d38d9b9a381c9403fc50c801817de28f670ce29af6ab111f",
     "src/ui/tui/music.rs": "adccbd40aad88a5e4b60b7a8e7a6f71e2a8b2172cf9a0a6218bb4af5ed96533f",
-    "src/ui/tui/studio/mod.rs": "d04c1fe848125f3909a84ee94b0bd33cc7fc38dcc9e48a8073bdee08b5bc88f6",
+    "src/ui/tui/studio/mod.rs": "cc40b6ad477c5e958262ce3d06f2ebd67544673a6996bb9ba83a56d5c6bab8c8",
     "src/ui/tui/studio/analyzer.rs": "a7147fc511ec2af7245c16d6cf58e740b94c6d84602c67c45b62a448c94fe089",
     "src/ui/tui/studio/appearance.rs": "59bd945beae348ae6d2ccfd43bdfb4dfbcbdd22dad11f9248aaad88cfc1b7ae7",
     "src/ui/tui/studio/controls.rs": "5ab440a18fdb6af210a0f16fa44ce17ccb21dfc8c9920a5e66e585c404a8e3bf",
@@ -15,17 +15,19 @@
     "src/ui/tui/settings/input.rs": "0992e94389e0146cf57a3d86e5d0aabffdae2a752f966984f053e6cfa920f84c",
     "src/ui/tui/settings/view.rs": "5ec02660510cbe967368a48cdc3ea3b17d581a35716ce4f6854306a7390e3e05",
     "src/ui/tui/presets.rs": "3e3e78093029b3fecc27a3aad422bfe874b0b881f105c55f0cd709b7f659c0a8",
-    "src/ui/tui/output_picker.rs": "17c31b68ebdd61ad0d1528a68b59dcb1891713c14ec2e723ffe37b6a55848f8d",
-    "src/ui/tui/preset_picker.rs": "3d9a1e30ab64297385843a7bdcb3628754e84647b7c63612a9b2855f1ef30972",
-    "src/ui/tui/inspector.rs": "3bb15f7ca65f71d799f46b28a76327a8a2a7dabba321aa43ac91f585898b3a93",
+    "src/ui/tui/output_picker.rs": "0946e4df30422c837a0a6ff021931ee6d5ec1e086a45dfd788cec017f5d94f6d",
+    "src/ui/tui/preset_picker.rs": "8f72733b38818b4394f6b5b17880d4ddb1c994252615131f63c2bfd8106c78af",
+    "src/ui/tui/picker_search.rs": "31abdafb7f7fd17c0d4bbb59ae462a079bea3603a5f460bbec4861d53a6cd04b",
+    "src/ui/tui/inspector.rs": "c232e01e35dc5a414136f4a4cd17a8d94096907ba97a54046adf1d5e5561213a",
+    "src/ui/tui/inspector/mixer.rs": "d2552a25ee359adb31a99bd19f3910c4a449283bba17e724d5c7a2a90b73320e",
     "src/dsp/music.rs": "ed9fd4044be6c71bafd158f83db1e0f9a42e70589c314a3c9393ff96c02f7092",
     "src/presets/mod.rs": "393bd8509d025ce6a6ff9918cc5c6778693fb9a2a9c65f03d70337c7d1cdf27d",
     "src/presets/scenes.rs": "4b4803a821f17e521ecb8699d5905f0f3818aa2412c0eab62074621bd2a8194e",
     "src/i18n/mod.rs": "52dad2f6e7ffeeab6dc852c442e2de5d02be021c628b802bc571fccbf0e6f01f",
-    "src/i18n/console.rs": "221f3e6d4e647e5681a11302f62c0e3342ceeb19b8bfff75126b93af653173eb",
-    "src/i18n/surface.rs": "02f8ff5343c057964514fd2e0af86775799fe1ed6bec46badc79a69d0ccfe99a",
+    "src/i18n/console.rs": "ced7090821cd31389d1b0aa5f10b286f989cd2dca4a28ad190f5fbfa6f56a7a3",
+    "src/i18n/surface.rs": "715b740cd3ad47267400bc797fa98eeadd3c28dd2e272ebec7a75d1291ee602b",
     "src/i18n/messages.rs": "f523252bfe6c4bfe21d828959ec33019fb2b1f1fc1383f336e2bb4e2b9ae144d",
-    "tests/support/ui_probe.rs": "dd0bf9d9d1b1278615035b67f5c055c571fe0b3aeb36ec49579d6457598d098f"
+    "tests/support/ui_probe.rs": "33712deb38d31030e77ffbccf0ef421d6782bb8b78d9c873c15dd208ffe57704"
   },
   "images": {
     "studio-en.svg": {
@@ -125,48 +127,48 @@
       "rows": 40
     },
     "presets-en.svg": {
-      "sha256": "d0d3d014b0bc5c3fff288e9cd7ed7a3c435dd9f31a7cb209f66fb3ed0dd13d0b",
-      "buffer_sha256": "e72f96ef171746b04e758483272e097f6f93226e6f7bab4b8235741a2d9a0f03",
+      "sha256": "8f18d51907a0d903ff2b72a06351de68e8d7d60ab91758fdc842e2e53a0c57a6",
+      "buffer_sha256": "36e71ef46efd2617b10d9978ffcd7019a9868b3d26a048b3b819e475fb6e00b7",
       "locale": "en",
       "view": "presets",
       "columns": 140,
       "rows": 40
     },
     "presets-zh-CN.svg": {
-      "sha256": "0728e580c0571919d91d3e30ad2d940b49d2d0e6c2c627e82bf6de2f8380454f",
-      "buffer_sha256": "b89fedd2d797167fd0f37e3e5833d4fda9495a29cc3170ed1962d96e6dbb06f4",
+      "sha256": "ff95f0de46db1f23c48f534d69b60343ce620b9a668c2ff39ce78d1b145c9e31",
+      "buffer_sha256": "1b75fe66e181215286b47d41b8c3810a9365f5666916b52798b2d3b2a21e5bd6",
       "locale": "zh-CN",
       "view": "presets",
       "columns": 140,
       "rows": 40
     },
     "presets-zh-TW.svg": {
-      "sha256": "d8a62e6e32165ff623ca17abee9c366aac74aaf5b058d97977455996b3839331",
-      "buffer_sha256": "19262a2bed64cf3eba0deacc8ec00591fde56df28e9467ef1ff4ddda451e51b5",
+      "sha256": "8f3e6d4fcec27572ca117966323eeced5a6192fef4818ddd00e24bf0f12d4fd3",
+      "buffer_sha256": "da11471e20ff54ea15f4da223ccbd3b951397fa6a0bb30326ca438e968448b0f",
       "locale": "zh-TW",
       "view": "presets",
       "columns": 140,
       "rows": 40
     },
     "presets-ja.svg": {
-      "sha256": "343022e48bf16b0680572feac6b4e296dbb02ca70c4d5e76d1b38740feebc6ca",
-      "buffer_sha256": "110e983941a886582b516ada185bb3cf89891c914bcc9c7d992872ebd059edd1",
+      "sha256": "ffc7d128b18ed15ce7b785d564010590d5988f82a53688231a674e293765f778",
+      "buffer_sha256": "7906dafaab27c85cc8356b408e70482fa7eb471c2832dce039e8ffe9c7bd77a8",
       "locale": "ja",
       "view": "presets",
       "columns": 140,
       "rows": 40
     },
     "presets-de.svg": {
-      "sha256": "70c09ff1f44b1c208eb702e23456e8eda620b4f6ab306b1889b16d8c407306cf",
-      "buffer_sha256": "65b9fe4848149a5c43d1c8a09fcb5f6e6457c74af425f78657b17bdc33df0b94",
+      "sha256": "225072f6bad5a67963245ac513eba0464a329f0cacfd480da627fb4825d6bd72",
+      "buffer_sha256": "cb0ea8170e53174bf80df79d4200befe8e4c665bbb505377c11df12d67723e2b",
       "locale": "de",
       "view": "presets",
       "columns": 140,
       "rows": 40
     },
     "presets-es.svg": {
-      "sha256": "8a464746dd372a78db21147fde51821110728894bf3cf22edd55d7582a2337af",
-      "buffer_sha256": "09e4884e399be7034726c4a46881abe3788837ffca2d91962793ecb56a3a769c",
+      "sha256": "2ddd11e2a8f073d9f7ece279ddf6e49bf7a8d6311efa3ebe22ec823932c95639",
+      "buffer_sha256": "4e5b24c95d0f16c95db3a5a5b1d5b1010800fff48bc84c1f5878a3d4353a64e8",
       "locale": "es",
       "view": "presets",
       "columns": 140,

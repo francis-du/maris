@@ -8,6 +8,10 @@ Eine Ansicht zeigt Gerät, gemessenes Spektrum, berechneten globalen EQ, Stereop
 
 `E` öffnet Einstellungen, `P` Presets, `O` Ausgabe und `I` den Assistenten. `B` vergleicht den Klang vor und nach der Anpassung, `U` macht die letzte passende Änderung rückgängig. Ständiges Tab-Wechseln ist nicht erforderlich.
 
+Im Preset- oder Ausgabedialog (`P`/`O`) startet `/` die Suche nach Namen oder Kennungen. Mehrere Wörter grenzen die Treffer gemeinsam ein. Home/End und Page Up/Down bewegen nur die Auswahl; erst Enter bestätigt. Ohne Treffer wird nichts angewendet. Backspace entfernt ein vollständiges Anzeigezeichen, Ctrl+U leert den Suchtext. Esc beendet zuerst die Suche und schließt beim zweiten Drücken den Dialog.
+
+Nach `/` kannst du Suchtext in Terminals mit Bracketed Paste einfügen. Eingefügte Zeilenumbrüche werden zu Leerzeichen und bestätigen nichts; dazu ist ein separates Enter nötig. Außerhalb einer aktiven Suche wird eingefügter Text ignoriert. Überschreitet die gesamte Suche 256 UTF-8-Bytes, wird die Einfügung vollständig abgelehnt. Bis du die Suche bearbeitest oder leerst, bleibt die Bestätigung gesperrt. Bei langen Suchtexten bleiben das bearbeitete Ende, der Cursor und die Trefferzahl sichtbar.
+
 ## Einstellungen als Entwurf {#settings}
 
 Nach `E` wählt `1` den Geräteklang, `2` den globalen EQ und `3` Wiedergabeschalter. Liste, Pfeile und Mausrad dienen dem Auswählen. Der getrennte Regler verändert den Entwurf; `Enter` wendet an, `Esc` verwirft. Maus-Anwenden benötigt Drücken und Loslassen am gleichen Entwurf und Ort.
@@ -37,6 +41,8 @@ A/B schätzt die Lautstärke beider Versionen und senkt die lautere ab. So wird 
 Der Assistent schlägt kleine Änderungen anhand aktueller Signaldaten, Gerätegrenzen, Korrektur und Geschmack vor und wendet sie nicht automatisch an. Enthält der Build die geprüften MusicNN-Gewichte, entstehen Musik-Tags nur im Hintergrund; veraltete oder schwache Ergebnisse und Builds ohne Modell fallen auf Signaldaten zurück, statt ein Genre zu erraten. Apps und Geräte können eigene Mixer-Eingänge erhalten. Die zwei Ausgänge haben eigene Einstellungen für Zielgerät, Lautstärke und Verzögerung. Sprach-Entrauschung wird je Kanal eingeschaltet und ist kein Standard-Musikeffekt.
 
 Ordne Ein- und Ausgänge mit den [Mixer-Befehlen](../reference/commands.md) zu und starte den Mixer. Während er läuft, zeigt `M` die Kanäle: Auf/Ab wählt, Links/Rechts ändert den Pegel um 0,5 dB, die Leertaste schaltet stumm und `X` schaltet Solo. `[` und `]` ändern die Balance; `U` macht die letzte Mixer-Änderung rückgängig, nicht den Geräteklang. Die Spitzenpegel stammen aus Messungen. Enter ist nicht erforderlich; die Anzeige wartet trotzdem auf die Bestätigung der Audioverarbeitung. Nach einer Änderung der Ein-/Ausgänge muss der Mixer gestoppt und neu gestartet werden. Im normalen Systemaudio-Modus wählt dieselbe Seite die zu verarbeitenden Apps; Enter bestätigt die Auswahl.
+
+Die beiden Ausgangsbusse stehen hinter den Eingangskanälen. Pfeile, Home/End oder die Maus wählen einen Bus; Links/Rechts ändert seinen Pegel um 0,5 dB und die Leertaste schaltet ihn stumm. Minus, Stumm und Plus wirken nur auf den gewählten Bus. Der Bereich beträgt −60 bis +6 dB; die Systemlautstärke bleibt unverändert. Verzögerung und Gerätezuordnung sind hier nur lesbar und erfordern nach einer Änderung per Befehl einen Mixer-Neustart. Fehlende oder veraltete Stereospitzen werden als nicht verfügbar angezeigt, nicht als Stille. Entfernte Eingänge übertragen ihre Auswahl nicht auf einen Ausgangsbus.
 
 ```sh
 maris language de

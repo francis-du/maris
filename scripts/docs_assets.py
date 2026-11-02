@@ -21,7 +21,8 @@ SOURCES = ('src/ui/tui/view.rs', 'src/ui/tui/dashboard.rs', 'src/ui/tui/input.rs
            'src/ui/tui/studio/mod.rs', 'src/ui/tui/studio/analyzer.rs', 'src/ui/tui/studio/appearance.rs',
            'src/ui/tui/studio/controls.rs', 'src/ui/tui/monitor.rs', 'src/ui/tui/settings/mod.rs',
            'src/ui/tui/settings/input.rs', 'src/ui/tui/settings/view.rs', 'src/ui/tui/presets.rs',
-           'src/ui/tui/output_picker.rs', 'src/ui/tui/preset_picker.rs', 'src/ui/tui/inspector.rs',
+           'src/ui/tui/output_picker.rs', 'src/ui/tui/preset_picker.rs', 'src/ui/tui/picker_search.rs',
+           'src/ui/tui/inspector.rs', 'src/ui/tui/inspector/mixer.rs',
            'src/dsp/music.rs', 'src/presets/mod.rs', 'src/presets/scenes.rs', 'src/i18n/mod.rs',
            'src/i18n/console.rs', 'src/i18n/surface.rs', 'src/i18n/messages.rs', 'tests/support/ui_probe.rs')
 
@@ -120,6 +121,7 @@ def main() -> None:
         report = validate(directory)
         print(f'Validated {len(report["images"])} real offline illustrations.')
         return
+    before = {name: digest(ROOT / name) for name in SOURCES}
     logs = []
     # Product illustrations use one reproducible display capability fixture, independent
     # of a caller's shell/CI color and motion preferences. No user settings are changed.
@@ -129,8 +131,10 @@ def main() -> None:
         result = subprocess.run(['cargo', 'run', '--locked', '--quiet', '--example', 'ui_probe', '--'] + flags,
                                 cwd=ROOT, env=environment, capture_output=True, text=True, check=True, timeout=180)
         logs.append(result.stdout + result.stderr)
+    if {name: digest(ROOT / name) for name in SOURCES} != before:
+        raise ValueError('Illustration sources changed during the probe; rerun after source ownership is settled')
     manifest = {'scope': 'actual_offline_ratatui', 'hardware_validation': False,
-                'source_sha256': {name: digest(ROOT / name) for name in SOURCES}, 'images': {}}
+                'source_sha256': before, 'images': {}}
     for view, prefix in VIEWS.items():
         for locale in LANGUAGES:
             suffix = '' if locale == 'en' else '-' + locale

@@ -8,6 +8,10 @@ Una vista muestra dispositivo, espectro medido, EQ global calculada, niveles est
 
 `E` abre Configuración, `P` preajustes, `O` salida e `I` el asistente. `B` compara el sonido antes y después del ajuste, y `U` deshace el último cambio correspondiente. No necesitas una cadena de Tab para escuchar.
 
+En los selectores de preajuste y salida (`P`/`O`), `/` busca por nombre o identificador. Varias palabras filtran conjuntamente. Home/End y Page Up/Down solo cambian la selección; Enter confirma. Sin coincidencias no se aplica nada. Backspace elimina un carácter visual completo y Ctrl+U vacía la búsqueda. Esc borra primero la búsqueda y una segunda pulsación cierra el selector.
+
+Después de `/`, puedes pegar la búsqueda en terminales compatibles con pegado delimitado. Los saltos de línea pegados se convierten en espacios, no en confirmaciones; pulsa Enter por separado para aplicar. Fuera de una búsqueda activa, se ignora el texto pegado. Si la consulta combinada supera 256 bytes UTF-8, se rechaza todo el pegado y se bloquea la confirmación hasta editar o borrar la búsqueda. Las consultas largas mantienen visibles el final editado, el cursor y el número de resultados.
+
 ## Configurar mediante borradores {#settings}
 
 Tras `E`, `1` elige sonido del dispositivo, `2` EQ global y `3` interruptores de reproducción. Lista, flechas y rueda solo exploran. El control separado modifica el borrador; `Enter` aplica y `Esc` cancela. Aplicar con ratón exige pulsar y soltar sobre el mismo borrador y geometría.
@@ -37,6 +41,8 @@ A/B estima el volumen de ambas versiones y baja el de la más fuerte para no con
 El asistente propone ajustes pequeños usando señal actual, capacidades, corrección y gusto, sin aplicarlos automáticamente. Cuando la compilación incluye los pesos MusicNN verificados, las etiquetas musicales se calculan en segundo plano; resultados caducados o de baja confianza, o un modelo ausente, dejan que el programa utilice solo las mediciones de audio, sin mostrar un género incierto. Aplicaciones y dispositivos pueden usar entradas independientes del mixer. Las dos salidas permiten elegir su dispositivo, volumen y retardo por separado; la reducción de ruido de voz se activa de forma explícita por canal y no es un efecto musical predeterminado.
 
 Asigna las entradas y salidas con los [comandos del mezclador](../reference/commands.md) y empieza la mezcla. Mientras está en marcha, `M` muestra los canales: arriba/abajo selecciona, izquierda/derecha cambia el volumen en pasos de 0,5 dB, Espacio silencia y `X` reproduce el canal en solitario. `[` y `]` ajustan el balance; `U` deshace el último cambio de mezcla, no el tono del dispositivo. Los picos mostrados son mediciones reales. No hace falta Enter, aunque el estado sigue pendiente hasta que el procesador recibe los ajustes. Cambiar entradas o salidas requiere detener y reiniciar la mezcla. En el modo normal de audio del sistema, la misma página selecciona las apps que se van a procesar y Enter confirma la selección.
+
+Los dos buses de salida aparecen después de las entradas. Selecciona uno con las flechas, Home/End o el ratón; izquierda/derecha ajusta su ganancia en pasos de 0,5 dB y Espacio lo silencia. Los botones de menos, silencio y más afectan solo al bus elegido. El rango es de −60 a +6 dB y no cambia el volumen del sistema. El retardo y el dispositivo son de solo lectura aquí; cambiarlos mediante comandos sigue requiriendo reiniciar la mezcla. Los picos estéreo ausentes o caducados se muestran como no disponibles, no como silencio. Eliminar una entrada no transfiere su selección a un bus.
 
 ```sh
 maris language es

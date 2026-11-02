@@ -8,6 +8,10 @@ The screen shows the output device, spectrum, EQ curve, stereo levels and sound 
 
 Click a parameter to select it, then use minus or plus to adjust. The wheel only changes selection. `E` opens Settings, `P` presets, `O` output selection and `I` tuning suggestions. `B` compares, `U` undoes the last relevant sound change, and `S` stops processing.
 
+In the `P` preset or `O` output picker, press `/` to search names or identifiers. Multiple words narrow the results together. Home/End and Page Up/Down browse results without changing sound; Enter confirms the highlighted result. No matches means nothing can be applied. Backspace removes one displayed character, Ctrl+U clears the query, and Esc clears search before a second Esc closes the picker.
+
+After `/`, you can paste a query in terminals that support bracketed paste. Pasted line breaks become spaces, not confirmations; press Enter separately to apply. Paste outside an active search is ignored. If the combined query would exceed 256 UTF-8 bytes, the entire paste is rejected with a warning, and confirmation stays blocked until you edit or clear the search. Long queries keep the edited end, cursor and result count visible.
+
 ## Change settings {#settings}
 
 After `E`, press `1` for device tone, `2` for global EQ or `3` for playback switches. Arrow keys and the wheel only browse; minus and plus change the proposed values. Enter applies and Esc cancels. With a mouse, press and release on the same Apply button.
@@ -45,6 +49,8 @@ Suggestions use the current audio, supported device settings, correction and you
 The mixer can give each app or input device its own volume, EQ and compression, then send it to two outputs. Use the [mixer commands](../reference/commands.md) to assign inputs and outputs and start mixing. Speech noise reduction must be enabled separately for each channel.
 
 While the mixer is running, `M` opens its channels. Up/down selects a channel; left/right changes its volume by 0.5 dB; Space toggles mute; `X` plays the channel alone; `[` and `]` adjust left/right balance. `U` undoes the last mixer change, not the device's tone settings. The list also shows measured channel peaks. These controls apply without Enter, but the status remains pending until the audio processor receives the settings. Changing input/output assignments requires stopping and restarting the mixer. In ordinary system-audio mode, the same page selects which apps to process and Enter confirms that selection.
+
+Output buses appear after the input channels in the same list. Select a bus with the arrows, Home/End or the mouse; left/right adjusts its gain by 0.5 dB and Space toggles its mute. The visible minus, mute and plus buttons affect only the selected bus. Bus gain is limited to −60…+6 dB, independently of the operating system volume. Bus delay and device assignments are read-only here and still require a mixer restart when changed through commands. A missing or stale stereo peak is shown as unavailable, not as silence. Removing an input does not transfer its selection to an output bus.
 
 ```sh
 maris language zh-CN
