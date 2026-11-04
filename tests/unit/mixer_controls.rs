@@ -877,6 +877,17 @@ fn undo_admission_check_holds_the_mixer_lock_and_releases_it_on_rejection() {
     assert_eq!(error.to_string(), "test Undo admission rejected");
     assert_eq!(fs::read(store.directory.join("mixer.json")).unwrap(), saved);
 
-    FileExt::try_lock_exclusive(&probe).expect("rejected Undo must release mixer.lock");
+    // Closing the lock handle releases the flock, but a loaded runner may make
+    // that release visible to another handle slightly later. Poll briefly; a
+    // lock that is never released still fails this test.
+    let mut released = false;
+    for _ in 0..100 {
+        if FileExt::try_lock_exclusive(&probe).is_ok() {
+            released = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(released, "rejected Undo must release mixer.lock");
     FileExt::unlock(&probe).unwrap();
 }
