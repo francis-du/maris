@@ -4,6 +4,7 @@ pub mod platform;
 mod bridge;
 mod devices;
 pub mod mix;
+mod performance;
 #[cfg(unix)]
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 mod pulse;
@@ -783,31 +784,16 @@ impl Session {
         } else {
             None
         };
-        let callback_frames = self.metrics.callback_frames.load(Ordering::Relaxed);
-        let callback_nanos = self
-            .metrics
-            .callback_processing_nanos
-            .load(Ordering::Relaxed);
-        let callback_average_percent = if callback_frames > 0 {
-            Some(
-                callback_nanos as f64 * self.sample_rate as f64 * 100.0
-                    / (callback_frames as f64 * 1_000_000_000.0),
-            )
-        } else {
-            None
-        };
-        let performance = json!({
-            "analysis_queue_depth":self.metrics.analysis_queue.get().map_or(0,|queue|queue.len()),
-            "update_queue_depth":self.updates.len(),
-            "callback_processing_average_percent":callback_average_percent,
-            "callback_processing_max_us":self.metrics.callback_max_nanos.load(Ordering::Relaxed) as f64 / 1000.0,
-            "callback_calls":self.metrics.callback_calls.load(Ordering::Relaxed),
-            "callback_frames":callback_frames,
-            "worker_cpu_percent":Value::Null,
-            "worker_processing_nanos":self.metrics.worker_processing_nanos.load(Ordering::Relaxed),
-            "worker_frames":self.metrics.worker_frames.load(Ordering::Relaxed),
-            "model_latency_ms":self.context.latest().map(|context|context.inference_ms)
-        });
+        let performance = performance::status(
+            &self.metrics,
+            self.sample_rate,
+            self.metrics
+                .analysis_queue
+                .get()
+                .map_or(0, |queue| queue.len()),
+            self.updates.len(),
+            self.context.latest().map(|context| context.inference_ms),
+        );
         let mut status = json!({"active":!self.stop_requested,"session_id":self.session_id,"pid":std::process::id(),
         "analysis":self.analysis.latest(),"visualization":self.analysis.visual(),
         "music_context":self.context.latest(),"music_context_status":self.context.status(),
