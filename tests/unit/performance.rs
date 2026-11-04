@@ -47,13 +47,56 @@ fn status_derives_worker_cpu_percent_from_measured_counters() {
     metrics
         .worker_processing_nanos
         .store(5_000_000, Ordering::Relaxed);
-    let status = status(&metrics, 48_000, 0, 0, None);
+    let status = status(&metrics, None, 48_000, 0, 0, None);
     assert_eq!(status["worker_cpu_percent"], serde_json::json!(50.0));
 }
 
 #[test]
 fn status_worker_cpu_percent_is_null_before_frames() {
     let metrics = Metrics::default();
-    let status = status(&metrics, 48_000, 0, 0, None);
+    let status = status(&metrics, None, 48_000, 0, 0, None);
     assert_eq!(status["worker_cpu_percent"], serde_json::Value::Null);
+}
+
+#[test]
+fn worker_counters_prefer_capture_metrics_when_supplied() {
+    let metrics = Metrics::default();
+    metrics.worker_frames.store(10, Ordering::Relaxed);
+    metrics
+        .worker_processing_nanos
+        .store(1_000_000, Ordering::Relaxed);
+    let capture = Metrics::default();
+    capture.worker_frames.store(480, Ordering::Relaxed);
+    capture
+        .worker_processing_nanos
+        .store(5_000_000, Ordering::Relaxed);
+    assert_eq!(worker_counters(&metrics, Some(&capture)), (480, 5_000_000));
+    assert_eq!(worker_counters(&metrics, None), (10, 1_000_000));
+}
+
+#[test]
+fn status_derives_worker_cpu_percent_from_windows_capture_counters() {
+    let metrics = Metrics::default();
+    let capture = Metrics::default();
+    capture.worker_frames.store(480, Ordering::Relaxed);
+    capture
+        .worker_processing_nanos
+        .store(5_000_000, Ordering::Relaxed);
+    let status = status(&metrics, Some(&capture), 48_000, 0, 0, None);
+    assert_eq!(status["worker_cpu_percent"], serde_json::json!(50.0));
+    assert_eq!(status["worker_frames"], serde_json::json!(480));
+    assert_eq!(
+        status["worker_processing_nanos"],
+        serde_json::json!(5_000_000)
+    );
+}
+
+#[test]
+fn status_windows_capture_without_frames_reports_null() {
+    let metrics = Metrics::default();
+    let capture = Metrics::default();
+    let status = status(&metrics, Some(&capture), 48_000, 0, 0, None);
+    assert_eq!(status["worker_cpu_percent"], serde_json::Value::Null);
+    assert_eq!(status["worker_frames"], serde_json::json!(0));
+    assert_eq!(status["worker_processing_nanos"], serde_json::json!(0));
 }

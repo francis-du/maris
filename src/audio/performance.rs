@@ -21,9 +21,23 @@ fn finite_percent(percent: f64) -> Option<f64> {
     percent.is_finite().then_some(percent)
 }
 
+/// Worker counters that a status report must describe.
+///
+/// Windows maintains the capture worker's counters in a separate metrics
+/// object, so the caller supplies it when present. The reported CPU share and
+/// the reported counter fields always come from the same pair.
+pub(super) fn worker_counters(metrics: &Metrics, capture: Option<&Metrics>) -> (u64, u64) {
+    let source = capture.unwrap_or(metrics);
+    (
+        source.worker_frames.load(Ordering::Relaxed),
+        source.worker_processing_nanos.load(Ordering::Relaxed),
+    )
+}
+
 /// Runtime `performance` object shared by the single-session status builder.
 pub(super) fn status(
     metrics: &Metrics,
+    capture: Option<&Metrics>,
     sample_rate: u32,
     analysis_queue_depth: usize,
     update_queue_depth: usize,
@@ -35,11 +49,8 @@ pub(super) fn status(
         metrics.callback_processing_nanos.load(Ordering::Relaxed),
         sample_rate,
     );
-    let worker_cpu_percent = percent(
-        metrics.worker_frames.load(Ordering::Relaxed),
-        metrics.worker_processing_nanos.load(Ordering::Relaxed),
-        sample_rate,
-    );
+    let (worker_frames, worker_processing_nanos) = worker_counters(metrics, capture);
+    let worker_cpu_percent = percent(worker_frames, worker_processing_nanos, sample_rate);
     json!({
         "analysis_queue_depth":analysis_queue_depth,
         "update_queue_depth":update_queue_depth,
@@ -48,8 +59,8 @@ pub(super) fn status(
         "callback_calls":metrics.callback_calls.load(Ordering::Relaxed),
         "callback_frames":callback_frames,
         "worker_cpu_percent":worker_cpu_percent,
-        "worker_processing_nanos":metrics.worker_processing_nanos.load(Ordering::Relaxed),
-        "worker_frames":metrics.worker_frames.load(Ordering::Relaxed),
+        "worker_processing_nanos":worker_processing_nanos,
+        "worker_frames":worker_frames,
         "model_latency_ms":model_latency_ms,
     })
 }
