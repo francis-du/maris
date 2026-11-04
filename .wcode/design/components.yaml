@@ -280,8 +280,6 @@
   - kind: file
     path: src/ui/tui/music.rs
   - kind: file
-    path: src/ui/tui/presets.rs
-  - kind: file
     path: src/ui/tui/settings/mod.rs
   - kind: file
     path: src/ui/tui/settings/input.rs

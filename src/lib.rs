@@ -73,8 +73,6 @@ pub use ui::tui::monitor as monitor_view;
 #[doc(hidden)]
 pub use ui::tui::music as music_view;
 #[doc(hidden)]
-pub use ui::tui::presets as preset_view;
-#[doc(hidden)]
 pub use ui::tui::settings as configuration;
 #[doc(hidden)]
 pub use ui::tui::studio as studio_view;
