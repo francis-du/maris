@@ -784,8 +784,13 @@ impl Session {
         } else {
             None
         };
+        #[cfg(target_os = "windows")]
+        let capture_metrics = self.windows.as_ref().map(|native| native.capture_metrics());
+        #[cfg(not(target_os = "windows"))]
+        let capture_metrics: Option<&Metrics> = None;
         let performance = performance::status(
             &self.metrics,
+            capture_metrics,
             self.sample_rate,
             self.metrics
                 .analysis_queue
@@ -856,10 +861,6 @@ impl Session {
             status["captured_frames"] = json!(capture.captured_frames.load(Ordering::Relaxed));
             status["overruns"] = json!(capture.overruns.load(Ordering::Relaxed));
             status["capture_continuity"] = capture.continuity();
-            status["performance"]["worker_processing_nanos"] =
-                json!(capture.worker_processing_nanos.load(Ordering::Relaxed));
-            status["performance"]["worker_frames"] =
-                json!(capture.worker_frames.load(Ordering::Relaxed));
         }
         status
     }
