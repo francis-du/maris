@@ -54,7 +54,7 @@ The spectrum uses real pre-EQ telemetry and stale/inactive data decay. No decora
 
 ## Real-time and performance boundary
 
-Audio callbacks remain free of model inference, network access, file IO, application mutexes and logging. Music Context inference is background-only, receives bounded worker windows, rate-limits semantic backend submissions, and resets stale context after output rebinding. Runtime status exposes queue depths, xruns, model latency, callback count/frames, total callback processing time converted to average real-time-budget percentage, and maximum callback processing microseconds. This timing is measured callback wall time, not whole-process CPU utilization; worker CPU remains null rather than fabricated.
+Audio callbacks remain free of model inference, network access, file IO, application mutexes and logging. Music Context inference is background-only, receives bounded worker windows, rate-limits semantic backend submissions, and resets stale context after output rebinding. Runtime status exposes queue depths, xruns, model latency, callback count/frames, total callback processing time converted to average real-time-budget percentage, and maximum callback processing microseconds. This timing is measured callback wall time, not whole-process CPU utilization. Worker CPU share uses the same measured processing-counter definition as the callback figure and remains null until worker frames exist.
 
 The requested CPU/latency targets still require measurement on real devices and builds. Passing offline tests is not evidence that every hardware combination meets a 2–3% CPU target or a particular end-to-end latency.
 

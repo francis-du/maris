@@ -144,7 +144,7 @@ fn tools(allow_write: bool) -> Value {
         tool("maris_device", "Read current output identity, stable profile binding, capability, correction and known physical limits. Unknown limits remain unknown.",object(json!({}),&[]),true),
         tool("maris_device_bindings", "Read stable device-ID to listening-profile bindings. Display-name fallback remains explicit when no stable ID is available.",object(json!({}),&[]),true),
         tool("maris_applications", "Read audio-process metadata and platform capability flags. This read-only tool never starts or changes application capture.",object(json!({}),&[]),true),
-        tool("maris_performance", "Read audio buffer interruptions, model latency and measured callback time. Unmeasured worker CPU usage is null.",object(json!({}),&[]),true),
+        tool("maris_performance", "Read audio buffer interruptions, model latency and measured callback time. Worker CPU share is derived from measured worker processing counters and is null until worker frames exist.",object(json!({}),&[]),true),
         tool("maris_tuning_suggest", "Preview tuning for the selected device using recent audio analysis, available music recognition, correction settings and listening preferences.",object(json!({"goal":{"type":"string","enum":music_tuning::GOALS}}),&["goal"]),true),
         tool("maris_autoeq_match", "Match an exact output name against the locally cached pinned AutoEq index only. This tool does not access the network.",object(json!({"device":{"type":"string"}}),&["device"]),true),
         tool("maris_suggest", "Preview the legacy conservative signal-aware ten-band EQ proposal. No settings are changed.",object(json!({"goal":{"type":"string","enum":smart::GOALS}}),&["goal"]),true),

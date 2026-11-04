@@ -49,6 +49,8 @@
   - kind: file
     path: src/audio/offline.rs
   - kind: file
+    path: src/audio/performance.rs
+  - kind: file
     path: src/audio/platform.rs
   - kind: file
     path: src/audio/pulse/mod.rs

@@ -703,9 +703,7 @@ impl Session {
             "sample_peak_limiter_dbfs":-1.0,"clock_bridge":"windowed_sinc_128","capture_scope":"mixer_assignments",
             "underruns":self.input_metrics.iter().chain(self.output_metrics.iter()).map(|m|m.underruns.load(Ordering::Relaxed)).sum::<u64>(),
             "overruns":self.input_metrics.iter().chain(self.output_metrics.iter()).map(|m|m.overruns.load(Ordering::Relaxed)).sum::<u64>(),
-            "performance":{"callback_calls":metrics.callback_calls.load(Ordering::Relaxed),"callback_frames":metrics.callback_frames.load(Ordering::Relaxed),
-                "callback_processing_average_percent":(metrics.callback_frames.load(Ordering::Relaxed)>0).then(|| metrics.callback_processing_nanos.load(Ordering::Relaxed) as f64*self.rate as f64*100.0/(metrics.callback_frames.load(Ordering::Relaxed) as f64*1e9)),
-                "callback_processing_max_us":metrics.callback_max_nanos.load(Ordering::Relaxed) as f64/1000.0,"worker_cpu_percent":Value::Null}});
+            "performance":performance_status(metrics,self.rate)});
         status["level_match_makeup_db"] = json!(f32::from_bits(
             metrics.level_match_makeup.load(Ordering::Relaxed)
         ));
@@ -725,6 +723,26 @@ impl Session {
         status["continuity"] = metrics.continuity();
         self.store.write_json("runtime.json", &status)
     }
+}
+fn performance_status(metrics: &Metrics, rate: u32) -> Value {
+    let callback_frames = metrics.callback_frames.load(Ordering::Relaxed);
+    let callback_average_percent = super::performance::percent(
+        callback_frames,
+        metrics.callback_processing_nanos.load(Ordering::Relaxed),
+        rate,
+    );
+    let worker_cpu_percent = super::performance::percent(
+        metrics.worker_frames.load(Ordering::Relaxed),
+        metrics.worker_processing_nanos.load(Ordering::Relaxed),
+        rate,
+    );
+    json!({
+        "callback_calls":metrics.callback_calls.load(Ordering::Relaxed),
+        "callback_frames":callback_frames,
+        "callback_processing_average_percent":callback_average_percent,
+        "callback_processing_max_us":metrics.callback_max_nanos.load(Ordering::Relaxed) as f64/1000.0,
+        "worker_cpu_percent":worker_cpu_percent,
+    })
 }
 impl Drop for Session {
     fn drop(&mut self) {
@@ -819,3 +837,7 @@ mod tests;
 #[cfg(test)]
 #[path = "../../../tests/mixing/control.rs"]
 mod control_tests;
+
+#[cfg(test)]
+#[path = "../../../tests/unit/mixer_performance.rs"]
+mod mixer_performance_tests;
