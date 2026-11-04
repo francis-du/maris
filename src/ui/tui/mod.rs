@@ -10,7 +10,6 @@ pub mod music;
 pub mod output_picker;
 pub mod picker_search;
 pub mod preset_picker;
-pub mod presets;
 mod session;
 pub mod settings;
 pub mod studio;

@@ -410,16 +410,6 @@ pub const TRANSLATIONS: &[(&str, [&str; 5])] = &[
         ],
     ),
     (
-        "D Download MusicNN",
-        [
-            "D 下载 MusicNN",
-            "D 下載 MusicNN",
-            "D MusicNN 取得",
-            "D MusicNN laden",
-            "D Descargar MusicNN",
-        ],
-    ),
-    (
         "Engine health",
         [
             "引擎运行状态",
@@ -570,16 +560,6 @@ pub const TRANSLATIONS: &[(&str, [&str; 5])] = &[
     (
         "Applied",
         ["已应用", "已套用", "適用済み", "Angewendet", "Aplicado"],
-    ),
-    (
-        "Downloading MusicNN",
-        [
-            "正在下载 MusicNN",
-            "正在下載 MusicNN",
-            "MusicNN を取得中",
-            "MusicNN wird geladen",
-            "Descargando MusicNN",
-        ],
     ),
     (
         "Click sound · −/+ adjust · wheel selects",
@@ -817,16 +797,6 @@ pub const TRANSLATIONS: &[(&str, [&str; 5])] = &[
         ],
     ),
     (
-        "MODELS · D downloads verified MusicNN weights",
-        [
-            "模型 · D 下载并校验 MusicNN 权重",
-            "模型 · D 下載並驗證 MusicNN 權重",
-            "モデル · D で MusicNN を取得・検証",
-            "MODELLE · D lädt geprüfte MusicNN-Gewichte",
-            "MODELOS · D descarga y verifica MusicNN",
-        ],
-    ),
-    (
         "O opens output picker · no switching until Enter",
         [
             "O 选择输出 · Enter 确认后才切换",
@@ -924,16 +894,6 @@ pub const TRANSLATIONS: &[(&str, [&str; 5])] = &[
             "↑↓ 選択 · Space マーク · A 全体 · Enter 適用",
             "↑↓ wählen · Leertaste markieren · A alle · Enter anwenden",
             "↑↓ elegir · Espacio marcar · A todos · Enter aplicar",
-        ],
-    ),
-    (
-        "D download MusicNN · diagnostics are read-only",
-        [
-            "D 下载 MusicNN · 诊断信息只读",
-            "D 下載 MusicNN · 診斷資訊唯讀",
-            "D MusicNN 取得 · 診断は読み取り専用",
-            "D MusicNN laden · Diagnose schreibgeschützt",
-            "D descargar MusicNN · diagnóstico de solo lectura",
         ],
     ),
     (
