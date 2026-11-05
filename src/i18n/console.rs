@@ -454,6 +454,26 @@ pub const TRANSLATIONS: &[(&str, [&str; 5])] = &[
         ],
     ),
     (
+        "Update queue",
+        [
+            "更新队列",
+            "更新佇列",
+            "更新キュー",
+            "Update-Warteschlange",
+            "Cola de actualizaciones",
+        ],
+    ),
+    (
+        "Model latency",
+        [
+            "模型延迟",
+            "模型延遲",
+            "モデル遅延",
+            "Modelllatenz",
+            "Latencia del modelo",
+        ],
+    ),
+    (
         "Applied revision",
         [
             "已应用版本",
