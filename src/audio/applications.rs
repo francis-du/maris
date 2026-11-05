@@ -3,7 +3,9 @@
 
 use anyhow::Result;
 use serde::Serialize;
-use serde_json::{json, Value};
+#[cfg(not(target_os = "windows"))]
+use serde_json::json;
+use serde_json::Value;
 
 #[cfg(target_os = "linux")]
 use super::pulse;
