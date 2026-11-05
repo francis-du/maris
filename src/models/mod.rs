@@ -180,16 +180,11 @@ pub fn enhance(input: &std::path::Path, output: &std::path::Path) -> Result<Valu
         let block_count = audio.frames.len().div_ceil(480);
         let mut written = 0;
         let mut vad = 0.0;
-        for i in 0..=block_count {
+        for i in 0..block_count {
             block.fill([0.0; 2]);
-            if i < block_count {
-                let chunk = &audio.frames[i * 480..audio.frames.len().min((i + 1) * 480)];
-                block[..chunk.len()].copy_from_slice(chunk);
-            }
+            let chunk = &audio.frames[i * 480..audio.frames.len().min((i + 1) * 480)];
+            block[..chunk.len()].copy_from_slice(chunk);
             vad += model.process(&block, &mut denoised) as f64;
-            if i == 0 {
-                continue;
-            }
             for frame in denoised
                 .iter()
                 .take((audio.frames.len() - written).min(480))
@@ -207,7 +202,7 @@ pub fn enhance(input: &std::path::Path, output: &std::path::Path) -> Result<Valu
             "local":true,
             "sample_rate":48000,
             "frames":written,
-            "mean_voice_probability":vad/(block_count+1) as f64,
+            "mean_voice_probability":vad/block_count as f64,
             "warning":"Speech enhancement only. Musical instruments can be attenuated; no quality improvement is guaranteed."
         }))
     }
