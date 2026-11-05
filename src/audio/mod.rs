@@ -1,6 +1,12 @@
 pub mod offline;
 pub mod platform;
 
+/// The Windows capture backend normalizes capture to this rate, so the capture
+/// worker's frame counters are always in these units regardless of the output
+/// device rate. Reporting them against the output rate would scale
+/// `worker_cpu_percent` by `output_rate / 48_000`.
+pub(super) const CAPTURE_WORKER_RATE: u32 = 48_000;
+
 mod bridge;
 mod devices;
 pub mod mix;
@@ -788,10 +794,18 @@ impl Session {
         let capture_metrics = self.windows.as_ref().map(|native| native.capture_metrics());
         #[cfg(not(target_os = "windows"))]
         let capture_metrics: Option<&Metrics> = None;
+        // The capture worker's counters are always in the Windows backend's
+        // normalized 48 kHz units; the output rate describes the callback.
+        let worker_sample_rate = if capture_metrics.is_some() {
+            CAPTURE_WORKER_RATE
+        } else {
+            self.sample_rate
+        };
         let performance = performance::status(
             &self.metrics,
             capture_metrics,
             self.sample_rate,
+            worker_sample_rate,
             self.metrics
                 .analysis_queue
                 .get()

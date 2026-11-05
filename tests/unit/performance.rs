@@ -47,14 +47,14 @@ fn status_derives_worker_cpu_percent_from_measured_counters() {
     metrics
         .worker_processing_nanos
         .store(5_000_000, Ordering::Relaxed);
-    let status = status(&metrics, None, 48_000, 0, 0, None);
+    let status = status(&metrics, None, 48_000, 48_000, 0, 0, None);
     assert_eq!(status["worker_cpu_percent"], serde_json::json!(50.0));
 }
 
 #[test]
 fn status_worker_cpu_percent_is_null_before_frames() {
     let metrics = Metrics::default();
-    let status = status(&metrics, None, 48_000, 0, 0, None);
+    let status = status(&metrics, None, 48_000, 48_000, 0, 0, None);
     assert_eq!(status["worker_cpu_percent"], serde_json::Value::Null);
 }
 
@@ -82,7 +82,7 @@ fn status_derives_worker_cpu_percent_from_windows_capture_counters() {
     capture
         .worker_processing_nanos
         .store(5_000_000, Ordering::Relaxed);
-    let status = status(&metrics, Some(&capture), 48_000, 0, 0, None);
+    let status = status(&metrics, Some(&capture), 48_000, 48_000, 0, 0, None);
     assert_eq!(status["worker_cpu_percent"], serde_json::json!(50.0));
     assert_eq!(status["worker_frames"], serde_json::json!(480));
     assert_eq!(
@@ -95,8 +95,22 @@ fn status_derives_worker_cpu_percent_from_windows_capture_counters() {
 fn status_windows_capture_without_frames_reports_null() {
     let metrics = Metrics::default();
     let capture = Metrics::default();
-    let status = status(&metrics, Some(&capture), 48_000, 0, 0, None);
+    let status = status(&metrics, Some(&capture), 48_000, 48_000, 0, 0, None);
     assert_eq!(status["worker_cpu_percent"], serde_json::Value::Null);
     assert_eq!(status["worker_frames"], serde_json::json!(0));
     assert_eq!(status["worker_processing_nanos"], serde_json::json!(0));
+}
+
+#[test]
+fn worker_cpu_percent_uses_the_capture_worker_rate_not_the_output_rate() {
+    let metrics = Metrics::default();
+    let capture = Metrics::default();
+    // 480 frames at the 48 kHz capture rate is 10 ms of real time, so 5 ms of
+    // processing is 50%. Reporting against a 96 kHz output rate would double it.
+    capture.worker_frames.store(480, Ordering::Relaxed);
+    capture
+        .worker_processing_nanos
+        .store(5_000_000, Ordering::Relaxed);
+    let status = status(&metrics, Some(&capture), 96_000, 48_000, 0, 0, None);
+    assert_eq!(status["worker_cpu_percent"], serde_json::json!(50.0));
 }

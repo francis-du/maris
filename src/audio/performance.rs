@@ -35,10 +35,16 @@ pub(super) fn worker_counters(metrics: &Metrics, capture: Option<&Metrics>) -> (
 }
 
 /// Runtime `performance` object shared by the single-session status builder.
+///
+/// `sample_rate` is the output device rate and describes the callback frames.
+/// `worker_sample_rate` describes the capture worker's frame counters, which
+/// the Windows backend always normalizes to 48 kHz; passing the output rate
+/// there would scale `worker_cpu_percent` by `output_rate / 48_000`.
 pub(super) fn status(
     metrics: &Metrics,
     capture: Option<&Metrics>,
     sample_rate: u32,
+    worker_sample_rate: u32,
     analysis_queue_depth: usize,
     update_queue_depth: usize,
     model_latency_ms: Option<f64>,
@@ -50,7 +56,7 @@ pub(super) fn status(
         sample_rate,
     );
     let (worker_frames, worker_processing_nanos) = worker_counters(metrics, capture);
-    let worker_cpu_percent = percent(worker_frames, worker_processing_nanos, sample_rate);
+    let worker_cpu_percent = percent(worker_frames, worker_processing_nanos, worker_sample_rate);
     json!({
         "analysis_queue_depth":analysis_queue_depth,
         "update_queue_depth":update_queue_depth,
