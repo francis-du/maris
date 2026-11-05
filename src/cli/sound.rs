@@ -179,13 +179,29 @@ pub fn run(
         Action::Capability => {
             let name = device
                 .as_deref()
-                .ok_or_else(|| anyhow::anyhow!("No current output device; pass --device"))?;
+                .ok_or_else(|| {
+                    if explicit_device {
+                        anyhow::anyhow!(
+                            "The default fallback is not a physical device; pass an explicit device profile"
+                        )
+                    } else {
+                        anyhow::anyhow!("No current output device; pass --device")
+                    }
+                })?;
             crate::devices::capability::inspect(store, name)
         }
         Action::Match { apply } => {
             let key = device
                 .as_deref()
-                .ok_or_else(|| anyhow::anyhow!("No current output device; pass --device"))?;
+                .ok_or_else(|| {
+                    if explicit_device {
+                        anyhow::anyhow!(
+                            "The default fallback is not a physical device; pass an explicit device profile"
+                        )
+                    } else {
+                        anyhow::anyhow!("No current output device; pass --device")
+                    }
+                })?;
             let name = discovery_name.as_deref().unwrap_or(key);
             let entries = crate::devices::autoeq::ensure_index(store)?;
             let matched = crate::devices::autoeq::match_device(name, &entries);
@@ -207,7 +223,15 @@ pub fn run(
         Action::Bind { model } => {
             let key = device
                 .as_deref()
-                .ok_or_else(|| anyhow::anyhow!("No current output device; pass --device"))?;
+                .ok_or_else(|| {
+                    if explicit_device {
+                        anyhow::anyhow!(
+                            "The default fallback is not a physical device; pass an explicit device profile"
+                        )
+                    } else {
+                        anyhow::anyhow!("No current output device; pass --device")
+                    }
+                })?;
             let name = discovery_name.as_deref().unwrap_or(key);
             let entries = crate::devices::autoeq::ensure_index(store)?;
             let entry = entries
