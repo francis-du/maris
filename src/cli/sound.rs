@@ -115,6 +115,15 @@ pub fn run(
 ) -> Result<Value> {
     let runtime = audio::runtime_status(store);
     let explicit_device = device.is_some();
+    // Reject an empty or control-bearing selector up front. Reads otherwise
+    // reported the fallback profile for `--device ""` while writes failed with
+    // the same rule, so the two surfaces disagreed about one input.
+    if let Some(name) = device.as_deref() {
+        ensure!(
+            !name.is_empty() && name.len() <= 256 && !name.chars().any(char::is_control),
+            "Invalid output device name"
+        );
+    }
     let mutates = !matches!(
         &action,
         Action::Status

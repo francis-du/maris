@@ -439,3 +439,36 @@ fn wav_render_uses_the_same_dsp_without_overwriting_files() {
     assert_eq!(hound::WavReader::open(&output).unwrap().len(), 2000);
     assert!(!run(directory.path(), &args).status.success());
 }
+
+#[test]
+fn empty_or_control_bearing_device_selector_is_rejected_for_reads_and_writes() {
+    let directory = tempfile::tempdir().unwrap();
+    for action in [
+        &["sound", "--device", "", "status"][..],
+        &["sound", "--device", "", "capability"][..],
+        &["sound", "--device", "", "preview", "warm"][..],
+        &["sound", "--device", "", "set", "--bass", "1"][..],
+    ] {
+        let output = run(directory.path(), action);
+        let mut report = String::from_utf8_lossy(&output.stdout).into_owned();
+        report.push_str(&String::from_utf8_lossy(&output.stderr));
+        assert!(
+            !output.status.success(),
+            "an empty --device selector must be rejected for reads and writes: {report}"
+        );
+        assert!(
+            report.contains("Invalid output device name"),
+            "unexpected failure text: {report}"
+        );
+    }
+    let output = run(
+        directory.path(),
+        &["sound", "--device", "bad\u{7f}name", "status"],
+    );
+    assert!(!output.status.success());
+    let report = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        report.contains("Invalid output device name"),
+        "unexpected failure text: {report}"
+    );
+}
