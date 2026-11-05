@@ -24,6 +24,11 @@ struct ConsoleProcess {
     terminal: vt100::Parser,
 }
 
+/// Upper bound for a real PTY console to render an expected screen. This is a
+/// test-harness deadline, not a product timeout: on a loaded runner a five
+/// second bound turns ordinary scheduling noise into a failure.
+const TERMINAL_TEST_DEADLINE: Duration = Duration::from_secs(30);
+
 /// Fixture status must continue independently while the terminal blocks on a burst.
 /// This does not weaken the production timeout or grant a real capture session.
 struct Heartbeat {
@@ -78,7 +83,7 @@ impl ConsoleProcess {
         }
         // On macOS, terminal teardown can still need its output drained after
         // SIGKILL. A blocking wait here deadlocked all parallel preset tests.
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + TERMINAL_TEST_DEADLINE;
         let mut discarded = String::new();
         while self.child.try_wait()?.is_none() {
             self.drain(&mut discarded);
@@ -115,7 +120,7 @@ impl ConsoleProcess {
     }
     fn send(&mut self, input: &str) {
         let mut data = input.as_bytes();
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + TERMINAL_TEST_DEADLINE;
         let mut discarded = String::new();
         while !data.is_empty() {
             self.drain(&mut discarded);
@@ -283,7 +288,7 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
             click(if plus { areas.plus } else { areas.minus })
         ));
         let expected = format!("{expected_gain:+.1} dB Q1.0");
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + TERMINAL_TEST_DEADLINE;
         loop {
             process.drain(&mut output);
             assert!(
@@ -347,7 +352,7 @@ fn real_terminal_mouse_bursts_reach_draft_and_apply_exactly_once() {
     // alive while the user reads the draft; Enter must still commit that same draft.
     process.send("+");
     let editing = Instant::now();
-    let draft_deadline = editing + Duration::from_secs(5);
+    let draft_deadline = editing + TERMINAL_TEST_DEADLINE;
     let mut draft_visible = false;
     while editing.elapsed() < Duration::from_millis(1400) || !draft_visible {
         process.drain(&mut output);

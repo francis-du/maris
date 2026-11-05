@@ -48,6 +48,10 @@ fn platform_capabilities_match_the_wired_native_paths() {
         assert!(capability.live_output_pin);
         assert!(capability.changes_application_session_mute);
         assert!(capability.candidate_backend.is_none());
+        // `Session::tick` follows the unique physical default output when no pin
+        // is held, and `output_binding` pins on the WASAPI endpoint identity.
+        assert!(capability.automatic_output_follow);
+        assert!(capability.stable_device_identity);
     } else {
         assert!(!capability.automatic_system_takeover);
         assert!(capability.active_backend.is_none());
