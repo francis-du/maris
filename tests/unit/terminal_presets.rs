@@ -2,7 +2,7 @@
 use super::*;
 
 fn wait_screen(process: &mut ConsoleProcess, label: &str, done: impl Fn(&str) -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + TERMINAL_TEST_DEADLINE;
     let mut output = String::new();
     loop {
         process.drain(&mut output);
@@ -43,7 +43,7 @@ fn real_terminal_search_keeps_repeated_letters_read_only_then_confirms_once() {
     wait_for_preset(
         &mut process,
         Some("Dialogue"),
-        Instant::now() + Duration::from_secs(5),
+        Instant::now() + TERMINAL_TEST_DEADLINE,
     );
     process.send("\r");
     wait_until(&mut process, "filtered scene applied", || {
@@ -130,7 +130,7 @@ fn real_terminal_bracketed_paste_search_waits_for_explicit_confirmation() {
     wait_for_preset(
         &mut process,
         Some("Dialogue"),
-        Instant::now() + Duration::from_secs(5),
+        Instant::now() + TERMINAL_TEST_DEADLINE,
     );
     assert_eq!(store.load().unwrap().revision, 0);
     assert_eq!(
@@ -168,7 +168,7 @@ fn real_terminal_bracketed_paste_mode_is_enabled_and_restored_on_exit() {
     assert!(!dir.path().join("control.json").exists());
     assert_eq!(store.load().unwrap().revision, 0);
     process.send("q");
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + TERMINAL_TEST_DEADLINE;
     let mut output = String::new();
     loop {
         process.drain(&mut output);
@@ -197,7 +197,7 @@ fn real_terminal_oversized_paste_blocks_old_selection_until_search_is_edited() {
     wait_for_preset(
         &mut process,
         Some("Dialogue"),
-        Instant::now() + Duration::from_secs(5),
+        Instant::now() + TERMINAL_TEST_DEADLINE,
     );
     process.send(&format!("\x1b[200~{}\x1b[201~", "x".repeat(257)));
     wait_screen(&mut process, "oversized paste warning", |text| {
@@ -213,7 +213,7 @@ fn real_terminal_oversized_paste_blocks_old_selection_until_search_is_edited() {
     wait_for_preset(
         &mut process,
         Some("Focus"),
-        Instant::now() + Duration::from_secs(5),
+        Instant::now() + TERMINAL_TEST_DEADLINE,
     );
     process.send("\r");
     wait_until(&mut process, "edited search after rejected paste", || {
@@ -257,7 +257,7 @@ fn real_terminal_paste_payload_can_arrive_in_separate_reads_without_shortcuts() 
 }
 
 fn wait_until(process: &mut ConsoleProcess, label: &str, mut done: impl FnMut() -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + TERMINAL_TEST_DEADLINE;
     let mut output = String::new();
     while !done() {
         process.drain(&mut output);
@@ -357,7 +357,7 @@ fn open_preset(process: &mut ConsoleProcess, expected: Option<&str>) -> String {
         !text.contains("PRESETS")
     });
     process.send("p");
-    wait_for_preset(process, expected, Instant::now() + Duration::from_secs(5))
+    wait_for_preset(process, expected, Instant::now() + TERMINAL_TEST_DEADLINE)
 }
 
 fn select_preset(process: &mut ConsoleProcess, id: &str) {
@@ -390,7 +390,7 @@ fn select_preset(process: &mut ConsoleProcess, id: &str) {
             wait_for_preset(
                 process,
                 Some(&catalog[current].name),
-                Instant::now() + Duration::from_secs(5),
+                Instant::now() + TERMINAL_TEST_DEADLINE,
             );
         }
     }
@@ -522,8 +522,8 @@ fn real_terminal_clicking_a_visible_preset_then_enter_applies_that_row() {
     let _heartbeat = Heartbeat::start(store.clone());
     let mut process = spawn_console(dir.path());
     process.send("p");
-    wait_for_preset(&mut process, None, Instant::now() + Duration::from_secs(5));
-    let deadline = Instant::now() + Duration::from_secs(5);
+    wait_for_preset(&mut process, None, Instant::now() + TERMINAL_TEST_DEADLINE);
+    let deadline = Instant::now() + TERMINAL_TEST_DEADLINE;
     let dialogue_row = loop {
         let mut output = String::new();
         process.drain(&mut output);

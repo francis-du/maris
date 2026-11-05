@@ -37,7 +37,7 @@ fn setup() -> (tempfile::TempDir, Store) {
 }
 
 fn wait_for(process: &mut ConsoleProcess, label: &str, done: impl Fn(&str) -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + TERMINAL_TEST_DEADLINE;
     let mut output = String::new();
     loop {
         process.drain(&mut output);
