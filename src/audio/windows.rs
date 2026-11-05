@@ -14,7 +14,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-const RATE: u32 = 48_000;
+const RATE: u32 = super::CAPTURE_WORKER_RATE;
 const CHANNELS: u16 = 2;
 
 pub(super) struct CaptureWorker {
