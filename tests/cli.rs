@@ -472,3 +472,34 @@ fn empty_or_control_bearing_device_selector_is_rejected_for_reads_and_writes() {
         "unexpected failure text: {report}"
     );
 }
+
+#[test]
+fn default_fallback_explains_it_is_not_a_physical_device() {
+    let directory = tempfile::tempdir().unwrap();
+    for action in [
+        &["sound", "--device", "default", "capability"][..],
+        &["sound", "--device", "default", "match"][..],
+        &["sound", "--device", "default", "bind", "Some Model"][..],
+    ] {
+        let output = run(directory.path(), action);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !output.status.success(),
+            "the default fallback has no device profile for {action:?}: {stderr}"
+        );
+        assert!(
+            stderr.contains("The default fallback is not a physical device"),
+            "unexpected failure text for {action:?}: {stderr}"
+        );
+        assert!(
+            !stderr.contains("pass --device"),
+            "must not ask for a selector that was already given: {stderr}"
+        );
+    }
+    let output = run(directory.path(), &["sound", "capability"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("No current output device; pass --device"),
+        "without a selector the original instruction still applies: {stderr}"
+    );
+}
