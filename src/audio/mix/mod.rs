@@ -687,23 +687,32 @@ impl Session {
             "speech_worker":self.voice_workers[index].as_ref().map(super::voice::VoiceWorker::status),
             "peak_dbfs":self.input_peaks[index].as_ref().map(|p|20.0*f64::from_bits(p.swap(0,Ordering::Relaxed)).max(1e-6).log10())})).collect();
         let mut status = json!({"active":active,"session_id":self.id,"pid":std::process::id(),
-            "system_backend":"multi_device_mixer","engine_revision":crate::dsp::DSP_REVISION,"music_processing":true,
-            "output":primary.binding.resolution.identity.display_name,"profile_key":primary.binding.resolution.profile_key,
-            "device_identity":primary.binding.resolution.identity,"device_binding_revision":primary.binding.resolution.binding_revision,
-            "profile_binding_source":primary.binding.resolution.binding_source,"output_mode":"mixer_assignments","rebind_count":0,
-            "sample_rate":self.rate,"applied_revision":metrics.revision.load(Ordering::Relaxed),"applied_music_revision":metrics.music_revision.load(Ordering::Relaxed),
-            "peak_left_dbfs":db(metrics.peak_left.load(Ordering::Relaxed)),"peak_right_dbfs":db(metrics.peak_right.load(Ordering::Relaxed)),
-            "effective_preamp_db":f32::from_bits(metrics.effective_gain.load(Ordering::Relaxed)),"tonal_bypass":metrics.tonal_bypass.load(Ordering::Relaxed),
-            "updated_at_ms":analysis::now_ms(),"mixer":{"revision":state.revision,"processing_revision":(processing!=u64::MAX).then_some(processing),
-                "restart_required":!same_routes(&self.topology,&state.config),"strips":strips,"buses":buses,"error":self.notice},
-            "analysis":self.analysis.latest(),"visualization":self.analysis.visual(),"analysis_bus":self.topology.buses[self.primary].id,
-            "music_context":self.context.latest(),"music_context_status":self.context.status(),
-            "captured_frames":self.input_metrics.iter().map(|m|m.captured_frames.load(Ordering::Relaxed)).sum::<u64>(),
-            "frames":metrics.frames.load(Ordering::Relaxed),"source_started":metrics.source_started.load(Ordering::Relaxed),
-            "sample_peak_limiter_dbfs":-1.0,"clock_bridge":"windowed_sinc_128","capture_scope":"mixer_assignments",
-            "underruns":self.input_metrics.iter().chain(self.output_metrics.iter()).map(|m|m.underruns.load(Ordering::Relaxed)).sum::<u64>(),
-            "overruns":self.input_metrics.iter().chain(self.output_metrics.iter()).map(|m|m.overruns.load(Ordering::Relaxed)).sum::<u64>(),
-            "performance":performance_status(metrics,self.rate)});
+        "system_backend":"multi_device_mixer","engine_revision":crate::dsp::DSP_REVISION,"music_processing":true,
+        "output":primary.binding.resolution.identity.display_name,"profile_key":primary.binding.resolution.profile_key,
+        "device_identity":primary.binding.resolution.identity,"device_binding_revision":primary.binding.resolution.binding_revision,
+        "profile_binding_source":primary.binding.resolution.binding_source,"output_mode":"mixer_assignments","rebind_count":0,
+        "sample_rate":self.rate,"applied_revision":metrics.revision.load(Ordering::Relaxed),"applied_music_revision":metrics.music_revision.load(Ordering::Relaxed),
+        "peak_left_dbfs":db(metrics.peak_left.load(Ordering::Relaxed)),"peak_right_dbfs":db(metrics.peak_right.load(Ordering::Relaxed)),
+        "effective_preamp_db":f32::from_bits(metrics.effective_gain.load(Ordering::Relaxed)),"tonal_bypass":metrics.tonal_bypass.load(Ordering::Relaxed),
+        "updated_at_ms":analysis::now_ms(),"mixer":{"revision":state.revision,"processing_revision":(processing!=u64::MAX).then_some(processing),
+            "restart_required":!same_routes(&self.topology,&state.config),"strips":strips,"buses":buses,"error":self.notice},
+        "analysis":self.analysis.latest(),"visualization":self.analysis.visual(),"analysis_bus":self.topology.buses[self.primary].id,
+        "music_context":self.context.latest(),"music_context_status":self.context.status(),
+        "captured_frames":self.input_metrics.iter().map(|m|m.captured_frames.load(Ordering::Relaxed)).sum::<u64>(),
+        "frames":metrics.frames.load(Ordering::Relaxed),"source_started":metrics.source_started.load(Ordering::Relaxed),
+        "sample_peak_limiter_dbfs":-1.0,"clock_bridge":"windowed_sinc_128","capture_scope":"mixer_assignments",
+        "underruns":self.input_metrics.iter().chain(self.output_metrics.iter()).map(|m|m.underruns.load(Ordering::Relaxed)).sum::<u64>(),
+        "overruns":self.input_metrics.iter().chain(self.output_metrics.iter()).map(|m|m.overruns.load(Ordering::Relaxed)).sum::<u64>(),
+        "performance":performance_status(
+            metrics,
+            self.rate,
+            self.output_metrics[self.primary]
+                .analysis_queue
+                .get()
+                .map_or(0, |queue| queue.len()),
+            self.queue.len(),
+            self.context.latest().map(|context| context.inference_ms),
+        )});
         status["level_match_makeup_db"] = json!(f32::from_bits(
             metrics.level_match_makeup.load(Ordering::Relaxed)
         ));
@@ -724,25 +733,24 @@ impl Session {
         self.store.write_json("runtime.json", &status)
     }
 }
-fn performance_status(metrics: &Metrics, rate: u32) -> Value {
-    let callback_frames = metrics.callback_frames.load(Ordering::Relaxed);
-    let callback_average_percent = super::performance::percent(
-        callback_frames,
-        metrics.callback_processing_nanos.load(Ordering::Relaxed),
+/// Publish the shared performance object so mixer sessions report the same
+/// queue depths, worker counters and model latency as single-session status.
+fn performance_status(
+    metrics: &Metrics,
+    rate: u32,
+    analysis_queue_depth: usize,
+    update_queue_depth: usize,
+    model_latency_ms: Option<f64>,
+) -> Value {
+    super::performance::status(
+        metrics,
+        None,
         rate,
-    );
-    let worker_cpu_percent = super::performance::percent(
-        metrics.worker_frames.load(Ordering::Relaxed),
-        metrics.worker_processing_nanos.load(Ordering::Relaxed),
         rate,
-    );
-    json!({
-        "callback_calls":metrics.callback_calls.load(Ordering::Relaxed),
-        "callback_frames":callback_frames,
-        "callback_processing_average_percent":callback_average_percent,
-        "callback_processing_max_us":metrics.callback_max_nanos.load(Ordering::Relaxed) as f64/1000.0,
-        "worker_cpu_percent":worker_cpu_percent,
-    })
+        analysis_queue_depth,
+        update_queue_depth,
+        model_latency_ms,
+    )
 }
 impl Drop for Session {
     fn drop(&mut self) {
