@@ -340,6 +340,33 @@ fn scene_tools_preview_without_writes_and_apply_with_exact_listening_revision() 
     );
     assert!(mcp::invoke(&store, "maris_scene_apply", args, true).is_err());
     assert_eq!(store.load().unwrap().revision, 0);
+
+    // The CLI/TUI transaction accepts the listening presets as well as the
+    // scenes; MCP must not be narrower than the surface it claims to mirror.
+    let preset_args = json!({"name":"warm","device":"Headphones"});
+    let preset_preview = mcp::invoke(&store, "maris_scene_preview", preset_args, false).unwrap();
+    assert_eq!(preset_preview["applied"], false);
+    let preset_args = json!({"name":"warm","device":"Headphones","expected_listening_revision":1});
+    let preset_applied = mcp::invoke(&store, "maris_scene_apply", preset_args, true).unwrap();
+    assert_eq!(preset_applied["revision"], 2);
+    assert_eq!(
+        preset_applied["devices"]["Headphones"],
+        preset_preview["preview"]["profile"]
+    );
+    assert_ne!(
+        preset_preview["preview"]["profile"]["bass_db"], preview["preview"]["profile"]["bass_db"],
+        "the listening preset must reach a different profile than the scene"
+    );
+    assert!(
+        mcp::invoke(
+            &store,
+            "maris_scene_preview",
+            json!({"name":"absent","device":"Headphones"}),
+            false
+        )
+        .is_err(),
+        "an unknown name must still fail closed"
+    );
 }
 
 #[test]

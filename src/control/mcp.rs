@@ -128,7 +128,7 @@ fn tools(allow_write: bool) -> Value {
     let mut list = vec![
         tool("maris_listening", "Read device-specific music preferences and their separate revision. Does not start capture.", object(json!({}), &[]), true),
         tool("maris_scenes", "List original listening scene preferences. These are not device measurements and require no model download.", object(json!({}), &[]), true),
-        tool("maris_scene_preview", "Preview a listening scene against a saved device profile and capability limits without writing state. Use default to target fallback preferences.", object(json!({"name":{"type":"string"},"device":{"type":"string"}}), &["name","device"]), true),
+        tool("maris_scene_preview", "Preview a listening preset or scene against a saved device profile and capability limits without writing state. Use default to target fallback preferences.", object(json!({"name":{"type":"string"},"device":{"type":"string"}}), &["name","device"]), true),
         tool("maris_music_schema", "Read the accepted sound and parametric-EQ settings and their limits. Device measurements must come from a known source.", object(json!({}), &[]), true),
         tool("maris_status", "Read current settings, their revision, and audio status. Does not start recording.", object(json!({}), &[]), true),
         tool("maris_platform", "Read the audio functions supported by this build and platform, including unavailable functions.", object(json!({}), &[]), true),
@@ -151,7 +151,7 @@ fn tools(allow_write: bool) -> Value {
     ];
     if allow_write {
         list.extend([
-            tool("maris_scene_apply", "Apply a listening scene using the same revision-checked transaction as the TUI/CLI. Preserves correction and does not change routing or system volume.", object(json!({"name":{"type":"string"},"device":{"type":"string"},"expected_listening_revision":{"type":"integer","minimum":0}}), &["name","device","expected_listening_revision"]), false),
+            tool("maris_scene_apply", "Apply a listening preset or scene using the same revision-checked transaction as the TUI/CLI. Preserves correction and does not change routing or system volume.", object(json!({"name":{"type":"string"},"device":{"type":"string"},"expected_listening_revision":{"type":"integer","minimum":0}}), &["name","device","expected_listening_revision"]), false),
             tool("maris_music_apply", "Apply a device-specific music profile with its listening revision. Use an exact output name; 'default' explicitly edits the fallback. Does not start audio or override OS volume.", music_arguments(), false),
             tool("maris_tuning_apply", "Apply a previously previewed context-aware music tuning proposal through listening revision validation. Correction filters cannot be changed by this path.", music_tuning_arguments(), false),
             tool("maris_listening_undo", "Restore the previous device-listening library while keeping the listening revision monotonic.", object(json!({"expected_listening_revision":{"type":"integer","minimum":0}}), &["expected_listening_revision"]), false),
@@ -212,9 +212,15 @@ pub fn invoke(store: &Store, name: &str, arguments: Value, allow_write: bool) ->
                 expected_listening_revision: Option<u64>,
             }
             let args: SceneArgs = serde_json::from_value(arguments)?;
+            // The CLI/TUI transaction accepts the listening presets as well as
+            // the scenes, so gate on the same resolver instead of the scene-only
+            // catalog; otherwise MCP callers cannot reach presets the CLI accepts.
             ensure!(
-                crate::presets::scenes::find(&args.name).is_some(),
-                "Unknown listening scene"
+                crate::dsp::music::MusicProfile::preset(
+                    args.name.strip_prefix("scene:").unwrap_or(&args.name)
+                )
+                .is_ok(),
+                "Unknown listening preset or scene"
             );
             let device = (args.device != "default").then_some(args.device.as_str());
             if name == "maris_scene_apply" {
