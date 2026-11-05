@@ -130,3 +130,50 @@ fn export_never_overwrites_an_existing_file() {
     assert!(atomic_json_new(&file, &json!({"replacement":true})).is_err());
     assert!(std::fs::read_to_string(&file).unwrap().contains("original"));
 }
+
+#[test]
+fn spectral_band_boundaries_follow_the_geometric_midpoints() {
+    // At 48 kHz the analysis FFT is 8192 bins wide, so bin centres are
+    // 5.859375 Hz apart. Each band boundary is the geometric mean of two
+    // adjacent profile frequencies, so the bin just below it and the next bin
+    // up must land in adjacent bands.
+    let bin = 48000.0 / 8192.0;
+    let dominant = |share: [f64; analysis::BINS]| {
+        share
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .unwrap()
+            .0
+    };
+    for (lower_bin, upper_bin, lower_band, upper_band) in [(30, 31, 2, 3), (965, 966, 7, 8)] {
+        let midpoint = (maris::dsp::profile::FREQUENCIES[lower_band]
+            * maris::dsp::profile::FREQUENCIES[upper_band])
+            .sqrt();
+        let below = bin * lower_bin as f64;
+        let above = bin * upper_bin as f64;
+        assert!(
+            below < midpoint && midpoint < above,
+            "bins {below}/{above} Hz must straddle the {midpoint} Hz boundary"
+        );
+        let lower = analysis::measure(&tone(below, false), 48000).unwrap();
+        lower.validate().unwrap();
+        let upper = analysis::measure(&tone(above, false), 48000).unwrap();
+        upper.validate().unwrap();
+        assert_eq!(
+            dominant(lower.band_energy_share),
+            lower_band,
+            "{below} Hz should be dominated by band {lower_band}"
+        );
+        assert_eq!(
+            dominant(upper.band_energy_share),
+            upper_band,
+            "{above} Hz should be dominated by band {upper_band}"
+        );
+    }
+    // Everything at or above the last geometric midpoint falls through to the
+    // top band rather than being dropped.
+    let top = analysis::measure(&tone(16000.0, false), 48000).unwrap();
+    top.validate().unwrap();
+    assert_eq!(dominant(top.band_energy_share), 9);
+}
