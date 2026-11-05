@@ -59,7 +59,9 @@ fn runtime() -> Value {
         "overruns":0,
         "performance":{
             "callback_processing_average_percent":1.75,
-            "callback_processing_max_us":420.0
+            "callback_processing_max_us":420.0,
+            "update_queue_depth":2,
+            "model_latency_ms":12.5
         },
         "display_bands":vec![0.4;24],
         "captured_application_pids":[222],
@@ -225,6 +227,10 @@ fn system_shows_measured_runtime_facts_and_model_truthfulness() {
     assert!(text.contains("Audio processing time"));
     assert!(text.contains("1.75%"));
     assert!(text.contains("4.25 ms"));
+    assert!(text.contains("Update queue"));
+    assert!(text.contains("2"));
+    assert!(text.contains("Model latency"));
+    assert!(text.contains("12.50 ms"));
     let assist = render(Workspace::Intelligence, Overlay::None, 130, 36);
     for required in [
         "Listening Assist",

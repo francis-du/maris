@@ -588,6 +588,14 @@ fn draw_health(frame: &mut Frame<'_>, area: Rect, view: &Console<'_>) {
             "Analysis queue",
             counter(&r["performance"]["analysis_queue_depth"], live),
         ),
+        (
+            "Update queue",
+            counter(&r["performance"]["update_queue_depth"], live),
+        ),
+        (
+            "Model latency",
+            number(&r["performance"]["model_latency_ms"], " ms", live),
+        ),
         ("Rebinds", counter(&r["rebind_count"], live)),
         ("Applied revision", counter(&r["applied_revision"], live)),
         (
