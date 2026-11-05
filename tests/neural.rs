@@ -156,3 +156,68 @@ fn missing_backend_fails_without_opening_files() {
     )
     .is_err());
 }
+
+#[cfg(feature = "neural")]
+#[test]
+fn offline_neural_processing_writes_every_block_in_input_order() {
+    let directory = tempfile::tempdir().unwrap();
+    let input = directory.path().join("speech.wav");
+    let output = directory.path().join("clean.wav");
+    let spec = hound::WavSpec {
+        channels: 2,
+        sample_rate: 48000,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+    // Non-silent and non-stationary: a dropped or shifted block is visible,
+    // unlike the all-zero input used elsewhere. Quantize exactly as the offline
+    // reader does, so the expected output is computed from the same samples.
+    let frames: Vec<[f32; 2]> = (0..1173)
+        .map(|index| {
+            let amplitude = if index < 480 { 0.28 } else { 0.07 };
+            let phase = (index % 48) as f32 / 48.0 * std::f32::consts::TAU;
+            let sample = amplitude * phase.sin();
+            let quantized = (sample * 32768.0) as i16 as f32 / 32768.0;
+            [quantized, quantized]
+        })
+        .collect();
+    {
+        let mut writer = hound::WavWriter::create(&input, spec).unwrap();
+        for frame in &frames {
+            for sample in frame {
+                writer.write_sample((*sample * 32768.0) as i16).unwrap();
+            }
+        }
+        writer.finalize().unwrap();
+    }
+
+    neural::enhance(&input, &output).unwrap();
+
+    // The contract is per-block processing, in input order, with no dropped
+    // warm-up block and no extra trailing block.
+    let mut model = neural::VoiceModel::new();
+    let mut expected = Vec::with_capacity(frames.len());
+    for chunk in frames.chunks(480) {
+        let mut block = [[0.0_f32; 2]; 480];
+        for (slot, frame) in block.iter_mut().zip(chunk.iter()) {
+            *slot = *frame;
+        }
+        let mut denoised = [[0.0_f32; 2]; 480];
+        model.process(&block, &mut denoised);
+        expected.extend_from_slice(&denoised[..chunk.len()]);
+    }
+
+    let reader = hound::WavReader::open(&output).unwrap();
+    let samples: Vec<f32> = reader.into_samples::<f32>().map(|v| v.unwrap()).collect();
+    assert_eq!(samples.len(), frames.len() * 2);
+    for (index, frame) in expected.iter().enumerate() {
+        for channel in 0..2 {
+            let got = samples[index * 2 + channel];
+            assert!(
+                (got - frame[channel]).abs() < 1e-6,
+                "frame {index} channel {channel} differs: got {got}, want {}",
+                frame[channel]
+            );
+        }
+    }
+}
