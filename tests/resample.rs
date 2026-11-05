@@ -52,3 +52,34 @@ fn starvation_does_not_invent_audio_or_grow_buffers() {
     assert_eq!(gaps, 1);
     assert!(bridge.next_frame().0[0].abs() < 1e-12);
 }
+
+#[test]
+fn sinc_interpolator_clamps_extremes_and_non_finite_fractions() {
+    let mut interpolator = SincInterpolator::new();
+    for _ in 0..TAPS {
+        interpolator.push([1.0, -1.0]);
+    }
+    // Every table row is normalized to unity DC gain, so the two ends of the
+    // phase range must reproduce a constant input exactly like the interior.
+    for fraction in [0.0, 0.25, 0.5, 0.75, 1.0] {
+        let sample = interpolator.sample(fraction);
+        assert!(
+            (sample[0] - 1.0).abs() < 1e-9 && (sample[1] + 1.0).abs() < 1e-9,
+            "fraction {fraction} lost DC gain: {sample:?}"
+        );
+    }
+    for fraction in [f64::NEG_INFINITY, -2.0, f64::NAN] {
+        assert_eq!(
+            interpolator.sample(fraction),
+            interpolator.sample(0.0),
+            "fraction {fraction} must clamp to the first phase"
+        );
+    }
+    for fraction in [f64::INFINITY, 3.0] {
+        assert_eq!(
+            interpolator.sample(fraction),
+            interpolator.sample(1.0),
+            "fraction {fraction} must clamp to the last phase"
+        );
+    }
+}
