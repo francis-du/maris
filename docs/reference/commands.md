@@ -51,7 +51,7 @@ The CLI is the scriptable interface to the same saved settings and audio engine 
 | `play` | Play a file through Maris processing |
 | `tui` | Open the terminal UI |
 | `system` | Process system playback with explicit routing authorization |
-| `restore` | Restore platform routing owned by a previous Maris session |
+| `restore` | Restore platform routing owned by a previous Maris session (macOS/Linux); on Windows it reports that Maris changed no system routing |
 | `mcp` | Serve the local MCP protocol; writes are opt-in |
 | `integration` | Print MCP client configuration |
 

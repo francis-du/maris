@@ -111,7 +111,7 @@ Maris's tonal planner is original bounded heuristic code, not a pretrained neura
 
 ## flexaudio-core security patch
 
-Maris vendors the unmodified flexaudio-core v0.2.0 source under `third_party/flexaudio-core` and retains its MIT license. The local Cargo manifest changes only its ringbuf dependency from the upstream 0.4 range to ringbuf 0.5.2 so the Windows loopback path does not ship the memory-safety issue fixed by RUSTSEC-2026-0293. The vendored source remains attributable to Studio Sadola; Maris-specific rationale is recorded in `MARIS_PATCH.md`.
+Maris vendors the unmodified flexaudio-core v0.2.0 source under `third_party/flexaudio-core` and retains its MIT license. The local Cargo manifest changes only its ringbuf dependency from the upstream 0.4 range to ringbuf 0.6.0 so the Windows loopback path does not ship the memory-safety issue fixed by RUSTSEC-2026-0293. The vendored source remains attributable to Studio Sadola; Maris-specific rationale is recorded in `MARIS_PATCH.md`.
 
 ## gemm-common AArch64 FP16 patch
 

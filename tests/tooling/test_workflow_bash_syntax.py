@@ -52,7 +52,7 @@ class WorkflowBashSyntax(TestCase):
         checked = 0
         for encoding in ("default", "cp1252"):
             fallback = (nullcontext() if encoding == "default" else
-                        mock.patch("subprocess._text_encoding", return_value="cp1252"))
+                        mock.patch("subprocess._text_encoding", return_value="cp1252", create=True))
             with fallback:
                 for workflow in workflows:
                     for line, script in bash_blocks(workflow):
