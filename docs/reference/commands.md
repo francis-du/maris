@@ -118,6 +118,8 @@ maris restore
 
 Commands that can temporarily reroute or replace playback require explicit authorization. Maris does not change system volume.
 
+`start` starts a detached live/system session through the desktop controller and accepts `--input <INPUT>` plus `--system` for the whole-system path; `tray` runs the native menu/tray controller and accepts `--background` to stay off the foreground.
+
 ## Mixer
 
 ~~~sh
@@ -149,7 +151,7 @@ maris smart --save ./proposal.json
 maris smart-apply ./proposal.json
 ~~~
 
-`enhance` and `voice` are speech-only RNNoise paths and require `--confirm-speech`; they are not general music enhancement commands.
+`enhance` and `voice` are speech-only RNNoise paths and require `--confirm-speech`; they are not general music enhancement commands. `voice` and `run` take `--input <INPUT>` naming a live input device, and `run` also accepts `--seconds <SECONDS>` to stop after a bounded timeout.
 
 ## JSON and MCP
 
