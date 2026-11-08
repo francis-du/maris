@@ -25,7 +25,7 @@ No sudo, drivers, audio activation, OS volume/default-output changes or security
 HELP
 }
 ARGS=("$@")
-VERSION=''; PREFIX=''; LOCAL_PAYLOAD=''; YES=0; DRY=0; LOCAL=0; BUILD=0; FROM=0; UNTRUSTED=0
+VERSION=''; PREFIX=''; LOCAL_PAYLOAD=''; YES=0; DRY=0; LOCAL=0; BUILD=0; FROM=0; UNTRUSTED=0; SHA256=0
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --version|--prefix|--from|--sha256)
@@ -35,7 +35,7 @@ while [ "$#" -gt 0 ]; do
                 --version) [ -z "$VERSION" ] || fail 'Duplicate --version'; VERSION=${2#v} ;;
                 --prefix) PREFIX=$2 ;;
                 --from) LOCAL=1; FROM=1; LOCAL_PAYLOAD=$2 ;;
-                --sha256) UNTRUSTED=1 ;;
+                --sha256) UNTRUSTED=1; SHA256=1 ;;
             esac
             shift 2 ;;
         --build) LOCAL=1; BUILD=1; shift ;;
@@ -55,7 +55,9 @@ if [ "$LOCAL" -eq 1 ]; then
     fi
     case "$(uname -s)" in
         Linux) exec /bin/bash "$ROOT/scripts/install_linux.sh" "${ARGS[@]}" ;;
-        Darwin) exec /bin/bash "$ROOT/scripts/install_macos.sh" "${ARGS[@]}" ;;
+        Darwin)
+            [ "$SHA256" -eq 0 ] || fail '--sha256 applies only to the offline Linux CLI payload; the macOS bundle is verified with codesign'
+            exec /bin/bash "$ROOT/scripts/install_macos.sh" "${ARGS[@]}" ;;
         *) fail 'Use install.ps1 on Windows' ;;
     esac
 fi
