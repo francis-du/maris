@@ -16,6 +16,7 @@ INSTALL = ROOT / 'install.sh'
 HASH = '0' * 64
 
 
+@unittest.skipIf(os.name == 'nt', 'Unix bootstrap; PowerShell production functions are checked separately')
 class MacosInstallEntry(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
