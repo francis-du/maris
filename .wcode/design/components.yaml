@@ -69,6 +69,8 @@
   - kind: file
     path: src/audio/tap.rs
   - kind: file
+    path: src/audio/tap_support.rs
+  - kind: file
     path: src/audio/tap_ffi.rs
   - kind: file
     path: src/audio/voice.rs

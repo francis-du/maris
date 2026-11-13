@@ -23,6 +23,8 @@ mod system;
 mod tap;
 #[cfg(target_os = "macos")]
 mod tap_ffi;
+#[cfg(target_os = "macos")]
+mod tap_support;
 mod voice;
 #[cfg(target_os = "windows")]
 mod windows;
