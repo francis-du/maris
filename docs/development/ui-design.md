@@ -59,7 +59,7 @@ Normal desktop composition, approximately 140 columns by 40 rows:
     quiet range tracks  evidence and confidence   preview + reason
 
     MIXER configuration summary                 SYSTEM HEALTH / revision
-    contextual controls                         O output · P preset · J assist · help
+    contextual controls                         O output · P preset · I assist · help
 
 The left rail uses 28-35 columns. The main analyzer/support surface receives the remaining width: normally more than 65% of the content width. Stereo meters are part of this surface, not separate dashboard cards. One horizontal separator divides lower evidence/support areas from the plot. Grouping uses shared background and spacing, not a rounded rectangle around every label.
 
