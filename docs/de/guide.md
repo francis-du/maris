@@ -26,7 +26,7 @@ Geräteklang betrifft das ausgewählte Profil, globaler EQ alle Ausgaben. Klangb
 
 ![Tatsächliche Szenenauswahl mit Vorschau](../assets/presets-de.svg)
 
-Nachtdialog verringert den Unterschied zwischen lauten und leisen Stellen, ohne die Gesamtlautstärke automatisch anzuheben. Virtueller Bass braucht bekannte Gerätegrenzen. Keine Szene verspricht Gehörschutz, Surround oder bessere Spielortung. Messkorrektur, Herkunft, Hochpass, Balance und Vergleichsregeln bleiben getrennt.
+Nachtdialog verringert den Unterschied zwischen lauten und leisen Stellen, ohne die Gesamtlautstärke automatisch anzuheben. Virtueller Bass braucht bekannte Gerätegrenzen. Keine Szene verspricht Gehörschutz oder bessere Spielortung. Außer den ausdrücklich als virtuel Surround gekennzeichneten Szenen bietet keine Szene Surround. Messkorrektur, Herkunft, Hochpass, Balance und Vergleichsregeln bleiben getrennt.
 
 ## Vergleich und Undo {#compare}
 

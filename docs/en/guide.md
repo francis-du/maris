@@ -26,7 +26,7 @@ Device tone changes the current device's settings. Global EQ affects every outpu
 
 ![Preset list and proposed changes](../assets/presets-en.svg)
 
-Night dialogue reduces the difference between loud and quiet sounds without automatically raising the overall volume. Small-speaker virtual bass is used only when the device supports it. Presets do not provide hearing protection, surround sound or game positioning. Existing correction, high-pass filtering, balance and comparison settings are preserved.
+Night dialogue reduces the difference between loud and quiet sounds without automatically raising the overall volume. Small-speaker virtual bass is used only when the device supports it. Presets do not provide hearing protection or game positioning. Apart from the explicitly labeled virtual-surround scenes, no preset provides surround sound. Existing correction, high-pass filtering, balance and comparison settings are preserved.
 
 ## Compare and undo {#compare}
 

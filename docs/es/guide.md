@@ -26,7 +26,7 @@ El sonido del dispositivo afecta al perfil elegido; la EQ global, a todas las sa
 
 ![Selector real de escenas y vista previa](../assets/presets-es.svg)
 
-Diálogo nocturno reduce la diferencia entre sonidos fuertes y suaves sin subir automáticamente el volumen general. Los graves virtuales necesitan límites conocidos del dispositivo. No se promete protección auditiva, sonido envolvente ni mejor localización en juegos. Corrección, procedencia, paso alto, balance y comparación permanecen separados.
+Diálogo nocturno reduce la diferencia entre sonidos fuertes y suaves sin subir automáticamente el volumen general. Los graves virtuales necesitan límites conocidos del dispositivo. No se promete protección auditiva ni mejor localización en juegos. Aparte de las escenas de sonido envolvente virtual etiquetadas explícitamente, ninguna escena ofrece sonido envolvente. Corrección, procedencia, paso alto, balance y comparación permanecen separados.
 
 ## Comparar y deshacer {#compare}
 
