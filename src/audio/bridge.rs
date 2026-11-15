@@ -763,6 +763,9 @@ mod voice_source_handoff_tests;
 #[path = "../../tests/unit/limiter_telemetry.rs"]
 mod limiter_telemetry_tests;
 #[cfg(test)]
+#[path = "../../tests/unit/loudness_rapid_updates.rs"]
+mod loudness_rapid_updates_tests;
+#[cfg(test)]
 #[path = "../../tests/unit/loudness_recovery.rs"]
 mod loudness_recovery_tests;
 #[cfg(test)]
