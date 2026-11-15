@@ -144,3 +144,13 @@ fn retina_template_frames_have_a_bounded_mask_and_distinct_state_symbols() {
     assert_ne!(masks[0], masks[1]);
     assert_ne!(masks[1], masks[2]);
 }
+
+#[test]
+fn the_mark_keeps_the_documented_template_size_and_cadence() {
+    // AC-UI-001 states the menu-bar mark uses a macOS template at 18 logical
+    // points and bounds changes to 8 Hz. The template contract itself, black
+    // plus alpha only, is asserted by the mask case above.
+    assert_eq!(status_icon::POINTS, 18.0);
+    assert_eq!(status_icon::FRAME_INTERVAL_MS, 125);
+    assert_eq!(status_icon::PIXELS, 64);
+}
